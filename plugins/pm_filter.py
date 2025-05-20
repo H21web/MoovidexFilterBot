@@ -1828,7 +1828,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             download = f"{URL}{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
             button = [[
                 InlineKeyboardButton("🚀 ғᴀsᴛ ᴅᴏᴡɴʟᴏᴀᴅ ", url=download),
-                InlineKeyboardButton('🖥️ Watch online ', url=stream)
+                InlineKeyboardButton('🖥️ ᴡᴀᴛᴄʜ ᴏɴʟɪɴᴇ ', url=stream)
             ],[
                 InlineKeyboardButton("🌐 ᴡᴀᴛᴄʜ ɪɴ ᴡᴇʙ ᴀᴘᴘ 🌐", web_app=WebAppInfo(url=stream))
             ]]
