@@ -1,5 +1,6 @@
 import requests
 from pyrogram import Client, filters
+from pyrogram.enums import ParseMode
 
 # Function to fetch upcoming movies
 def fetch_upcoming_movies():
@@ -49,6 +50,7 @@ async def send_upcoming_movies(client, message):
             )
             all_movies_details += movie_details
 
-        await message.reply_text(all_movies_details, parse_mode="HTML")
+        await message.reply_text(all_movies_details, parse_mode=ParseMode.HTML)
+
     else:
         await message.reply_text("⚠️ Failed to fetch upcoming movies or no movies found. Please try again later.")
