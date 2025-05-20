@@ -89,7 +89,7 @@ async def doo(bot, data, message):
     
     ai_search = True
 
-     Replace underscores with spaces
+     #Replace underscores with spaces
     data = data.replace('_', ' ')
 
      #Send the initial search message
