@@ -249,36 +249,42 @@ async def next_page(bot, query):
 
 @Client.on_callback_query(filters.regex(r"^spol"))
 async def advantage_spoll_choker(bot, query):
-    _, user, movie_ = query.data.split('#')
+    _, user_id, movie_index = query.data.split('#')
     movies = SPELL_CHECK.get(query.message.reply_to_message.id)
-  #  if not movies:
-     #   return await query.answer(script.OLD_ALRT_TXT.format(query.from_user.first_name), show_alert=True)
-    if int(user) != 0 and query.from_user.id != int(user):
+
+    if not movies:
+        return await query.answer(script.OLD_ALRT_TXT.format(query.from_user.first_name), show_alert=True)
+    
+    if int(user_id) != 0 and query.from_user.id != int(user_id):
         return await query.answer(script.ALRT_TXT.format(query.from_user.first_name), show_alert=True)
-    if movie_ == "close_spellcheck":
+    
+    if movie_index == "close_spellcheck":
         return await query.message.delete()
-    movie = movies[(int(movie_))]
+    
+    movie = movies[int(movie_index)]
     movie = re.sub(r"[:\-]", " ", movie)
     movie = re.sub(r"\s+", " ", movie).strip()
     await query.answer(script.TOP_ALRT_MSG)
-    gl = await global_filters(bot, query.message, text=movie)
-    if gl == False:
-        k = await manual_filters(bot, query.message, text=movie)
-        if k == False:
+    
+    if not await global_filters(bot, query.message, text=movie):
+        if not await manual_filters(bot, query.message, text=movie):
             files, offset, total_results = await get_search_results(query.message.chat.id, movie, offset=0, filter=True)
             if files:
-                k = (movie, files, offset, total_results)
                 ai_search = True
-                reply_msg = await query.message.edit_text(f"<b><i>Searching For {movie} 🔍</i></b>")
+                k = (movie, files, offset, total_results)
+                reply_msg = await query.message.edit_text(f"<b><i>🔍 Searching for {movie} 🔍</i></b>")
                 await auto_filter(bot, movie, query, reply_msg, ai_search, k)
             else:
-                reqstr1 = query.from_user.id if query.from_user else 0
-                reqstr = await bot.get_users(reqstr1)
+                reqstr = await bot.get_users(query.from_user.id if query.from_user else 0)
                 if NO_RESULTS_MSG:
-                    await bot.send_message(chat_id=LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, movie)))
-                k = await query.message.edit(script.MVE_NT_FND)
-                await asyncio.sleep(10)
-                await k.delete()
+                    await bot.send_message(chat_id=LOG_CHANNEL, text=script.NORSLTS.format(reqstr.id, reqstr.mention, movie))
+                
+            
+                encoded_movie = re.sub(r'\W+', '_', movie)  # Replace non-alphanumeric characters with underscores
+                request_btn = [[InlineKeyboardButton(f'💬 sᴇɴᴅ ʀᴇǫᴜᴇsᴛ', url=f"https://t.me/moovidexbot?start=Request_{encoded_movie}")]]
+                msg = await query.message.edit(script.MVE_NT_FND, reply_markup=InlineKeyboardMarkup(request_btn))
+                await asyncio.sleep(120)
+                await msg.delete()
 
 # Year 
 @Client.on_callback_query(filters.regex(r"^years#"))
