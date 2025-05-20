@@ -2,6 +2,7 @@ import requests
 import re
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from utils import temp
 
 # List of Admin IDs
 ADMIN_IDS = [1011394081,5745069956]  # Replace with actual admin user IDs
@@ -60,7 +61,7 @@ async def send_today_movies(client, message):
             formatted_title = format_title_for_url(title)
 
             # Create buttons
-            search_button = InlineKeyboardButton("🔍 Click to Search", url=f"https://t.me/moovidex_bot?start=Search_{formatted_title}")
+            search_button = InlineKeyboardButton("🔍 Click to Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{formatted_title}")
 
             buttons = [[search_button]]
             
@@ -108,7 +109,7 @@ async def post_movie_to_channel(client, callback_query):
                 formatted_title = format_title_for_url(title)
 
                 # Create a search button
-                search_button = InlineKeyboardButton("🔍 Click To Search", url=f"https://t.me/moovidex_bot?start=Search_{formatted_title}")
+                search_button = InlineKeyboardButton("🔍 Click To Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{formatted_title}")
 
                 reply_markup = InlineKeyboardMarkup([[search_button]])
 
