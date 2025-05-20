@@ -251,23 +251,18 @@ Nᴀᴍᴇ - {}"""
 <b>⚙️ sɪᴢᴇ : {file_size}</b>""" 
 
     IMDB_TEMPLATE_TXT = """
-<b>Query: {qurey}
+<b>🎪 {kind} : {title} ({year})</b>
 
-IMDb Data:
+⭐<b> Rᴀᴛɪɴɢs: </b> <code>{rating}</code>
+🗓 <b>Rᴇʟᴇᴀsᴇ Iɴғᴏ: </b><code>{release_date}</code>
+🕰 <b>Dᴜʀᴀᴛɪᴏɴ: </b><code>{runtime}</code>
+🎧 <b>Lᴀɴɢᴜᴀɢᴇ: </b><code>{languages}</code>
+🎭 <b>Gᴇɴʀᴇs: </b><code>{genres}</code>
 
-<b>🏷 Title</b>: <a href={url}>{title}</a>
-🎭 Genres: {genres}
-📆 Year: <a href={url}/releaseinfo>{year}</a>
-🌟 Rating: <a href={url}/ratings>{rating}</a> / 10 (based on {votes} user ratings.)
-☀️ Languages : <code>{languages}</code>
-📀 RunTime: {runtime} Minutes
-📆 Release Info : {release_date}
-🎛 Countries : <code>{countries}</code>
+<blockquote>⏱️ Rᴇsᴜʟᴛ sʜᴏᴡɴ ɪɴ: {remaining_seconds} <i>seconds</i> 
+🐱 Rᴇǫᴜᴇsᴛᴇᴅ ʙʏ : {message.from_user.mention}</b></blockquote>
 
-
-⏰Result Shown in: {remaining_seconds} <i>seconds</i> 🔥
-
-Requested by : {message.from_user.mention}</b>"""
+"""
     
     ALL_FILTERS = """
 <b>Hᴇʏ {}, Tʜᴇsᴇ ᴀʀᴇ ᴍʏ ᴛʜʀᴇᴇ ᴛʏᴘᴇs ᴏғ ғɪʟᴛᴇʀs.</b>"""
