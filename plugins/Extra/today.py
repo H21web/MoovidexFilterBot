@@ -50,12 +50,11 @@ async def send_today_movies(client, message):
             year = movie.get('theatrical-year', 'N/A')
             # Build the movie's details message
             movie_details = (
-                f"🎟️ **ᴛɪᴛʟᴇ :** {title} ({year})\n"
+                f"✅ **{title}** · ({year})\n"
                 f"🎥 **ᴛʏᴘᴇ:** {movie_type}\n"
-                f"🗓️ **sᴛʀᴇᴀᴍɪɴɢ ᴅᴀᴛᴇ:** {streaming_date}\n"
-                f"🎭 **ɢᴇɴʀᴇ:** {genres}\n"
-                f"🌐 **ʟᴀɴɢᴜᴀɢᴇs:** {language}\n"
-                f"📺 **ᴘʟᴀᴛғᴏʀᴍ:** {platform}\n"
+              #  f"🗓️ **sᴛʀᴇᴀᴍɪɴɢ ᴅᴀᴛᴇ:** {streaming_date}\n"
+                f"🎭 {genres} · 🉑 {language}\n"
+                f"📺 {platform}\n"
             )
 
             # Format title for search URL
@@ -98,16 +97,14 @@ async def post_movie_to_channel(client, callback_query):
                 genres = ', '.join(movie.get('genres', ['No Data']))
                 year = movie.get('theatrical-year', 'N/A')
                 # Build the movie's details message for the channel
-                movie_details = (
-                    f"🎟️ **ᴛɪᴛʟᴇ :** {title} ({year})\n"
-                    f"🎥 **ᴛʏᴘᴇ:** {movie_type}\n"
-                    f"🗓️ **sᴛʀᴇᴀᴍɪɴɢ ᴅᴀᴛᴇ:** {streaming_date}\n"
-                    f"🎭 **ɢᴇɴʀᴇ:** {genres}\n"
-                    f"🌐 **ʟᴀɴɢᴜᴀɢᴇs:** {language}\n"
-                    f"📺 **ᴘʟᴀᴛғᴏʀᴍ:** {platform}\n\n"
-                    f"**@MooviDex**"
-                )
-                
+            movie_details = (
+                f"✅ **{title}** · ({year})\n"
+                f"🎥 **ᴛʏᴘᴇ:** {movie_type}\n"
+              #  f"🗓️ **sᴛʀᴇᴀᴍɪɴɢ ᴅᴀᴛᴇ:** {streaming_date}\n"
+                f"🎭 {genres} · 🉑 {language}\n"
+                f"📺 {platform}\n"
+                f"**@MooviDex**"
+            )
                 # Format title for search URL
                 formatted_title = format_title_for_url(title)
 
