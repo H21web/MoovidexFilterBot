@@ -2125,22 +2125,25 @@ async def cb_handler(client: Client, query: CallbackQuery):
             parse_mode=enums.ParseMode.HTML
         )
     elif query.data == "admin":
-        buttons = [[
-            InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='help'),
-            InlineKeyboardButton('ᴇxᴛʀᴀ', callback_data='extra')
-        ]]
-        await client.edit_message_media(
-            query.message.chat.id, 
-            query.message.id, 
-            InputMediaPhoto(random.choice(PICS))
-        )
-        reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(
-            text=script.ADMIN_TXT,
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
-    
+        if query.from_user.id in ADMINS:
+            buttons = [[
+                InlineKeyboardButton('⟸ Bᴀᴄᴋ', callback_data='help'),
+                InlineKeyboardButton('ᴇxᴛʀᴀ', callback_data='extra')
+            ]]
+            await client.edit_message_media(
+                query.message.chat.id, 
+                query.message.id, 
+                InputMediaPhoto(random.choice(PICS))
+            )
+            reply_markup = InlineKeyboardMarkup(buttons)
+            await query.message.edit_text(
+                text=script.ADMIN_TXT,
+                reply_markup=reply_markup,
+                parse_mode=enums.ParseMode.HTML
+            )
+            await handle_admin_button(query.data)
+        else:
+            await query.answer("⚙️ Yᴏᴜ ᴅᴏɴᴛ ʜᴀᴠᴇ ᴀᴄᴄᴇss ᴛᴏ ᴛʜɪs sᴇᴛᴛɪɴɢs!", show_alert=True)
     elif query.data == "store_file":
         buttons = [[
             InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='help')
