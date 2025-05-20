@@ -1,7 +1,6 @@
 import requests
 from pyrogram import Client, filters
 
-
 # Function to fetch upcoming movies
 def fetch_upcoming_movies():
     url = "https://www.binged.com/wp-json/binged-api/v1/movies?mode=streaming-soon"
@@ -31,26 +30,25 @@ async def send_upcoming_movies(client, message):
             return
 
         # Build a single message with all movie details
-        all_movies_details = "🎬 **Upcoming Movies:**\n\n"
+        all_movies_details = "🎬 <b>Upcoming Movies</b>:\n\n"
+        
         for movie in movies_data:
             title = movie.get('title', 'No title available')
             streaming_date = movie.get('streaming-date', 'No streaming date available')
             language = ', '.join(movie.get('languages', ['No language specified']))
-            platform = ', '.join(platform.get('name', 'No platform specified') for platform in movie.get('platforms', []))
-            movie_type = movie.get('type', 'No type specified')  # Add movie type
-            
-            # Append each movie's details to the message
+            platform = ', '.join(
+                platform.get('name', 'No platform specified') for platform in movie.get('platforms', [])
+            )
+            movie_type = movie.get('type', 'No type specified')
+
+            # Format each movie's block
             movie_details = (
-                f"📅 **Title:** {title}\n"
-                f"🎥 **Type:** {movie_type}\n"
-                f"🗓️ **Streaming Date:** {streaming_date}\n"
-                f"🌐 **Language:** {language}\n"
-                f"📺 **Platform:** {platform}\n"
-                f"--------------------\n"
+                f"◉ <u>{streaming_date}</u>\n"
+                f"<b>{title}</b>  ·  <i>{movie_type}</i>\n"
+                f"{platform}  ·  {language}\n\n"
             )
             all_movies_details += movie_details
-        
-        await message.reply_text(all_movies_details)
+
+        await message.reply_text(all_movies_details, parse_mode="HTML")
     else:
         await message.reply_text("⚠️ Failed to fetch upcoming movies or no movies found. Please try again later.")
-        
