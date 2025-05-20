@@ -86,19 +86,20 @@ async def pm_text(bot, message):
 async def doo(bot, data, message):
     user = message.from_user.first_name
     user_id = message.from_user.id
-    
+
     ai_search = True
 
-    #Replace underscores with spaces
+    # Replace underscores with spaces
     content = data.replace('_', ' ')
 
-     #Send the initial search message
-    reply_msg = await bot.send_message(
-        message.from_user.id, 
-        f"<b><i>🔍 sᴇᴀʀᴄʜɪɴɢ ғᴏʀ {data} </i></b>", 
-        reply_to_message_id=message.id
+    # Send "searching" message in the same chat where the request came from
+    reply_msg = await message.reply(
+        f"<b><i>🔍 Searching for {content}</i></b>"
     )
+
+    # Call auto_filter using the correct chat and message context
     await auto_filter(bot, content, message, reply_msg, ai_search)
+
     
     
 @Client.on_callback_query(filters.regex(r"^next"))
