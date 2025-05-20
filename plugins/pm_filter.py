@@ -281,7 +281,7 @@ async def advantage_spoll_choker(bot, query):
                 
             
                 encoded_movie = re.sub(r'\W+', '_', movie)  # Replace non-alphanumeric characters with underscores
-                request_btn = [[InlineKeyboardButton(f'💬 sᴇɴᴅ ʀᴇǫᴜᴇsᴛ', url=f"https://t.me/moovidexbot?start=Request_{encoded_movie}")]]
+                request_btn = [[InlineKeyboardButton(f'💬 sᴇɴᴅ ʀᴇǫᴜᴇsᴛ', url=f"https://t.me/{temp.U_NAME}?start=Request_{encoded_movie}")]]
                 msg = await query.message.edit(script.MVE_NT_FND, reply_markup=InlineKeyboardMarkup(request_btn))
                 await asyncio.sleep(120)
                 await msg.delete()
