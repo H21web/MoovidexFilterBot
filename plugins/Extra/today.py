@@ -51,9 +51,8 @@ async def send_today_movies(client, message):
             # Build the movie's details message
             movie_details = (
                 f"✅ **{title}** · ({year})\n"
-                f"🎥 **ᴛʏᴘᴇ:** {movie_type}\n"
               #  f"🗓️ **sᴛʀᴇᴀᴍɪɴɢ ᴅᴀᴛᴇ:** {streaming_date}\n"
-                f"🎭 {genres} · 🉑 {language}\n"
+                f"🎭 {genres} · 🎥 {movie_type} · 🉑 {language}\n"
                 f"📺 {platform}\n"
             )
 
