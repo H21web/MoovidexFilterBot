@@ -82,6 +82,24 @@ async def pm_text(bot, message):
         ai_search = True
         reply_msg = await bot.send_message(message.from_user.id, f"<b><i>Searching For {content} 🔍</i></b>", reply_to_message_id=message.id)
         await auto_filter(bot, content, message, reply_msg, ai_search)
+
+async def doo(bot, data, message):
+    user = message.from_user.first_name
+    user_id = message.from_user.id
+    
+    ai_search = True
+
+    #Replace underscores with spaces
+    data = data.replace('_', ' ')
+
+     #Send the initial search message
+    reply_msg = await bot.send_message(
+        message.from_user.id, 
+        f"<b><i>🔍 sᴇᴀʀᴄʜɪɴɢ ғᴏʀ {data} </i></b>", 
+        reply_to_message_id=message.id
+    )
+    await auto_filter(bot, data, message, reply_msg, ai_search)
+    
     
 @Client.on_callback_query(filters.regex(r"^next"))
 async def next_page(bot, query):
