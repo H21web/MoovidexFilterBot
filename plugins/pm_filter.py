@@ -90,7 +90,7 @@ async def doo(bot, data, message):
     ai_search = True
 
     #Replace underscores with spaces
-    data = data.replace('_', ' ')
+    content = data.replace('_', ' ')
 
      #Send the initial search message
     reply_msg = await bot.send_message(
@@ -98,7 +98,7 @@ async def doo(bot, data, message):
         f"<b><i>🔍 sᴇᴀʀᴄʜɪɴɢ ғᴏʀ {data} </i></b>", 
         reply_to_message_id=message.id
     )
-    await auto_filter(bot, data, message, reply_msg, ai_search)
+    await auto_filter(bot, content, message, reply_msg, ai_search)
     
     
 @Client.on_callback_query(filters.regex(r"^next"))
