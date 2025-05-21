@@ -166,7 +166,7 @@ async def start(client, message):
         user_id = int(data.split("-", 1)[1])
         vj = await referal_add_user(user_id, message.from_user.id)
         if vj and PREMIUM_AND_REFERAL_MODE == True:
-            await message.reply(f"<b>You have joined using the referral link of user with ID {user_id}\n\n /start again to use the bot</b>")
+            await message.reply(f"<b>You have joined using the referral link of user with ID {user_id}\n\nSend /start again to use the bot</b>")
             num_referrals = await get_referal_users_count(user_id)
             await client.send_message(chat_id = user_id, text = "<b>{} start the bot with your referral link\n\nTotal Referals - {}</b>".format(message.from_user.mention, num_referrals))
             if num_referrals == REFERAL_COUNT:
@@ -378,7 +378,7 @@ async def start(client, message):
         else:
             return await message.reply_text(text="<b>ɪɴᴠᴀʟɪᴅ ʟɪɴᴋ ᴏʀ ᴇxᴘɪʀᴇᴅ ʟɪɴᴋ</b>", protect_content=True)
             
-    if data.startswith("files"):
+    if data.startswith("sendfiles"):
         chat_id = int("-" + file_id.split("-")[1])
         userid = message.from_user.id if message.from_user else None
         settings = await get_settings(chat_id)
@@ -622,11 +622,11 @@ async def log_file(bot, message):
 
 @Client.on_message(filters.command('delete') & filters.user(ADMINS))
 async def delete(bot, message):
-    reply = await bot.ask(message.from_user.id, "Now  Me Media Which You Want to delete")
+    reply = await bot.ask(message.from_user.id, "Now Send Me Media Which You Want to delete")
     if reply.media:
         msg = await message.reply("Processing...⏳", quote=True)
     else:
-        await message.reply(' Me Video, File Or Document.', quote=True)
+        await message.reply('Send Me Video, File Or Document.', quote=True)
         return
 
     for file_type in ("document", "video", "audio"):
@@ -948,7 +948,7 @@ async def process_request(bot, message, data=None):
         ]
 
         if REQST_CHANNEL:
-            reported_post = await bot._message(
+            reported_post = await bot.send_message(
                 chat_id=REQST_CHANNEL,
                 text=f"<b>𝖱𝖾𝗉𝗈𝗋𝗍𝖾𝗋 : {mention} ({reporter})\n\n𝖬𝖾𝗌𝗌𝖺𝗀𝖾 : {content}</b>",
                 reply_markup=InlineKeyboardMarkup(btn)
@@ -957,7 +957,7 @@ async def process_request(bot, message, data=None):
 
         else:
             for admin in ADMINS:
-                reported_post = await bot._message(
+                reported_post = await bot.send_message(
                     chat_id=admin,
                     text=f"<b>𝖱𝖾𝗉𝗈𝗋𝗍𝖾𝗋 : {mention} ({reporter})\n\n𝖬𝖾𝗌𝗌𝖺𝗀𝖾 : {content}</b>",
                     reply_markup=InlineKeyboardMarkup(btn)
