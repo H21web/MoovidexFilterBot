@@ -239,7 +239,7 @@ async def start(client, message):
                 f_caption = f"{title}"
             try:
                 if STREAM_MODE == True:
-                    log_msg = await client._cached_media(chat_id=LOG_CHANNEL, file_id=msg.get("file_id"))
+                    log_msg = await client.send_cached_media(chat_id=LOG_CHANNEL, file_id=msg.get("file_id"))
                     fileName = {quote_plus(get_name(log_msg))}
                     stream = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
                     download = f"{URL}{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
@@ -255,7 +255,7 @@ async def start(client, message):
                 else:
                     reply_markup = None
                     
-                msg = await client._cached_media(
+                msg = await client.send_cached_media(
                     chat_id=message.from_user.id,
                     file_id=msg.get("file_id"),
                     caption=f_caption,
@@ -266,7 +266,7 @@ async def start(client, message):
                 
             except FloodWait as e:
                 await asyncio.sleep(e.value)
-                msg = await client._cached_media(
+                msg = await client.send_cached_media(
                     chat_id=message.from_user.id,
                     file_id=msg.get("file_id"),
                     caption=f_caption,
@@ -321,7 +321,7 @@ async def start(client, message):
                         f_caption = getattr(msg, 'caption', '')
                 file_id = file.file_id
                 if STREAM_MODE == True:
-                    log_msg = await client._cached_media(chat_id=LOG_CHANNEL, file_id=file_id)
+                    log_msg = await client.send_cached_media(chat_id=LOG_CHANNEL, file_id=file_id)
                     fileName = {quote_plus(get_name(log_msg))}
                     stream = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
                     download = f"{URL}{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
@@ -456,7 +456,7 @@ async def start(client, message):
                 reply_markup=InlineKeyboardMarkup(button)
             else:
                 reply_markup = None
-            msg = await client._cached_media(
+            msg = await client.send_cached_media(
                 chat_id=message.from_user.id,
                 file_id=file_id,
                 caption=f_caption,
@@ -519,7 +519,7 @@ async def start(client, message):
                 reply_markup=InlineKeyboardMarkup(button)
             else:
                 reply_markup = None
-            msg = await client._cached_media(
+            msg = await client.send_cached_media(
                 chat_id=message.from_user.id,
                 file_id=file_id,
                 protect_content=True if pre == 'filep' else False,
