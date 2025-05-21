@@ -1,3 +1,19 @@
+
+
+from plugins.Extra.utils import progress_for_pyrogram, convert, humanbytes
+from pyrogram import Client, filters
+from pyrogram.types import (  InlineKeyboardButton, InlineKeyboardMarkup,ForceReply)
+from hachoir.metadata import extractMetadata
+from hachoir.parser import createParser
+from database.users_chats_db import db
+import os 
+import humanize
+from PIL import Image
+import time
+import logging
+logger = logging.getLogger(__name__)
+logging.getLogger("pyrogram").setLevel(logging.WARNING)
+
 @Client.on_callback_query(filters.regex("upload"))
 async def doc(bot, update):
     try:
