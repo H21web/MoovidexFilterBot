@@ -1117,7 +1117,8 @@ async def filter_qualities_cb_handler(client: Client, query: CallbackQuery):
             await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(btn))
         except MessageNotModified:
             pass
-                
+
+@Client.on_callback_query()
 async def cb_handler(client: Client, query: CallbackQuery):
     try:
         link = await client.create_chat_invite_link(int(REQST_CHANNEL))
