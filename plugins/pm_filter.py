@@ -1118,8 +1118,11 @@ async def filter_qualities_cb_handler(client: Client, query: CallbackQuery):
         except MessageNotModified:
             pass
                 
-@Client.on_callback_query()
 async def cb_handler(client: Client, query: CallbackQuery):
+    try:
+        link = await client.create_chat_invite_link(int(REQST_CHANNEL))
+    except:
+        pass
     if query.data == "close_data":
         await query.message.delete()
     elif query.data == "get_trail":
@@ -1134,6 +1137,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             new_text= "**🤣 you already used free now no more free trail. please buy subscription here are our 👉 /plans**"
             await query.message.edit_text(text=new_text)
             return
+            
             
     elif query.data == "buy_premium":
         btn = [[            
