@@ -150,13 +150,14 @@ async def next_page(bot, query):
         btn.insert(0, 
             [
                 InlineKeyboardButton('🎚️ ǫᴜᴀʟɪᴛʏ', callback_data=f"qualities#{key}"),
+                InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
                # InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
                 InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
             InlineKeyboardButton(f"🗂 ꜰɪʟᴇꜱ: {total_results_str}", 'total'),
-            InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
+           # InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
            # InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
             InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}")
            # InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
@@ -166,13 +167,14 @@ async def next_page(bot, query):
         btn.insert(0, 
             [
                 InlineKeyboardButton('🎚️ ǫᴜᴀʟɪᴛʏ', callback_data=f"qualities#{key}"),
+                InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
               #  InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
                 InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
             InlineKeyboardButton(f"🗂 ꜰɪʟᴇꜱ: {total_results_str}", 'total'),
-            InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
+           # InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
           #  InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
             InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}")
           #  InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
