@@ -635,7 +635,6 @@ async def languages_cb_handler(client: Client, query: CallbackQuery):
         pass
 
     _, key = query.data.split("#")
-    search = FRESH.get(key)
     search = search.replace(' ', '_')
 
     btn = []
