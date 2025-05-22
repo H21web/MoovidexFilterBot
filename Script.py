@@ -161,19 +161,23 @@ Cᴏᴍᴍᴀɴᴅs Aɴᴅ Usᴀɢᴇ:
     STATUS_TXT = """<b>📊 Total Files : <code>{}</code></b>
 
 <b>📊 BOT STATUS :</b>
+
 • 👤 Users: <code>{}</code>  
 • 💬 Chats: <code>{}</code>
 
 <b>🗃 DB 1 :</b>
+
 • 🗂️ Files: <code>{}</code>  
-• 📦 Storage: <code>{} MB / {} MB</code>  
+• 📦 Storage: <code>{}MB / {}MB</code>  
 
 <b>🗃 DB 2 :</b>
+
 • 🗂️ Files: <code>{}</code>  
-• 📦 Storage: <code>{} MB / {} MB</code>  
+• 📦 Storage: <code>{}MB / {}MB</code>  
 
 <b>📦 OTHER DB :</b>
-• 🔸 Storage: <code>{} MB / {} MB</code> """
+
+• 🔸 Storage: <code>{}MB / {}MB</code> """
 
     
     LOG_TEXT_G = """#NewGroup
