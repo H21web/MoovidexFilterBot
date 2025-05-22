@@ -950,7 +950,12 @@ async def process_request(bot, message, data=None):
         if REQST_CHANNEL:
             reported_post = await bot.send_message(
                 chat_id=REQST_CHANNEL,
-                text=f"<b>𝖱𝖾𝗉𝗈𝗋𝗍𝖾𝗋 : {mention} ({reporter})\n\n𝖬𝖾𝗌𝗌𝖺𝗀𝖾 : {content}</b>",
+                text=f"""
+
+🆔 <b>Reporter:</b> <code>{mention} ({reporter})</code>
+📝 <b>Message:</b> <code>{content}</code>
+<b>
+    "",
                 reply_markup=InlineKeyboardMarkup(btn)
             )
             success = True
@@ -959,7 +964,12 @@ async def process_request(bot, message, data=None):
             for admin in ADMINS:
                 reported_post = await bot.send_message(
                     chat_id=admin,
-                    text=f"<b>𝖱𝖾𝗉𝗈𝗋𝗍𝖾𝗋 : {mention} ({reporter})\n\n𝖬𝖾𝗌𝗌𝖺𝗀𝖾 : {content}</b>",
+                    text=f"""
+
+🆔 <b>Reporter:</b> <code>{mention} ({reporter})</code>
+📝 <b>Message:</b> <code>{content}</code>
+<b>
+    """,
                     reply_markup=InlineKeyboardMarkup(btn)
                 )
                 success = True
