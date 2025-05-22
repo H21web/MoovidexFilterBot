@@ -635,6 +635,7 @@ async def languages_cb_handler(client: Client, query: CallbackQuery):
         pass
 
     _, key = query.data.split("#")
+    search = FRESH.get(key)
     search = search.replace(' ', '_')
 
     btn = []
@@ -673,38 +674,39 @@ async def languages_cb_handler(client: Client, query: CallbackQuery):
 @Client.on_callback_query(filters.regex(r"^fl#"))
 async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
     _, lang, key = query.data.split("#")
+    curr_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
+    search = FRESH.get(key)
+    
+    try:
+        search = search.replace(' ', '_')
+    except:
+        pass
+
+    if lang != "homepage":
+        if lang in search:
+            search = search.replace(lang, "")
+        else:
+            search += f" {lang}"
+    else:
+        lang = ""
+
+    BUTTONS[key] = search.strip()
+
     chat_id = query.message.chat.id
     message = query.message
     req = query.from_user.id
 
-    # Get the latest query (filtered or base)
-    search = BUTTONS.get(key) or FRESH.get(key) or ""
-
-    # Remove old language if already there
-    if lang != "homepage":
-        if lang in search:
-            search = search.replace(lang, "").strip()
-        search = f"{search} {lang}".strip()
-    else:
-        search = search.strip()
-
-    # Store updated search string
-    BUTTONS[key] = search
-    FRESH[key] = search
-
-    # Check access rights
     try:
         if int(req) not in [query.message.reply_to_message.from_user.id, 0]:
             return await query.answer(
-                f"⚠️ ʜᴇʟʟᴏ {query.from_user.first_name},\nᴛʜɪꜱ ɪꜱ ɴᴏᴛ ʏᴏᴜʀ ʀᴇQᴜᴇꜱᴛ.",
+                f"⚠️ ʜᴇʟʟᴏ {query.from_user.first_name},\nᴛʜɪꜱ ɪꜱ ɴᴏᴛ ʏᴏᴜʀ ᴍᴏᴠɪᴇ ʀᴇQᴜᴇꜱᴛ,\nʀᴇQᴜᴇꜱᴛ ʏᴏᴜʀ'ꜱ...",
                 show_alert=True,
             )
     except:
         pass
 
-    # Start fresh on filter change
-    offset = 0
-    files, offset, total_results = await get_search_results(chat_id, search, offset=offset, filter=True)
+    offset = 0  # start from beginning on filter change
+    files, offset, total_results = await get_search_results(chat_id, search.strip(), offset=offset, filter=True)
 
     if not files:
         await query.answer("🚫 𝗡𝗼 𝗙𝗶𝗹𝗲𝘀 𝗪𝗲𝗿𝗲 𝗙𝗼𝘂𝗻𝗱 🚫", show_alert=True)
@@ -714,7 +716,6 @@ async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
     settings = await get_settings(message.chat.id)
     pre = 'filep' if settings['file_secure'] else 'file'
 
-    # Build buttons
     btn = [
         [
             InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
@@ -727,57 +728,49 @@ async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
             InlineKeyboardButton("🗃️ ꜱᴇᴀꜱᴏɴꜱ", callback_data=f"seasons#{key}")
         ]
     ]
-
-    try:
-        if settings['max_btn']:
-            btn.append([
-                InlineKeyboardButton("𝐏𝐀𝐆𝐄", callback_data="pages"),
-                InlineKeyboardButton(f"1/{math.ceil(total_results/10)}", callback_data="pages"),
-                InlineKeyboardButton("𝐍𝐄𝐗𝐓 ➪", callback_data=f"next_{req}_{key}_{offset}")
-            ])
-        else:
-            btn.append([
-                InlineKeyboardButton("𝐏𝐀𝐆𝐄", callback_data="pages"),
-                InlineKeyboardButton(f"1/{math.ceil(total_results/int(MAX_B_TN))}", callback_data="pages"),
-                InlineKeyboardButton("𝐍𝐄𝐗𝐓 ➪", callback_data=f"next_{req}_{key}_{offset}")
-            ])
-    except KeyError:
-        await save_group_settings(chat_id, 'max_btn', True)
-        btn.append([
-            InlineKeyboardButton("𝐏𝐀𝐆𝐄", callback_data="pages"),
-            InlineKeyboardButton(f"1/{math.ceil(total_results/10)}", callback_data="pages"),
-            InlineKeyboardButton("𝐍𝐄𝐗𝐓 ➪", callback_data=f"next_{req}_{key}_{offset}")
-        ])
-
-    # Back button if coming from filtered view
+    
+    if offset != "":
+        try:
+            if settings['max_btn']:
+                btn.append(
+                    [InlineKeyboardButton("𝐏𝐀𝐆𝐄", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/10)}",callback_data="pages"), InlineKeyboardButton(text="𝐍𝐄𝐗𝐓 ➪",callback_data=f"next_{req}_{key}_{offset}")]
+                )
+    
+            else:
+                btn.append(
+                    [InlineKeyboardButton("𝐏𝐀𝐆𝐄", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/int(MAX_B_TN))}",callback_data="pages"), InlineKeyboardButton(text="𝐍𝐄𝐗𝐓 ➪",callback_data=f"next_{req}_{key}_{offset}")]
+                )
+        except KeyError:
+            await save_group_settings(query.message.chat.id, 'max_btn', True)
+            btn.append(
+                [InlineKeyboardButton("𝐏𝐀𝐆𝐄", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/10)}",callback_data="pages"), InlineKeyboardButton(text="𝐍𝐄𝐗𝐓 ➪",callback_data=f"next_{req}_{key}_{offset}")]
+            )
+    else:
+        btn.append(
+            [InlineKeyboardButton(text="𝐍𝐎 𝐌𝐎𝐑𝐄 𝐏𝐀𝐆𝐄𝐒 𝐀𝐕𝐀𝐈𝐋𝐀𝐁𝐋𝐄",callback_data="pages")]
+        )
     if lang != "homepage":
-        btn.append([InlineKeyboardButton("↭ ʙᴀᴄᴋ ᴛᴏ ʜᴏᴍᴇ ↭", callback_data=f"fl#homepage#{key}")])
-
-    # Send output
+        req = query.from_user.id
+        offset = 0
+        btn.append([InlineKeyboardButton(text="↭ ʙᴀᴄᴋ ᴛᴏ ʜᴏᴍᴇ ↭", callback_data=f"fl#homepage#{key}")])
+    
     if not settings["button"]:
         cur_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
-        time_difference = timedelta(
-            hours=cur_time.hour, minutes=cur_time.minute, seconds=cur_time.second + (cur_time.microsecond / 1000000)
-        ) - timedelta(
-            hours=query.message.date.time().hour,
-            minutes=query.message.date.time().minute,
-            seconds=query.message.date.time().second + (query.message.date.time().microsecond / 1000000)
-        )
+        time_difference = timedelta(hours=cur_time.hour, minutes=cur_time.minute, seconds=(cur_time.second+(cur_time.microsecond/1000000))) - timedelta(hours=curr_time.hour, minutes=curr_time.minute, seconds=(curr_time.second+(curr_time.microsecond/1000000)))
         remaining_seconds = "{:.2f}".format(time_difference.total_seconds())
         cap = await get_cap(settings, remaining_seconds, files, query, total_results, search)
-
         try:
             await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
         except MessageNotModified:
             pass
     else:
         try:
-            await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(btn))
+            await query.edit_message_reply_markup(
+                reply_markup=InlineKeyboardMarkup(btn)
+            )
         except MessageNotModified:
             pass
-
     await query.answer()
-
 
 
 @Client.on_callback_query(filters.regex(r"^fs#"))
