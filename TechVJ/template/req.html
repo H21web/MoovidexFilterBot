@@ -24,7 +24,7 @@
     <link rel="stylesheet" href="https://kuttudb.github.io/hostingly21/css/style.css">
     <link rel="stylesheet" href="https://kuttudb.github.io/hostingly21/css/engine.css">
     <meta name="theme-color" content="#FF4D5F">
-    <script src="https://cdn.jsdelivr.net/npm/@oplayer/core@latest/dist/index.min.js"></script>
+
   
   <body>
     <div class="wrap" >
@@ -126,58 +126,59 @@
           </li>
         </ul>
       </div>
-    </footer>
-    
-    <script>
-    // Configuration for the player
-    const playerConfig = {
-    source: {
-      src: '{{file_url}}',
       
-    }
-    };
+    </footer>
+<!-- Load OPlayer Core and UI only -->
+<script src="https://cdn.jsdelivr.net/npm/@oplayer/core@latest/dist/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@oplayer/ui@latest/dist/index.min.js"></script>
 
-    // Configuration for the OUI (OPlayer UI)
-    const uiConfig = {
-    fullscreen: true,
-    coverButton: true,
-    miniProgressBar: true,
-    autoFocus: true,
-    forceLandscapeOnFullscreen: true,
-    screenshot: false,
-    pictureInPicture: true,
-    showControls: 'always',
-    keyboard: { focused: true, global: false },
-    settings: ['loop'],
-    theme: {
-      primaryColor: 'red',
-      watermark: {
-        src: 'https://kuttudb.github.io/hostingly21/img/fontbolt.png',
-        style: {
-          position: 'absolute',
-          top: '10px',
-          right: '4px',
-          width: '40px',
-          height: 'auto'
-        },
-        attrs: {
-          class: 'watermark'
-        }
+<div id="oplayer" class="oplayer-con"></div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    OPlayer.make('#oplayer', {
+      source: {
+        src: '{{file_url}}',
+        
       }
-    },
-    speeds: ['2.0', '1.75', '1.25', '1.0', '0.75', '0.5'],
-    slideToSeek: 'long-touch',
-    controlBar: false,
-    topSetting: false,
-
-    };
-
-    // Create the OPlayer instance
-    const oplayerInstance = OPlayer.make('#oplayer', playerConfig)
-    .use([OPlayer.ui(uiConfig)])
+    })
+    .use([
+      OUI({
+        fullscreen: true,
+        coverButton: true,
+        miniProgressBar: true,
+        autoFocus: true,
+        forceLandscapeOnFullscreen: true,
+        pictureInPicture: true,
+        showControls: 'always',
+        keyboard: { focused: true, global: false },
+        settings: ['loop'],
+        speeds: ['2.0', '1.75', '1.25', '1.0', '0.75', '0.5'],
+        slideToSeek: 'long-touch',
+        controlBar: false,
+        topSetting: false,
+        theme: {
+          primaryColor: 'red',
+          watermark: {
+            src: 'https://kuttudb.github.io/hostingly21/img/fontbolt.png',
+            style: {
+              position: 'absolute',
+              top: '20px',
+              right: '10px',
+              width: '60px',
+              height: 'auto'
+            },
+            attrs: {
+              class: 'watermark'
+            }
+          }
+        }
+      })
+    ])
     .create();
-    
-    </script> 
+  });
+</script>
+
     <script>
 
     
