@@ -951,8 +951,9 @@ async def process_request(bot, message, data=None):
             reported_post = await bot.send_message(
                 chat_id=REQST_CHANNEL,
                 text=f"""
+<b><u> Request Details :</u></b>
 
-/n<b>Reporter:</b> <code>{mention} ({reporter})</code>
+👤 <b>Reporter:</b> <code>{mention} ({reporter})</code>
 📝 <b>Message:</b> <code>{content}</code>
 <b>
     """,
@@ -965,8 +966,9 @@ async def process_request(bot, message, data=None):
                 reported_post = await bot.send_message(
                     chat_id=admin,
                     text=f"""
+<b><u> Request Details :</u></b>
 
-/n<b>Reporter:</b> <code>{mention} ({reporter})</code>
+👤 <b>Reporter:</b> <code>{mention} ({reporter})</code>
 📝 <b>Message:</b> <code>{content}</code>
 <b>
     """,
