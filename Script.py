@@ -158,25 +158,23 @@ Cᴏᴍᴍᴀɴᴅs Aɴᴅ Usᴀɢᴇ:
 ★ Usᴇᴅ Sᴛᴏʀᴀɢᴇ: <code>{} MB</code>
 ★ Fʀᴇᴇ Sᴛᴏʀᴀɢᴇ: <code>{} MB</code></b>"""
     
-    STATUS_TXT = """<b>Total Files From All DBs: <code>{}</code>
+    STATUS_TXT = """<b>📊 Total Files : <code>{}</code></b>
 
-USERS DB :-
-★ Tᴏᴛᴀʟ Usᴇʀs: <code>{}</code>
-★ Tᴏᴛᴀʟ Cʜᴀᴛs: <code>{}</code>
+<b>👥 USERS :</b>
+• 👤 Total Users: <code>{}</code>  
+• 💬 Total Chats: <code>{}</code>
 
-FILE FIRST DB :-
-★ Tᴏᴛᴀʟ Fɪʟᴇs: <code>{}</code>
-★ Usᴇᴅ Sᴛᴏʀᴀɢᴇ: <code>{} MB</code>
-★ Fʀᴇᴇ Sᴛᴏʀᴀɢᴇ: <code>{} MB</code>
+<b>🗃 DB 1 :</b>
+• 🗂️ Total Files: <code>{}</code>  
+• 📦 Used Storage: <code>{} MB / {} MB</code>  
 
-FILE SECOND DB :-
-★ Tᴏᴛᴀʟ Fɪʟᴇs: <code>{}</code>
-★ Usᴇᴅ Sᴛᴏʀᴀɢᴇ: <code>{} MB</code>
-★ Fʀᴇᴇ Sᴛᴏʀᴀɢᴇ: <code>{} MB</code>
+<b>🗃 DB 2 :</b>
+• 🗂️ Total Files: <code>{}</code>  
+• 📦 Used Storage: <code>{} MB / {} MB</code>  
 
-OTHER DB :-
-★ Usᴇᴅ Sᴛᴏʀᴀɢᴇ: <code>{} MB</code>
-★ Fʀᴇᴇ Sᴛᴏʀᴀɢᴇ: <code>{} MB</code></b>"""
+<b>📦 OTHER DB :</b>
+• 🔸 Used Storage: <code>{} MB / {} MB</code> """
+
     
     LOG_TEXT_G = """#NewGroup
 Gʀᴏᴜᴘ = {}(<code>{}</code>)
