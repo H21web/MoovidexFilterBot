@@ -112,7 +112,8 @@ async def next_page(bot, query):
         offset = int(offset)
     except:
         offset = 0
-    search = FRESH.get(key)
+    search = BUTTONS.get(key) or BUTTONS0.get(key) or BUTTONS1.get(key) or BUTTONS2.get(key) or FRESH.get(key)
+
    # if not search:
       #  await query.answer(script.OLD_ALRT_TXT.format(query.from_user.first_name),show_alert=True)
        # return
