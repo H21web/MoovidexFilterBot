@@ -955,7 +955,7 @@ async def process_request(bot, message, data=None):
 🆔 <b>Reporter:</b> <code>{mention} ({reporter})</code>
 📝 <b>Message:</b> <code>{content}</code>
 <b>
-    "",
+    """,
                 reply_markup=InlineKeyboardMarkup(btn)
             )
             success = True
