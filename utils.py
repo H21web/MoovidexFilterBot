@@ -696,12 +696,12 @@ async def get_cap(settings, remaining_seconds, files, query, total_results, sear
                 for file in files:
                     cap += f"<b>📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}'>[{get_size(file['file_size'])}] {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}\n\n</a></b>"
             else:
-                cap = f"<b>𝖱𝖾𝗌𝗎𝗅𝗍  𝖥𝗈𝗎𝗇𝖽 𝖥𝗈𝗋 {search}\n\n🧑‍💻 𝖱𝖾𝗊𝗎𝖾𝗌𝗍𝖾𝖽 𝖡𝗒  : {message.from_user.mention}\n⏰ 𝖱𝖾𝗌𝗎𝗅𝗍 𝖲𝗁𝗈𝗐𝗇 𝗂𝗇 : {remaining_seconds} 𝗌𝖾𝖼𝗈𝗇𝖽𝗌\n\n<blockquote>⚠️ ᴀꜰᴛᴇʀ 5 ᴍɪɴᴜᴛᴇꜱ ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴅᴇʟᴇᴛᴇᴅ 🗑️</blockquote>\n\n</b>"
+                cap = f"<b>𝖱𝖾𝗌𝗎𝗅𝗍  𝖥𝗈𝗎𝗇𝖽 𝖥𝗈𝗋 {search}\n\n🧑‍💻 𝖱𝖾𝗊𝗎𝖾𝗌𝗍𝖾𝖽 𝖡𝗒  : {query.from_user.mention}\n⏰ 𝖱𝖾𝗌𝗎𝗅𝗍 𝖲𝗁𝗈𝗐𝗇 𝗂𝗇 : {remaining_seconds} 𝗌𝖾𝖼𝗈𝗇𝖽𝗌\n\n<blockquote>⚠️ ᴀꜰᴛᴇʀ 5 ᴍɪɴᴜᴛᴇꜱ ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴅᴇʟᴇᴛᴇᴅ 🗑️</blockquote>\n\n</b>"
                 #cap+="<b><u>🍿 Your Movie Files 👇</u></b>\n\n"
                 for file in files:
                     cap += f"<b>📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}'>[{get_size(file['file_size'])}] {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}\n\n</a></b>"
     else:
-        cap = f"<b>𝖱𝖾𝗌𝗎𝗅𝗍  𝖥𝗈𝗎𝗇𝖽 𝖥𝗈𝗋 {search}\n\n🧑‍💻 𝖱𝖾𝗊𝗎𝖾𝗌𝗍𝖾𝖽 𝖡𝗒  : {message.from_user.mention}\n⏰ 𝖱𝖾𝗌𝗎𝗅𝗍 𝖲𝗁𝗈𝗐𝗇 𝗂𝗇 : {remaining_seconds} 𝗌𝖾𝖼𝗈𝗇𝖽𝗌\n\n<blockquote>⚠️ ᴀꜰᴛᴇʀ 5 ᴍɪɴᴜᴛᴇꜱ ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴅᴇʟᴇᴛᴇᴅ 🗑️</blockquote>\n\n</b>"
+        cap = f"<b>𝖱𝖾𝗌𝗎𝗅𝗍  𝖥𝗈𝗎𝗇𝖽 𝖥𝗈𝗋 {search}\n\n🧑‍💻 𝖱𝖾𝗊𝗎𝖾𝗌𝗍𝖾𝖽 𝖡𝗒  : {query.from_user.mention}\n⏰ 𝖱𝖾𝗌𝗎𝗅𝗍 𝖲𝗁𝗈𝗐𝗇 𝗂𝗇 : {remaining_seconds} 𝗌𝖾𝖼𝗈𝗇𝖽𝗌\n\n<blockquote>⚠️ ᴀꜰᴛᴇʀ 5 ᴍɪɴᴜᴛᴇꜱ ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴅᴇʟᴇᴛᴇᴅ 🗑️</blockquote>\n\n</b>"
        # cap+="<b><u>🍿 Your Movie Files 👇</u></b>\n\n"
         for file in files:
             cap += f"<b>📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}'>[{get_size(file['file_size'])}] {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}\n\n</a></b>"
