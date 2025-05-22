@@ -952,7 +952,7 @@ async def process_request(bot, message, data=None):
                 chat_id=REQST_CHANNEL,
                 text=f"""
 
-🆔 <b>Reporter:</b> <code>{mention} ({reporter})</code>
+/n<b>Reporter:</b> <code>{mention} ({reporter})</code>
 📝 <b>Message:</b> <code>{content}</code>
 <b>
     """,
@@ -966,7 +966,7 @@ async def process_request(bot, message, data=None):
                     chat_id=admin,
                     text=f"""
 
-🆔 <b>Reporter:</b> <code>{mention} ({reporter})</code>
+/n<b>Reporter:</b> <code>{mention} ({reporter})</code>
 📝 <b>Message:</b> <code>{content}</code>
 <b>
     """,
