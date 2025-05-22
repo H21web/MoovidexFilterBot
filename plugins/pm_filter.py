@@ -678,8 +678,9 @@ async def languages_cb_handler(client: Client, query: CallbackQuery):
         pass
 
 @Client.on_callback_query(filters.regex(r"^fl#"))
-async def filter_qualities_cb_handler(client: Client, query: CallbackQuery):
-    _, qual, key = query.data.split("#")
+async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
+    _, lang, key = query.data.split("#")
+    curr_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
     search = FRESH.get(key)
     
     try:
@@ -687,122 +688,111 @@ async def filter_qualities_cb_handler(client: Client, query: CallbackQuery):
     except:
         pass
 
-    # Toggle quality from search
-    if qual in search:
-        search = search.replace(qual, "")
-    # else keep as is
+    if lang != "homepage":
+        if lang in search:
+            search = search.replace(lang, "")
+        else:
+            search += f" {lang}"
+    else:
+        lang = ""
 
-    req = query.from_user.id
+    BUTTONS[key] = search.strip()
+
     chat_id = query.message.chat.id
     message = query.message
+    req = query.from_user.id
 
     try:
         if int(req) not in [query.message.reply_to_message.from_user.id, 0]:
             return await query.answer(
                 f"⚠️ ʜᴇʟʟᴏ {query.from_user.first_name},\nᴛʜɪꜱ ɪꜱ ɴᴏᴛ ʏᴏᴜʀ ᴍᴏᴠɪᴇ ʀᴇQᴜᴇꜱᴛ,\nʀᴇQᴜᴇꜱᴛ ʏᴏᴜʀ'ꜱ...",
-                show_alert=False,
+                show_alert=True,
             )
     except:
         pass
 
-    searchagain = search
-    if lang != "homepage":
-        search = f"{search} {qual}"
-    
-    BUTTONS[key] = search
-
-    files, offset, total_results = await get_search_results(chat_id, search, offset=0, filter=True)
+    offset = 0  # start from beginning on filter change
+    files, offset, total_results = await get_search_results(chat_id, search.strip(), offset=offset, filter=True)
 
     if not files:
-        await query.answer("🚫 𝗡𝗼 𝗙𝗶𝗹𝗲𝘀 𝗪𝗲𝗿𝗲 𝗙𝗼𝘂𝗻𝗱 🚫", show_alert=1)
+        await query.answer("🚫 𝗡𝗼 𝗙𝗶𝗹𝗲𝘀 𝗪𝗲𝗿𝗲 𝗙𝗼𝘂𝗻𝗱 🚫", show_alert=True)
         return
 
     temp.GETALL[key] = files
     settings = await get_settings(message.chat.id)
     pre = 'filep' if settings['file_secure'] else 'file'
 
-    # Create buttons for files (always include on page 1)
     btn = [
         [
+            InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
+            InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}"),
+            InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
+        ],
+        [
+            InlineKeyboardButton("🎚️ ǫᴜᴀʟɪᴛʏ", callback_data=f"qualities#{key}"),
+            InlineKeyboardButton("📺 ᴇᴘɪꜱᴏᴅᴇꜱ", callback_data=f"episodes#{key}"),
+            InlineKeyboardButton("🗃️ ꜱᴇᴀꜱᴏɴꜱ", callback_data=f"seasons#{key}")
+        ]
+    ]
+
+    for file in files:
+        btn.append([
             InlineKeyboardButton(
                 text=f"📁[{get_size(file['file_size'])}] ⊳ {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}",
                 callback_data=f'{pre}#{file["file_id"]}'
             )
-        ]
-        for file in files
-    ] if settings["button"] else []
+        ])
 
-    # Insert filter options
-    btn.insert(0, [
-        InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
-        InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}"),
-        InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
-    ])
-    btn.insert(1, [
-        InlineKeyboardButton("🎚️ ǫᴜᴀʟɪᴛʏ", callback_data=f"qualities#{key}"),
-        InlineKeyboardButton("📺 ᴇᴘɪꜱᴏᴅᴇꜱ", callback_data=f"episodes#{key}"),
-        InlineKeyboardButton("🗃️ ꜱᴇᴀꜱᴏɴꜱ", callback_data=f"seasons#{key}")
-    ])
-
-    # Add pagination or "no more pages" button
-    if offset != "":
-        try:
-            if settings['max_btn']:
-                btn.append([
-                    InlineKeyboardButton("ᴘᴀɢᴇ", callback_data="pages"),
-                    InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/10)}", callback_data="pages"),
-                    InlineKeyboardButton(text="ɴᴇxᴛ ⇛", callback_data=f"next_{req}_{key}_{offset}")
-                ])
-            else:
-                btn.append([
-                    InlineKeyboardButton("ᴘᴀɢᴇ", callback_data="pages"),
-                    InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/int(MAX_B_TN))}", callback_data="pages"),
-                    InlineKeyboardButton(text="ɴᴇxᴛ ⇛", callback_data=f"next_{req}_{key}_{offset}")
-                ])
-        except KeyError:
-            await save_group_settings(query.message.chat.id, 'max_btn', True)
-            btn.append([
-                InlineKeyboardButton("ᴘᴀɢᴇ", callback_data="pages"),
-                InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/10)}", callback_data="pages"),
-                InlineKeyboardButton(text="ɴᴇxᴛ ⇛", callback_data=f"next_{req}_{key}_{offset}")
-            ])
+    total_pages = math.ceil(total_results / (int(MAX_B_TN) if not settings.get('max_btn') else 10))
+    if total_pages > 1:
+        btn.append([
+            InlineKeyboardButton("📑 𝖯𝖠𝖦𝖤", callback_data="pages"),
+            InlineKeyboardButton(f"1/{total_pages}", callback_data="pages"),
+            InlineKeyboardButton("𝖭𝖤𝖷𝖳 ⌦", callback_data=f"next_{req}_{key}_{offset}")
+        ])
     else:
         btn.append([
-            InlineKeyboardButton(text="⛔ ɴᴏ ᴍᴏʀᴇ ᴘᴀɢᴇꜱ ᴀᴠᴀɪʟᴀʙʟᴇ ⛔", callback_data="pages")
+            InlineKeyboardButton("⛔ ɴᴏ ᴍᴏʀᴇ ᴘᴀɢᴇꜱ ⛔", callback_data="pages")
         ])
 
-    if lang != "homepage":
-        offset = 0
+    # Add BACK button only if filtered
+    if lang and lang != "homepage":
         btn.append([
-            InlineKeyboardButton(text="◖BACK TO FILES◗", callback_data=f"next_{req}_{key}_{offset}")
+            InlineKeyboardButton("◖BACK TO FILES◗", callback_data=f"fl#homepage#{key}")
         ])
 
+    # Send caption if button setting is off
     if not settings["button"]:
-        # For caption mode
         cur_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
-        # Ensure curr_time is defined
-        curr_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
         time_difference = timedelta(
             hours=cur_time.hour,
             minutes=cur_time.minute,
-            seconds=(cur_time.second + (cur_time.microsecond / 1000000))
+            seconds=cur_time.second + (cur_time.microsecond / 1000000)
         ) - timedelta(
             hours=curr_time.hour,
             minutes=curr_time.minute,
-            seconds=(curr_time.second + (curr_time.microsecond / 1000000))
+            seconds=curr_time.second + (curr_time.microsecond / 1000000)
         )
         remaining_seconds = "{:.2f}".format(time_difference.total_seconds())
-        total_results = len(files)
+
         cap = await get_cap(settings, remaining_seconds, files, query, total_results, search)
         try:
-            await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
+            await query.message.edit_text(
+                text=cap,
+                reply_markup=InlineKeyboardMarkup(btn),
+                disable_web_page_preview=True
+            )
         except MessageNotModified:
             pass
     else:
         try:
-            await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(btn))
+            await query.edit_message_reply_markup(
+                reply_markup=InlineKeyboardMarkup(btn)
+            )
         except MessageNotModified:
             pass
+
+    await query.answer()
  
 @Client.on_callback_query(filters.regex(r"^fs#"))
 async def filter_seasons_cb_handler(client: Client, query: CallbackQuery):
