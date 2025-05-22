@@ -160,20 +160,20 @@ Cᴏᴍᴍᴀɴᴅs Aɴᴅ Usᴀɢᴇ:
     
     STATUS_TXT = """<b>📊 Total Files : <code>{}</code></b>
 
-<b>👥 USERS :</b>
-• 👤 Total Users: <code>{}</code>  
-• 💬 Total Chats: <code>{}</code>
+<b>📊 BOT STATUS :</b>
+• 👤 Users: <code>{}</code>  
+• 💬 Chats: <code>{}</code>
 
 <b>🗃 DB 1 :</b>
-• 🗂️ Total Files: <code>{}</code>  
-• 📦 Used Storage: <code>{} MB / {} MB</code>  
+• 🗂️ Files: <code>{}</code>  
+• 📦 Storage: <code>{} MB / {} MB</code>  
 
 <b>🗃 DB 2 :</b>
-• 🗂️ Total Files: <code>{}</code>  
-• 📦 Used Storage: <code>{} MB / {} MB</code>  
+• 🗂️ Files: <code>{}</code>  
+• 📦 Storage: <code>{} MB / {} MB</code>  
 
 <b>📦 OTHER DB :</b>
-• 🔸 Used Storage: <code>{} MB / {} MB</code> """
+• 🔸 Storage: <code>{} MB / {} MB</code> """
 
     
     LOG_TEXT_G = """#NewGroup
@@ -466,13 +466,7 @@ Aᴠᴀɪʟᴀʙʟᴇ ᴄᴏᴍᴍᴀɴᴅs:
 🛠️ Bᴜɪʟᴅ Sᴛᴀᴛᴜs: <code>v2.7.1 [ Sᴛᴀʙʟᴇ ]</code></b>"""
 
     LOGO = """
-████████╗███████╗███████╗██╗  ██╗    ╔██        ██╗       ██╗
-╚═ ██╔══╝██╔════╝██╔════╝██║  ██║     ║██      ██║        ██║
-   ██║    █████╗  ██║      ███████║      ║██    ██║         ██║
-   ██║    ██╔══╝  ██║      ██╔══██║       ║██  ██║  ╔██     ██║
-   ██║    ███████╗███████╗██║  ██║        ║████║   ║████████║
-   ╚═╝    ╚══════╝╚══════╝╚═╝  ╚═╝        ╚════╝   ╚════════╝"""
- 
+    MOOVIDEX ON AIR 
     TAMIL_INFO = """
 ஏய் <a href='tg://settings'>ᴍʏ ғʀɪᴇɴᴅ</a> 
 
