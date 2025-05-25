@@ -176,39 +176,52 @@ Cᴏᴍᴍᴀɴᴅs Aɴᴅ Usᴀɢᴇ:
 • 🔸 Storage: <code>{} MB / {} MB</code> """
 
     
-    LOG_TEXT_G = """#NewGroup
-Gʀᴏᴜᴘ = {}(<code>{}</code>)
-Tᴏᴛᴀʟ Mᴇᴍʙᴇʀs = <code>{}</code>
-Aᴅᴅᴇᴅ Bʏ - {}"""
+    LOG_TEXT_G = """<b>𝙱𝙾𝚃 𝙰𝙳𝙳𝙴𝙳 𝚃𝙾 𝙽𝙴𝚆 𝙶𝚁𝙾𝚄𝙿</b>                      🚨
+<blockquote>𝙶𝚁𝙾𝚄𝙿 :  <code>{}</code>
+ 𝙸𝙳 : ||<code>{}</code>||               
+𝙼𝙴𝙼𝙱𝙴𝚁𝚂 : <code>{}</code>
+𝙰𝙳𝙳𝙴𝙳 𝙱𝚈 : <code>{}</code></blockquote>
 
-    LOG_TEXT_P = """#NewUser
-ID - <code>{}</code>
-Nᴀᴍᴇ - {}"""
+"""
+
+    LOG_TEXT_P = """<b>𝙽𝚎𝚠 𝚄𝚜𝚎𝚛 </b>                                       🛎️ 
+<blockquote>👤 𝙸𝙳 : <code>{}</code>                                       
+🛡️ 𝙽𝚊𝚖𝚎 : <code>{}</code></blockquote>"""
+
 
     ALRT_TXT = """ʜᴇʟʟᴏ {},
 ᴛʜɪꜱ ɪꜱ ɴᴏᴛ ʏᴏᴜʀ ᴍᴏᴠɪᴇ ʀᴇQᴜᴇꜱᴛ,
 ʀᴇQᴜᴇꜱᴛ ʏᴏᴜʀ'ꜱ..."""
 
-    OLD_ALRT_TXT = """ʜᴇʏ {},
-ʏᴏᴜ ᴀʀᴇ ᴜꜱɪɴɢ ᴏɴᴇ ᴏꜰ ᴍʏ ᴏʟᴅ ᴍᴇꜱꜱᴀɢᴇꜱ, 
-ᴘʟᴇᴀꜱᴇ ꜱᴇɴᴅ ᴛʜᴇ ʀᴇQᴜᴇꜱᴛ ᴀɢᴀɪɴ."""
+      OLD_ALRT_TXT = """ʜᴇʏ {},
+⛔ ᴛʜɪs ᴍᴇssᴀɢᴇ ᴡᴀs ᴇxᴘɪʀᴇᴅ ⛔, 
+ᴘʟᴇᴀꜱᴇ ꜱᴇɴᴅ ᴛʜᴇ ʀᴇǫᴜᴇꜱᴛ ᴀɢᴀɪɴ."""
+
 
     CUDNT_FND = """ɪ ᴄᴏᴜʟᴅɴ'ᴛ ꜰɪɴᴅ ᴀɴʏᴛʜɪɴɢ ʀᴇʟᴀᴛᴇᴅ ᴛᴏ {}
-ᴅɪᴅ ʏᴏᴜ ᴍᴇᴀɴ ᴀɴʏ ᴏɴᴇ ᴏꜰ ᴛʜᴇꜱᴇ?"""
+ᴘʟᴇᴀsᴇ sᴇʟᴇᴄᴛ ᴛʜᴇ ᴄᴏʀʀᴇᴄᴛ ɴᴀᴍᴇ ғʀᴏᴍ ᴛʜᴇ ʟɪsᴛ ʙᴇʟᴏᴡ 👇"""
 
-    I_CUDNT = """<b>sᴏʀʀʏ ɴᴏ ꜰɪʟᴇs ᴡᴇʀᴇ ꜰᴏᴜɴᴅ ꜰᴏʀ ʏᴏᴜʀ ʀᴇǫᴜᴇꜱᴛ {} 😕
+   I_CUDNT = """
+    <b>Sorry I couldn't find {} in my database 🤧
+✅ Make sure it's OTT Released. 
+</b>
+<blockquote>
+See the correct format for a movie/show below 👇
+Movie Format:
+  Inception Movie ❌
+  Inception Link Send ❌
+  Inception 2010 ✅
 
-ᴄʜᴇᴄᴋ ʏᴏᴜʀ sᴘᴇʟʟɪɴɢ ɪɴ ɢᴏᴏɢʟᴇ ᴀɴᴅ ᴛʀʏ ᴀɢᴀɪɴ 😃
-
-ᴍᴏᴠɪᴇ ʀᴇǫᴜᴇꜱᴛ ꜰᴏʀᴍᴀᴛ 👇
-
-ᴇxᴀᴍᴘʟᴇ : Uncharted or Uncharted 2022 or Uncharted En
-
-ꜱᴇʀɪᴇꜱ ʀᴇǫᴜᴇꜱᴛ ꜰᴏʀᴍᴀᴛ 👇
-
-ᴇxᴀᴍᴘʟᴇ : Loki S01 or Loki S01E04 or Lucifer S03E24
-
-🚯 ᴅᴏɴᴛ ᴜꜱᴇ ➠ ':(!,./)</b>"""
+Series Format:
+  Suits Full Series ❌
+  Suits Episode 1 ❌
+  Suits S01 ✅
+  Suits S01E01 ✅
+  </blockquote>
+ <b> 
+🚯 ᴅᴏɴᴛ ᴜꜱᴇ ➪ ':(!,./) ᴛʜɪs ᴛʏᴘᴇ ᴏғ sʏᴍʙᴏʟs
+🚫 ᴅᴏɴᴛ ᴜsᴇ ➪ 𝚑𝕖𝐥𝒍𝑜 ᴡℴ𝓻ᒪ𝗱 ᴛʜɪs ғᴏɴᴛs</b>
+"""
 
     I_CUD_NT = """ɪ ᴄᴏᴜʟᴅɴ'ᴛ ꜰɪɴᴅ ᴀɴʏ ᴍᴏᴠɪᴇ ʀᴇʟᴀᴛᴇᴅ ᴛᴏ {}.
 ᴘʟᴇᴀꜱᴇ ᴄʜᴇᴄᴋ ᴛʜᴇ ꜱᴘᴇʟʟɪɴɢ ᴏɴ ɢᴏᴏɢʟᴇ ᴏʀ ɪᴍᴅʙ..."""
@@ -236,17 +249,22 @@ Nᴀᴍᴇ - {}"""
 🫣 For Movie Join First Then Click On Try Again Button 😅"""
 
     NORSLTS = """ 
-★ #𝗡𝗼𝗥𝗲𝘀𝘂𝗹𝘁𝘀 ★
-
-𝗜𝗗 <b>: {}</b>
-
-𝗡𝗮𝗺𝗲 <b>: {}</b>
-
-𝗠𝗲𝘀𝘀𝗮𝗴𝗲 <b>: {}</b>"""
+<b>𝙽𝙾 𝚁𝙴𝚂𝚄𝙻𝚃𝚂  </b>                                       🚧
+<blockquote>📟 𝙸𝙳 : <code>{}</code> 
+🏷️ 𝙽𝙰𝙼𝙴 : <code>{}</code> 
+📜 𝙼𝙴𝚂𝚂𝙰𝙶𝙴 : <code>{}</code></blockquote> """
+    
+    PM_SEARCH= """ 
+<b>𝙿𝙼 𝚂𝙴𝙰𝚁𝙲𝙷   </b>                                        🕵  
+<blockquote>🏷️ 𝙽𝙰𝙼𝙴 :   {user}                                       
+📟 𝙸𝙳   :   {user_id}
+📜 𝙼𝙴𝚂𝚂𝙰𝙶𝙴 : {content}</blockquote>
+"""
 
     CAPTION = """<b>📂 ғɪʟᴇɴᴀᴍᴇ : {file_name}
 
-<b>⚙️ sɪᴢᴇ : {file_size}</b>""" 
+<b>⚙️ sɪᴢᴇ : {file_size}</b>
+@MooviDex""" 
 
     IMDB_TEMPLATE_TXT = """
 <b>🎪 {kind} : {title} ({year})</b>
