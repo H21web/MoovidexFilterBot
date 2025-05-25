@@ -3,9 +3,9 @@ import re
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
-
+from info import *
 # List of Admin IDs
-ADMIN_IDS = [1011394081,5745069956]  # Replace with actual admin user IDs
+ADMIN_IDS = ADMINS  # Replace with actual admin user IDs
 
 # Function to fetch today's movies
 def fetch_today_movies():
