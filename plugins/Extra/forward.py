@@ -94,7 +94,7 @@ async def flush_album(grouped_id, source_id):
 
 # === HANDLERS ===
 
-@client.on_message(filters.chat(list(main_channels.keys())) & ~filters.edited)
+@Client.on_message(filters.chat(list(main_channels.keys())) & ~filters.edited)
 async def message_handler(client_, message: Message):
     grouped_id = getattr(message, "media_group_id", None)
     source_id = message.chat.id
@@ -114,7 +114,7 @@ async def message_handler(client_, message: Message):
 
 # === SETTINGS MENU ===
 
-@client.on_message(filters.command("fsettings") & filters.private)
+@Client.on_message(filters.command("fsettings") & filters.private)
 async def open_settings(client_, message: Message):
     buttons = [
         [InlineKeyboardButton("➕ Add Main Channel", callback_data="add_main")],
@@ -125,7 +125,7 @@ async def open_settings(client_, message: Message):
     ]
     await message.reply("⚙️ **Bot Settings**:\nChoose an option below:", reply_markup=InlineKeyboardMarkup(buttons))
 
-@client.on_callback_query()
+@Client.on_callback_query()
 async def callback_handler(client_, callback_query: CallbackQuery):
     data = callback_query.data
     user_id = callback_query.from_user.id
@@ -164,7 +164,7 @@ async def callback_handler(client_, callback_query: CallbackQuery):
 
     await callback_query.answer()
 
-@client.on_message(filters.private & ~filters.command(["start", "fsettings"]))
+@Client.on_message(filters.private & ~filters.command(["start", "fsettings"]))
 async def handle_user_input(client_, message: Message):
     user_id = message.from_user.id
     if user_id not in set_parse:
