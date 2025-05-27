@@ -99,7 +99,7 @@ async def post_movie_to_channel(client, callback_query):
                 # Build the movie's details message for the channel
                 movie_details = (
                     f"✅ **{title}** · ({year})\n"
-                    f"🎥 **ᴛʏᴘᴇ:** {movie_type}\n"
+                    f"🎥 {movie_type}\n"
                   #  f"🗓️ **sᴛʀᴇᴀᴍɪɴɢ ᴅᴀᴛᴇ:** {streaming_date}\n"
                     f"🎭 {genres} · 🉑 {language}\n"
                     f"📺 {platform}\n"
