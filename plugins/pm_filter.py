@@ -466,6 +466,7 @@ async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
 
     await query.answer()
 
+
 @Client.on_callback_query(filters.regex(r"^seasons#"))
 async def seasons_cb_handler(client: Client, query: CallbackQuery):
 
@@ -479,12 +480,14 @@ async def seasons_cb_handler(client: Client, query: CallbackQuery):
         pass
     
     _, key = query.data.split("#")
+    # if BUTTONS.get(key+"2")!=None:
+    #     search = BUTTONS.get(key+"2")
+    # else:
+    #     search = BUTTONS.get(key)
+    #     BUTTONS[key+"2"] = search
     search = FRESH.get(key)
     BUTTONS[key] = None
-    try:
-        search = search.replace(' ', '_')
-    except:
-        pass
+    search = search.replace(' ', '_')
     btn = []
     for i in range(0, len(SEASONS)-1, 2):
         btn.append([
@@ -510,12 +513,7 @@ async def seasons_cb_handler(client: Client, query: CallbackQuery):
     offset = 0
     btn.append([InlineKeyboardButton(text="◖BACK TO FILES◗", callback_data=f"next_{req}_{key}_{offset}")])
 
-    try:
-        await query.edit_message_reply_markup(
-            reply_markup=InlineKeyboardMarkup(btn)
-        )
-    except MessageNotModified:
-        pass
+    await query.edit_message_reply_markup(InlineKeyboardMarkup(btn))
 
 
 @Client.on_callback_query(filters.regex(r"^fs#"))
