@@ -8,7 +8,7 @@ import re
 from collections import defaultdict
 from datetime import datetime
 
-from pyrogram import filters
+from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message, CallbackQuery
 
 # Assuming you already have this:
