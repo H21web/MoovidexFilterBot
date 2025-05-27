@@ -94,7 +94,7 @@ async def flush_album(grouped_id, source_id):
 
 # === HANDLERS ===
 
-@Client.on_message(filters.chat(list(main_channels.keys())) & ~filters.edited)
+@Client.on_message(filters.chat(list(main_channels.keys())) & ~filters.edited_messages)
 async def message_handler(client_, message: Message):
     grouped_id = getattr(message, "media_group_id", None)
     source_id = message.chat.id
@@ -164,7 +164,7 @@ async def callback_handler(client_, callback_query: CallbackQuery):
 
     await callback_query.answer()
 
-@Client.on_message(filters.private & ~filters.command(["start", "fsettings"]))
+@Client.on_message(filters.private & ~filters.command(["fsettings"]))
 async def handle_user_input(client_, message: Message):
     user_id = message.from_user.id
     if user_id not in set_parse:
