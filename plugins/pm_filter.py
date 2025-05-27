@@ -897,7 +897,7 @@ async def filter_seasons_cb_handler(client: Client, query: CallbackQuery):
     search2 = f"{search2} {seas2}"
     BUTTONS2[key] = search2
     files2, _, _ = await get_search_results(chat_id, search2, max_results=10)
-     files2 = [file for file in files2 if re.search(seas2, file["file_name"], re.IGNORECASE)]
+    files2 = [file for file in files2 if re.search(seas2, file["file_name"], re.IGNORECASE)]
 
     if files2:
         files.extend(files2)
