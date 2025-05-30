@@ -108,4 +108,4 @@ async def private_handler(client, message: Message):
 
 async def main():
     await app.start()
-    logging.info("✅ Script
+    logging.info("✅ Script running")
