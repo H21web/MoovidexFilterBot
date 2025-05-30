@@ -17,8 +17,8 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(m
 
 # Main forwarding channels (source: destination)
 main_channels = {
-    -1000000000000: -2000000000000, 
-    -3000000000000: -4000000000000,
+    -1002570431865: -1002540224499, 
+    -1001852694684: -1002540224499,
 }
 
 # Keyword-based forwarding
