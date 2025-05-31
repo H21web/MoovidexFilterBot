@@ -1,133 +1,108 @@
-import asyncio
-import re
-import random
+# Don't Remove Credit @VJ_Botz
+# Subscribe YouTube Channel For Amazing Bot @Tech_VJ
+# Ask Doubt on telegram @KingVJ01
+
 import logging
-from collections import defaultdict
+import re
+import os
+from info import CHNL_LNK  # Assuming this contains your channel link
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-# === CONFIGURATION ===
-api_id = 8281168  # Replace with your API ID
-api_hash = '445ff67ec34858448ac184c7479ce917'  # Replace with your API Hash
-session_name = 'mvdex'  # For user session. If using bot, use bot_token instead.
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-# Logging setup
-logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
-
-# Main forwarding channels (source: destination)
-main_channels = {
-    -1002570431865: -1002540224499,
-    -1001852694684: -1002540224499,
+# Configuration - Replace with your source and destination channels
+# Format: {"source_channel_id": ["dest_channel_id1", "dest_channel_id2"]}
+CHANNEL_MAPPING = {
+    -1001234567890: [-1009876543210, -1001122334455],  # Example mapping
+    # Add more channel mappings as needed
 }
 
-# Keyword-based forwarding (keywords tuple → target channel)
-keyword_channels = {
-    ("word", "phrase", "expression"): -100000200000,
-    ("alphabet",): -1000000200000,
-}
+# Regex patterns for URL and username replacement
+URL_PATTERN = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
+USERNAME_PATTERN = re.compile(r'@(\w+)')
 
-# Compile keyword regexes
-compiled_keywords = [
-    (re.compile(rf'\b({"|".join(re.escape(word) for word in words)})\b', flags=re.IGNORECASE), channel)
-    for words, channel in keyword_channels.items()
-]
+# Custom caption template - you can modify this
+CAPTION_TEMPLATE = """{filename}
+Size: {size}
+{original_caption}
 
-# Initialize the client
-app = Client(session_name, api_id=api_id, api_hash=api_hash)
+🔗 {channel_link}"""
 
-# Buffer and timer tracking for grouped messages
-group_buffer = defaultdict(list)
-group_timers = {}
-
-def extract_text_and_filenames(messages: list[Message]) -> str:
-    text_parts = []
-    filenames = []
-
-    for msg in messages:
-        if msg.text:
-            text_parts.append(msg.text)
-
-        if msg.document and msg.document.file_name:
-            filenames.append(msg.document.file_name)
-
-    return " ".join(text_parts + filenames)
-
-async def process_and_forward(messages: list[Message], source_id: int):
-    dest_id = main_channels.get(source_id)
-    if not dest_id:
-        return
-
+@Client.on_message(filters.channel & filters.incoming)
+async def forward_documents_and_videos(client: Client, message: Message):
     try:
-        await app.forward_messages(
-            chat_id=dest_id,
-            from_chat_id=source_id,
-            message_ids=[msg.id for msg in messages]
-        )
-        logging.info(f"📦 Main forward: {source_id} → {dest_id}")
-    except Exception as e:
-        logging.error(f"❌ Error forwarding to main channel ({dest_id}): {e}")
+        source_chat = message.chat.id
+        
+        # Check if this source channel is in our mapping
+        if source_chat not in CHANNEL_MAPPING:
+            logger.info(f"Ignoring message from unmapped channel: {source_chat}")
+            return
 
-    # Keyword-based forwarding
-    content = extract_text_and_filenames(messages)
-    found_channels = set()
+        destination_chats = CHANNEL_MAPPING[source_chat]
+        
+        # Check if message has document or video
+        if not (message.document or message.video):
+            logger.info(f"Ignoring non-media message from channel {source_chat}")
+            return
 
-    for regex, channel_id in compiled_keywords:
-        if regex.search(content) and channel_id not in found_channels:
-            try:
-                await app.forward_messages(
-                    chat_id=channel_id,
-                    from_chat_id=source_id,
-                    message_ids=[msg.id for msg in messages]
-                )
-                logging.info(f"🔑 Keyword match {regex.pattern} → forwarded to {channel_id}")
-                found_channels.add(channel_id)
-            except Exception as e:
-                logging.error(f"❌ Error forwarding to keyword channel ({channel_id}): {e}")
-
-    await asyncio.sleep(random.uniform(3, 5))
-
-async def flush_album(grouped_id, source_id):
-    messages = group_buffer.pop(grouped_id, [])
-    group_timers.pop(grouped_id, None)
-    if messages:
-        await process_and_forward(messages, source_id)
-
-async def delayed_flush(grouped_id, source_id):
-    await asyncio.sleep(1.5)
-    await flush_album(grouped_id, source_id)
-
-@app.on_message(filters.chat(list(main_channels.keys())) & filters.group)
-async def message_handler(client, message: Message):
-    try:
-        grouped_id = message.media_group_id
-        source_id = message.chat.id
-
-        if grouped_id:
-            group_buffer[grouped_id].append(message)
-
-            if group_timers.get(grouped_id):
-                group_timers[grouped_id].cancel()
-
-            group_timers[grouped_id] = asyncio.create_task(delayed_flush(grouped_id, source_id))
+        # Prepare file info
+        if message.document:
+            file = message.document
+            file_type = "Document"
         else:
-            await process_and_forward([message], source_id)
+            file = message.video
+            file_type = "Video"
+
+        file_name = file.file_name if hasattr(file, 'file_name') else f"{file_type}_{file.file_id}"
+        file_size = human_readable_size(file.file_size)
+
+        # Process caption
+        original_caption = message.caption or ""
+        
+        # Replace URLs and usernames
+        cleaned_caption = URL_PATTERN.sub("[LINK REMOVED]", original_caption)
+        cleaned_caption = USERNAME_PATTERN.sub("[USERNAME REMOVED]", cleaned_caption)
+        
+        # Format new caption
+        new_caption = CAPTION_TEMPLATE.format(
+            filename=file_name,
+            size=file_size,
+            original_caption=cleaned_caption,
+            channel_link=CHNL_LNK
+        )
+
+        # Forward to all destination channels
+        for dest_chat in destination_chats:
+            try:
+                if message.document:
+                    await message.document.copy(
+                        chat_id=dest_chat,
+                        caption=new_caption
+                    )
+                else:
+                    await message.video.copy(
+                        chat_id=dest_chat,
+                        caption=new_caption
+                    )
+                logger.info(f"Successfully forwarded {file_type} from {source_chat} to {dest_chat}")
+            except Exception as e:
+                logger.error(f"Failed to forward to {dest_chat}: {str(e)}")
+
     except Exception as e:
-        logging.error(f"💥 Error in group handler: {e}")
+        logger.error(f"Error in forward_documents_and_videos: {str(e)}")
 
-@app.on_message(filters.chat(list(main_channels.keys())) & filters.private)
-async def private_handler(client, message: Message):
-    try:
-        await process_and_forward([message], message.chat.id)
-    except Exception as e:
-        logging.error(f"💥 Error in private handler: {e}")
-
-async def main():
-    await app.start()
-    logging.info("✅ Bot started. Listening for messages...")
-    await asyncio.Event().wait()  # Keeps the bot running
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        logging.info("🛑 Bot stopped")
+def human_readable_size(size_bytes):
+    """Convert file size to human-readable format"""
+    if size_bytes is None:
+        return "Unknown size"
+    
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.2f} {unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.2f} TB"
