@@ -1,15 +1,13 @@
 import re
 import logging
 from pyrogram import Client, filters
-from pyrogram.session import StringSession
 
-# Add your StringSession here (generate using Pyrogram)
-STRING_SESSION = "1BVtsOIoBu4X-B021hLB4we-WRkOtYT5VJlHOpp8P6AKXHt5Jdoo2VGurK65sa_iGe5Hnl_idFdc8xLtkLUhnx74iI8NSuxb98OHIEXul3ikz1BNHm3CNiIXKftpxd_cia-fyFA4VZpNFIU8-S2gdtQnCTwcZQpgSbBcCE1evohvQHS3XcHumam1nGVki4Xr2LZhP98oyXJVbw8dfucZZ4XWT9NltQbfOd9Mvyn3qO-3lSpP-gm-bQayaGhD-RhThsCGxOgObbg5Xy0zu-x9EXWJ-DTcoGid0feaRtqryrRi2_Evr_D2qAPH1SE2GstPSxGPbIi4TBspn_1ot9V6A450vgdt6tsU="  # Replace with your session string
+# API Credentials
 API_ID = 8281168  # Replace with your API ID
 API_HASH = "445ff67ec34858448ac184c7479ce917"  # Replace with your API Hash
 
-# Initialize Pyrogram Client using User Session
-app = Client(StringSession(STRING_SESSION), api_id=API_ID, api_hash=API_HASH)
+# Initialize Pyrogram Client (user session file method)
+app = Client("my_session", api_id=API_ID, api_hash=API_HASH)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
