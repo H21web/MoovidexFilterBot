@@ -4,56 +4,91 @@
 
 import logging
 import re
+import asyncio
 from datetime import datetime
 from pyrogram import Client, filters
 from pyrogram.types import Message
+from pyrogram.errors import (
+    FloodWait,
+    PeerIdInvalid,
+    ChannelInvalid,
+    ChatAdminRequired
+)
 
+# ===== CONFIGURATION =====
+class Config:
+    # Get these from https://my.telegram.org
+    API_ID = 1234567  
+    API_HASH = "abcdef1234567890abcdef1234567890"
+    
+    # Generate with generate_session.py
+    USER_SESSION = "your_user_session_string_here"  
+    
+    # Get from @BotFather
+    BOT_TOKEN = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"  
+    
+    # Your Telegram ID
+    ADMIN_ID = 1011394081  
+    OWNER_ID = 1011394081  
+    
+    # Channel links for caption
+    CHANNEL_LINK = "https://t.me/moovidex"  
+    
+    # Channel mapping: {source_id: [dest_id1, dest_id2]}
+    CHANNEL_MAPPING = {
+        -1002570431865: [-1002540224499],
+        # Add more mappings as needed
+    }
+
+# ===== LOGGING SETUP =====
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("forwarder.log"),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 
-# === CONFIGURATION ===
-CHANNEL_MAPPING = {
-    -1002570431865: [-1002540224499],  # Format: {source_id: [dest1_id, dest2_id]}
-}
+# ===== GLOBAL TRACKERS =====
+class ForwardStats:
+    total_forwarded = 0
+    last_forwarded = None
+    errors = 0
+    channel_stats = {}
+    
+    @classmethod
+    def init_stats(cls):
+        for src_id, dest_ids in Config.CHANNEL_MAPPING.items():
+            cls.channel_stats[src_id] = {
+                "name": f"Channel {src_id}",
+                "destinations": {dest_id: {"count": 0, "last_forwarded": None} for dest_id in dest_ids},
+                "total_forwarded": 0,
+                "errors": 0
+            }
 
-ADMIN_ID = 1011394081  # Your Telegram user ID
-OWNER_ID = 1011394081  # Bot owner ID (same as above if solo)
-CHNL_LNK = "https://t.me/moovidex"  # For captions
+ForwardStats.init_stats()
 
-# Regex for cleaning captions
-URL_PATTERN = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
-USERNAME_PATTERN = re.compile(r'@(\w+)')
+# ===== CLIENT SETUP =====
+user_client = Client(
+    name="user_account",
+    api_id=Config.API_ID,
+    api_hash=Config.API_HASH,
+    session_string=Config.USER_SESSION,
+    in_memory=True
+)
 
-# Caption template
-CAPTION_TEMPLATE = """**{filename}** ({size})
-────────────────────
-{original_caption}
-────────────────────
-🔗 {channel_link}"""
+bot = Client(
+    name="forward_bot",
+    api_id=Config.API_ID,
+    api_hash=Config.API_HASH,
+    bot_token=Config.BOT_TOKEN
+)
 
-# === STATISTICS TRACKING ===
-FORWARD_STATS = {
-    "total_forwarded": 0,
-    "last_forwarded": None,
-    "channel_stats": {},
-    "errors": 0
-}
-
-# Initialize stats
-for src_id, dest_ids in CHANNEL_MAPPING.items():
-    FORWARD_STATS["channel_stats"][src_id] = {
-        "name": f"Channel {src_id}",
-        "destinations": {dest_id: {"count": 0, "last_forwarded": None} for dest_id in dest_ids},
-        "total_forwarded": 0,
-        "errors": 0
-    }
-
-# === HELPER FUNCTIONS ===
+# ===== HELPER FUNCTIONS =====
 def human_readable_size(size):
-    """Convert bytes to human-readable format (e.g., 1.2 MB)"""
+    """Convert bytes to readable format (e.g., 1.2 MB)"""
     if not size: return "N/A"
     for unit in ['B', 'KB', 'MB', 'GB']:
         if size < 1024.0:
@@ -65,101 +100,151 @@ def format_time(dt):
     """Format datetime for display"""
     return dt.strftime("%Y-%m-%d %H:%M:%S") if dt else "Never"
 
-async def forward_message(client: Client, message: Message, source_chat: int):
-    """Shared forwarding logic for both new and past messages"""
-    try:
-        file = message.document or message.video
-        file_type = "Document" if message.document else "Video"
-        file_name = getattr(file, "file_name", f"{file_type}_{file.file_id}")
-        file_size = human_readable_size(file.file_size)
-        
-        # Clean caption
-        original_caption = message.caption or ""
-        cleaned_caption = URL_PATTERN.sub("[LINK REMOVED]", original_caption)
-        cleaned_caption = USERNAME_PATTERN.sub("[USERNAME REMOVED]", cleaned_caption)
-        
-        # Apply template
-        new_caption = CAPTION_TEMPLATE.format(
-            filename=file_name,
-            size=file_size,
-            original_caption=cleaned_caption,
-            channel_link=CHNL_LNK
-        )
+def clean_caption(text):
+    """Remove URLs and usernames from text"""
+    if not text: return ""
+    text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', "[LINK REMOVED]", text)
+    text = re.sub(r'@(\w+)', "[USER REMOVED]", text)
+    return text
 
-        # Forward to all destinations
-        for dest_chat in CHANNEL_MAPPING[source_chat]:
-            try:
-                if message.document:
-                    await message.document.copy(dest_chat, caption=new_caption)
-                else:
-                    await message.video.copy(dest_chat, caption=new_caption)
-                
-                # Update stats
-                FORWARD_STATS["total_forwarded"] += 1
-                FORWARD_STATS["last_forwarded"] = datetime.now()
-                FORWARD_STATS["channel_stats"][source_chat]["total_forwarded"] += 1
-                FORWARD_STATS["channel_stats"][source_chat]["destinations"][dest_chat]["count"] += 1
-                FORWARD_STATS["channel_stats"][source_chat]["destinations"][dest_chat]["last_forwarded"] = datetime.now()
-                
-                logger.info(f"Forwarded {file_type} from {source_chat} to {dest_chat}")
-                
-            except Exception as e:
-                logger.error(f"Forward error (Source: {source_chat}, Dest: {dest_chat}): {e}")
-                FORWARD_STATS["errors"] += 1
-                FORWARD_STATS["channel_stats"][source_chat]["errors"] += 1
-                
-    except Exception as e:
-        logger.error(f"Error in forward_message: {e}")
-        raise
+# ===== CORE FORWARDING LOGIC =====
+async def forward_message(message: Message):
+    """Handle media forwarding with retry logic"""
+    if not (message.document or message.video):
+        return False
 
-# === REAL-TIME FORWARDING ===
-@Client.on_message(filters.channel & filters.incoming)
-async def handle_new_messages(client: Client, message: Message):
-    if message.chat.id in CHANNEL_MAPPING and (message.document or message.video):
-        await forward_message(client, message, message.chat.id)
+    file = message.document or message.video
+    file_name = getattr(file, "file_name", f"Media_{file.file_id}")
+    file_size = human_readable_size(file.file_size)
+    original_caption = clean_caption(message.caption or "")
+    
+    new_caption = f"""**{file_name}** ({file_size})
+────────────────────
+{original_caption}
+────────────────────
+🔗 {Config.CHANNEL_LINK}"""
 
-# === PAST MESSAGE FORWARDING ===
-@Client.on_message(filters.command("forwardpast") & filters.user([ADMIN_ID, OWNER_ID]))
-async def forward_past_messages(client: Client, message: Message):
+    source_chat = message.chat.id
+    if source_chat not in Config.CHANNEL_MAPPING:
+        return False
+
+    success = False
+    for dest_chat in Config.CHANNEL_MAPPING[source_chat]:
+        try:
+            # Forward using user account
+            await user_client.forward_messages(
+                chat_id=dest_chat,
+                from_chat_id=source_chat,
+                message_ids=message.id
+            )
+            
+            # Update caption (separate request)
+            async for msg in user_client.search_messages(dest_chat, limit=1):
+                if msg.caption != new_caption:
+                    await msg.edit_caption(new_caption)
+            
+            # Update statistics
+            ForwardStats.total_forwarded += 1
+            ForwardStats.last_forwarded = datetime.now()
+            ForwardStats.channel_stats[source_chat]["total_forwarded"] += 1
+            ForwardStats.channel_stats[source_chat]["destinations"][dest_chat]["count"] += 1
+            ForwardStats.channel_stats[source_chat]["destinations"][dest_chat]["last_forwarded"] = datetime.now()
+            
+            logger.info(f"Forwarded to {dest_chat}")
+            success = True
+            
+        except FloodWait as e:
+            logger.warning(f"Flood wait: Sleeping {e.value} seconds")
+            await asyncio.sleep(e.value)
+        except (PeerIdInvalid, ChannelInvalid, ChatAdminRequired) as e:
+            logger.error(f"Forward failed to {dest_chat}: {str(e)}")
+            ForwardStats.errors += 1
+            ForwardStats.channel_stats[source_chat]["errors"] += 1
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+            ForwardStats.errors += 1
+            ForwardStats.channel_stats[source_chat]["errors"] += 1
+    
+    return success
+
+# ===== BOT COMMANDS =====
+@bot.on_message(filters.command("start") & filters.private)
+async def start_command(client: Client, message: Message):
+    await message.reply("""🚀 **Media Forwarder Bot**
+    
+- Automatically forwards new media files
+- Use /forwardpast to process old messages
+- /forwardstats to view statistics""")
+
+@bot.on_message(filters.command("forwardpast") & filters.user([Config.ADMIN_ID, Config.OWNER_ID]))
+async def forward_past(client: Client, message: Message):
     try:
         args = message.text.split()
         if len(args) < 2:
-            await message.reply("**Usage:** `/forwardpast <limit>` (e.g., `/forwardpast 100`)")
+            await message.reply("**Usage:** `/forwardpast 100` (max 1000)")
             return
 
-        limit = min(int(args[1]), 1000)  # Telegram limits
-        source_chat = message.chat.id if message.chat.id in CHANNEL_MAPPING else None
+        limit = min(int(args[1]), 1000)
+        source_chat = message.chat.id if message.chat.id in Config.CHANNEL_MAPPING else None
         
         if not source_chat:
-            await message.reply("❌ This channel isn't configured for forwarding!")
+            await message.reply("❌ Channel not configured!")
             return
 
-        await message.reply(f"⏳ Fetching last {limit} messages...")
+        progress = await message.reply(f"⏳ Processing last {limit} messages...")
         processed = 0
 
-        async for old_msg in client.get_chat_history(source_chat, limit=limit):
-            if old_msg.document or old_msg.video:
-                await forward_message(client, old_msg, source_chat)
+        async for old_msg in user_client.get_chat_history(source_chat, limit=limit):
+            if await forward_message(old_msg):
                 processed += 1
+                if processed % 10 == 0:
+                    await progress.edit(f"🔄 Processed {processed}/{limit} messages...")
 
-        await message.reply(f"✅ Forwarded {processed}/{limit} media files.")
+        await progress.edit(f"✅ Forwarded {processed}/{limit} media files")
 
     except Exception as e:
-        logger.error(f"/forwardpast error: {e}")
-        await message.reply("❌ Failed to process past messages!")
+        logger.error(f"/forwardpast error: {str(e)}", exc_info=True)
+        await message.reply("❌ Processing failed!")
 
-# === STATISTICS COMMAND ===
-@Client.on_message(filters.command("forwardstats") & filters.user([ADMIN_ID, OWNER_ID]))
+@bot.on_message(filters.command("forwardstats") & filters.user([Config.ADMIN_ID, Config.OWNER_ID]))
 async def show_stats(client: Client, message: Message):
-    stats_text = "📊 **Forwarding Statistics**\n\n"
-    stats_text += f"• **Total Forwarded:** `{FORWARD_STATS['total_forwarded']}`\n"
-    stats_text += f"• **Last Forwarded:** `{format_time(FORWARD_STATS['last_forwarded'])}`\n"
-    stats_text += f"• **Total Errors:** `{FORWARD_STATS['errors']}`\n\n"
+    stats = []
+    stats.append(f"📊 **Forwarding Statistics**")
+    stats.append(f"• Total Forwarded: `{ForwardStats.total_forwarded}`")
+    stats.append(f"• Last Activity: `{format_time(ForwardStats.last_forwarded)}`")
+    stats.append(f"• Errors: `{ForwardStats.errors}`\n")
 
-    for src_id, data in FORWARD_STATS["channel_stats"].items():
-        stats_text += f"📌 **{data['name']}** (`{src_id}`)\n"
-        stats_text += f"   ➠ Forwarded: `{data['total_forwarded']}` | Errors: `{data['errors']}`\n"
+    for src_id, data in ForwardStats.channel_stats.items():
+        stats.append(f"📌 **{data['name']}** (`{src_id}`)")
+        stats.append(f"   ➠ Forwarded: `{data['total_forwarded']}`")
+        stats.append(f"   ➠ Errors: `{data['errors']}`")
+        
         for dest_id, dest_data in data["destinations"].items():
-            stats_text += f"      ├─➤ `{dest_id}`: `{dest_data['count']}` (Last: `{format_time(dest_data['last_forwarded'])})`\n"
+            stats.append(f"      ├─➤ `{dest_id}`")
+            stats.append(f"      │   ➠ Count: `{dest_data['count']}`")
+            stats.append(f"      │   ➠ Last: `{format_time(dest_data['last_forwarded'])}`")
 
-    await message.reply_text(stats_text, disable_web_page_preview=True)
+    await message.reply_text("\n".join(stats), disable_web_page_preview=True)
+
+# ===== EVENT HANDLERS =====
+@user_client.on_message(filters.channel & filters.incoming)
+async def handle_new_message(client: Client, message: Message):
+    if message.chat.id in Config.CHANNEL_MAPPING:
+        await forward_message(message)
+
+# ===== MAIN FUNCTION =====
+async def main():
+    await asyncio.gather(
+        user_client.start(),
+        bot.start()
+    )
+    logger.info("Bot and user client started successfully")
+    await asyncio.Event().wait()
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.critical(f"Fatal error: {str(e)}", exc_info=True)
