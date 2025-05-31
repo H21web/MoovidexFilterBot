@@ -18,14 +18,14 @@ from pyrogram.errors import (
 # ===== CONFIGURATION =====
 class Config:
     # Get these from https://my.telegram.org
-    API_ID = 1234567  
-    API_HASH = "abcdef1234567890abcdef1234567890"
+    API_ID = 8281168
+    API_HASH = "445ff67ec34858448ac184c7479ce917"
     
     # Generate with generate_session.py
-    USER_SESSION = "your_user_session_string_here"  
+    USER_SESSION = "1BVtsOIoBu4X-B021hLB4we-WRkOtYT5VJlHOpp8P6AKXHt5Jdoo2VGurK65sa_iGe5Hnl_idFdc8xLtkLUhnx74iI8NSuxb98OHIEXul3ikz1BNHm3CNiIXKftpxd_cia-fyFA4VZpNFIU8-S2gdtQnCTwcZQpgSbBcCE1evohvQHS3XcHumam1nGVki4Xr2LZhP98oyXJVbw8dfucZZ4XWT9NltQbfOd9Mvyn3qO-3lSpP-gm-bQayaGhD-RhThsCGxOgObbg5Xy0zu-x9EXWJ-DTcoGid0feaRtqryrRi2_Evr_D2qAPH1SE2GstPSxGPbIi4TBspn_1ot9V6A450vgdt6tsU="  
     
     # Get from @BotFather
-    BOT_TOKEN = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"  
+    BOT_TOKEN = "7898813406:AAEGLvPOVeJlDKaztJdS4OSv43xIk-2xbZo"  
     
     # Your Telegram ID
     ADMIN_ID = 1011394081  
