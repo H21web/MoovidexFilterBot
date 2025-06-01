@@ -15,6 +15,7 @@ logging.getLogger("cinemagoer").setLevel(logging.ERROR)
 
 from pyrogram import Client, idle
 from database.users_chats_db import db
+from plugins.extra.replykeyboard import *
 from info import *
 from utils import temp
 from typing import Union, Optional, AsyncGenerator
