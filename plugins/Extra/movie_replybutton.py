@@ -24,31 +24,30 @@ async def handle_whats_streaming(client, message: Message):
 
         await message.reply(
             reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True),
-            text=None  # No text reply
+            text=None  # No reply message
         )
 
 
-@Client.on_message(filters.text & ~filters.command(["start"]))
+@Client.on_message(filters.text & ~filters.command())
 async def handle_selection(client, message: Message):
     text = message.text.strip()
 
+    # If it's a platform
     if text in platform_data:
         movie_titles = platform_data[text]
         if not movie_titles:
             return
 
-        # Show one movie title per button (vertically listed)
-        keyboard = [[title] for title in movie_titles]
-        await message.reply(
-            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True),
-            text=None  # No text reply
+        movie_buttons = [[title] for title in movie_titles]
+        return await message.reply(
+            reply_markup=ReplyKeyboardMarkup(movie_buttons, resize_keyboard=True, one_time_keyboard=True),
+            text=None  # No reply message
         )
-        return
 
-    # If the selected text is one of the movie titles
-    for titles in platform_data.values():
-        if text in titles:
+    # If it's a movie title
+    for movie_list in platform_data.values():
+        if text in movie_list:
             return await message.reply(text, reply_markup=ReplyKeyboardRemove())
 
-    # If nothing matches
+    # Not matching any valid input
     await message.reply("❌ Please use the provided keyboard.")
