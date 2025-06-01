@@ -5,7 +5,7 @@ import httpx
 API_URL = "https://www.binged.com/wp-json/binged-api/v1/whats-streaming"
 platform_data = {}
 
-@Client.on_message(filters.text("🎬 What's Streaming"))
+@Client.on_message(filters.regex(r"^🎬 What's Streaming$"))
 async def handle_whats_streaming(client, message: Message):
     async with httpx.AsyncClient() as session:
         r = await session.get(API_URL)
