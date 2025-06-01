@@ -93,86 +93,89 @@ async def is_subscribed(bot, query):
                 return True
         return False
 
+def safe_get(d, key, default="N/A"):
+    return d.get(key, default) or default
+
+def list_to_str(value):
+    if isinstance(value, list):
+        return ", ".join(map(str, value))
+    elif isinstance(value, str):
+        return value
+    return "N/A"
+
 async def get_poster(query, bulk=False, id=False, file=None):
     if not id:
-        query = (query.strip()).lower()
+        query = query.strip().lower()
         title = query
-        year = re.findall(r'[1-2]\d{3}$', query, re.IGNORECASE)
+        year = re.findall(r'[1-2]\d{3}$', query)
         if year:
-            year = list_to_str(year[:1])
-            title = (query.replace(year, "")).strip()
-        elif file is not None:
-            year = re.findall(r'[1-2]\d{3}', file, re.IGNORECASE)
+            year = year[0]
+            title = query.replace(year, "").strip()
+        elif file:
+            year = re.findall(r'[1-2]\d{3}', file)
             if year:
-                year = list_to_str(year[:1]) 
+                year = year[0]
         else:
             year = None
-        movieid = imdb.search_movie(title.lower(), results=10)
-        if not movieid:
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"https://imdb.iamidiotareyoutoo.com/search?q={title}") as response:
+                if response.status != 200:
+                    return None
+                data = await response.json()
+
+        if not data.get("ok") or not data.get("description"):
             return None
+
+        results = data["description"]
         if year:
-            filtered=list(filter(lambda k: str(k.get('year')) == str(year), movieid))
+            filtered = [r for r in results if str(r.get("#YEAR")) == str(year)]
             if not filtered:
-                filtered = movieid
+                filtered = results
         else:
-            filtered = movieid
-        movieid=list(filter(lambda k: k.get('kind') in ['movie', 'tv series'], filtered))
-        if not movieid:
-            movieid = filtered
+            filtered = results
+
         if bulk:
-            return movieid
-        movieid = movieid[0].movieID
+            return filtered
+
+        movie = filtered[0]
     else:
-        movieid = query
-    movie = imdb.get_movie(movieid)
-    if not movie:
-        return None
-    if movie.get("original air date"):
-        date = movie["original air date"]
-    elif movie.get("year"):
-        date = movie.get("year")
-    else:
-        date = "N/A"
-    plot = ""
-    if not LONG_IMDB_DESCRIPTION:
-        plot = movie.get('plot')
-        if plot and len(plot) > 0:
-            plot = plot[0]
-    else:
-        plot = movie.get('plot outline')
-    if plot and len(plot) > 800:
-        plot = plot[0:800] + "..."
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"https://imdb.iamidiotareyoutoo.com/title/{query}") as response:
+                if response.status != 200:
+                    return None
+                movie = await response.json()
 
     return {
-        'title': movie.get('title'),
-        'votes': movie.get('votes'),
-        "aka": list_to_str(movie.get("akas")),
-        "seasons": movie.get("number of seasons"),
-        "box_office": movie.get('box office'),
-        'localized_title': movie.get('localized title'),
-        'kind': movie.get("kind"),
-        "imdb_id": f"tt{movie.get('imdbID')}",
-        "cast": list_to_str(movie.get("cast")),
-        "runtime": list_to_str(movie.get("runtimes")),
-        "countries": list_to_str(movie.get("countries")),
-        "certificates": list_to_str(movie.get("certificates")),
-        "languages": list_to_str(movie.get("languages")),
-        "director": list_to_str(movie.get("director")),
-        "writer":list_to_str(movie.get("writer")),
-        "producer":list_to_str(movie.get("producer")),
-        "composer":list_to_str(movie.get("composer")) ,
-        "cinematographer":list_to_str(movie.get("cinematographer")),
-        "music_team": list_to_str(movie.get("music department")),
-        "distributors": list_to_str(movie.get("distributors")),
-        'release_date': date,
-        'year': movie.get('year'),
-        'genres': list_to_str(movie.get("genres")),
-        'poster': movie.get('full-size cover url'),
-        'plot': plot,
-        'rating': str(movie.get("rating")),
-        'url':f'https://www.imdb.com/title/tt{movieid}'
+        'title': safe_get(movie, "#TITLE"),
+        'votes': "N/A",
+        'aka': safe_get(movie, "#AKA"),
+        'seasons': "N/A",
+        'box_office': "N/A",
+        'localized_title': safe_get(movie, "#TITLE"),
+        'kind': "N/A",
+        'imdb_id': safe_get(movie, "#IMDB_ID"),
+        'cast': safe_get(movie, "#ACTORS"),
+        'runtime': "N/A",
+        'countries': "N/A",
+        'certificates': "N/A",
+        'languages': "N/A",
+        'director': "N/A",
+        'writer': "N/A",
+        'producer': "N/A",
+        'composer': "N/A",
+        'cinematographer': "N/A",
+        'music_team': "N/A",
+        'distributors': "N/A",
+        'release_date': safe_get(movie, "#YEAR"),
+        'year': safe_get(movie, "#YEAR"),
+        'genres': "N/A",
+        'poster': safe_get(movie, "#IMG_POSTER"),
+        'plot': "N/A",
+        'rating': "N/A",
+        'url': safe_get(movie, "#IMDB_URL")
     }
-
+    
 async def broadcast_messages(user_id, message):
     try:
         await message.copy(chat_id=user_id)
