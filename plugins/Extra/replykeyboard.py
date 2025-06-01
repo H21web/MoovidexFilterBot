@@ -28,26 +28,27 @@ async def handle_whats_streaming(client, message: Message):
         )
 
 
-@Client.on_message(filters.text & ~filters.command())
+@Client.on_message(filters.text)
 async def handle_selection(client, message: Message):
+    if message.text.startswith("/"):
+        return  # Ignore commands
+
     text = message.text.strip()
 
-    # If it's a platform
+    # Platform selected
     if text in platform_data:
         movie_titles = platform_data[text]
         if not movie_titles:
             return
-
         movie_buttons = [[title] for title in movie_titles]
         return await message.reply(
             reply_markup=ReplyKeyboardMarkup(movie_buttons, resize_keyboard=True, one_time_keyboard=True),
-            text=None  # No reply message
+            text=None
         )
 
-    # If it's a movie title
+    # Movie selected
     for movie_list in platform_data.values():
         if text in movie_list:
             return await message.reply(text, reply_markup=ReplyKeyboardRemove())
 
-    # Not matching any valid input
     await message.reply("❌ Please use the provided keyboard.")
