@@ -95,10 +95,6 @@ async def is_subscribed(bot, query):
 
 
 
-
-import aiohttp
-import re
-
 API_BASE = "https://imdb.iamidiotareyoutoo.com"
 
 def list_to_str(val):
