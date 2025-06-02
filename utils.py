@@ -94,106 +94,90 @@ async def is_subscribed(bot, query):
         return False
 
 
-TMDB_API_KEY = "b3d10dab8e82525e3a2ed8ed8bc38874"
-TMDB_BASE_URL = "https://api.themoviedb.org/3"
-TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/w500"
 
-def safe_get(d, key, default="N/A"):
-    return d.get(key) or default
+TMDB_API_KEY = "b3d10dab8e82525e3a2ed8ed8bc38874"
+TMDB_API_URL = "https://api.themoviedb.org/3"
+IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
 
 def format_duration(minutes):
-    try:
-        minutes = int(minutes)
-        hours = minutes // 60
-        mins = minutes % 60
-        return f"{hours}h {mins}min" if hours else f"{mins}min"
-    except:
+    if not minutes:
         return "N/A"
+    hours = minutes // 60
+    mins = minutes % 60
+    return f"{hours}h {mins}min" if hours else f"{mins}min"
 
 def format_date(date_str):
     try:
-        date = datetime.strptime(date_str, "%Y-%m-%d")
-        return date.strftime("%d %B %Y")
+        date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+        return date_obj.strftime("%d %B %Y")
     except:
         return "N/A"
 
-def extract_language_names(lang_list):
-    if isinstance(lang_list, list):
-        return ", ".join(l.get("english_name") for l in lang_list if l.get("english_name"))
-    return "N/A"
+def get_type_from_media_type(media_type):
+    return {
+        "movie": "Movie",
+        "tv": "Series",
+        "anime": "Anime"  # Optional — anime are often categorized as "tv"
+    }.get(media_type, "Unknown")
 
-def extract_genre_names(genres):
-    if isinstance(genres, list):
-        return ", ".join(g.get("name") for g in genres if g.get("name"))
-    return "N/A"
-
-async def get_poster(query, bulk=False, id=False, file=None):
+async def get_poster(query, file=None):
     query = query.strip()
-    year_match = re.findall(r'(19|20)\d{2}$', query)
-    year = year_match[0] if year_match else None
-    title = query.replace(year, "").strip() if year else query
-
-    if not year and file:
-        file_year = re.findall(r'(19|20)\d{2}', file)
-        year = file_year[0] if file_year else None
 
     async with aiohttp.ClientSession() as session:
-        # Search request
-        search_url = f"{TMDB_BASE_URL}/search/multi"
-        params = {"api_key": TMDB_API_KEY, "query": title, "include_adult": "false"}
-        async with session.get(search_url, params=params) as response:
-            if response.status != 200:
+        # 1. Search
+        search_url = f"{TMDB_API_URL}/search/multi?api_key={TMDB_API_KEY}&query={query}"
+        async with session.get(search_url) as search_response:
+            if search_response.status != 200:
                 return None
-            data = await response.json()
-            results = [r for r in data.get("results", []) if r.get("media_type") in ["movie", "tv"]]
+            search_results = await search_response.json()
 
+        results = search_results.get("results", [])
         if not results:
             return None
-        if bulk:
-            return results
 
-        result = results[0]
-        media_id = result["id"]
-        media_type = result["media_type"]
+        # Pick the top result
+        item = results[0]
+        media_type = item.get("media_type", "movie")
+        item_id = item.get("id")
 
-        # Details request
-        details_url = f"{TMDB_BASE_URL}/{media_type}/{media_id}"
-        async with session.get(details_url, params={"api_key": TMDB_API_KEY}) as response:
-            if response.status != 200:
+        # 2. Get details
+        details_url = f"{TMDB_API_URL}/{media_type}/{item_id}?api_key={TMDB_API_KEY}&language=en-US"
+        async with session.get(details_url) as detail_response:
+            if detail_response.status != 200:
                 return None
-            details = await response.json()
+            details = await detail_response.json()
 
-    release_date = safe_get(details, "release_date") if media_type == "movie" else safe_get(details, "first_air_date")
-    duration = safe_get(details, "runtime") if media_type == "movie" else (
-        details.get("episode_run_time", [None])[0]
+    # 3. Format data
+    title = details.get("title") or details.get("name") or "N/A"
+    rating = details.get("vote_average")
+    rating = f"{rating:.1f}/10" if isinstance(rating, (int, float)) else "N/A"
+    release_date = details.get("release_date") or details.get("first_air_date") or ""
+    duration = (
+        details.get("runtime") or
+        (details.get("episode_run_time", [None])[0] if details.get("episode_run_time") else None)
     )
 
-    return {
-        'title': safe_get(details, "title") if media_type == "movie" else safe_get(details, "name"),
-        'aka': safe_get(details, "original_title") if media_type == "movie" else safe_get(details, "original_name"),
-        'localized_title': safe_get(details, "title") if media_type == "movie" else safe_get(details, "name"),
-        'imdb_id': safe_get(details, "imdb_id"),
-        'votes': safe_get(details, "vote_count"),
-        'box_office': safe_get(details, "revenue"),
-        'runtime': format_duration(duration),
-        'countries': ", ".join(details.get("origin_country", [])),
-        'languages': extract_language_names(details.get("spoken_languages", [])),
-        'release_date': format_date(release_date),
-        'year': release_date[:4] if release_date else "N/A",
-        'genres': extract_genre_names(details.get("genres", [])),
-        'poster': f"{TMDB_IMAGE_URL}{details['poster_path']}" if details.get("poster_path") else "N/A",
-        'plot': safe_get(details, "overview"),
-        'rating': f"{float(details['vote_average']):.1f}/10" if details.get("vote_average") is not None else "N/A",
-        'kind': "Movie" if media_type == "movie" else "TV Show",
-        'url': f"https://www.themoviedb.org/{media_type}/{media_id}",
-        'cast': "N/A",
-        'seasons': safe_get(details, "number_of_seasons", "N/A") if media_type == "tv" else "N/A",
-        'certificates': "N/A",
-        'director': "N/A", 'writer': "N/A", 'producer': "N/A",
-        'composer': "N/A", 'cinematographer': "N/A", 'music_team': "N/A",
-        'distributors': "N/A"
-    }
+    genres = ", ".join([genre.get("name") for genre in details.get("genres", [])])
+    language = details.get("original_language", "N/A").title()
+    full_language = details.get("spoken_languages", [{}])[0].get("english_name", "N/A")
 
+    poster_path = details.get("poster_path")
+    poster = IMAGE_BASE_URL + poster_path if poster_path else None
+    overview = details.get("overview", "N/A")
+    media_type_readable = get_type_from_media_type(media_type)
+
+    return {
+        "title": title,
+        "rating": rating,
+        "release_date": format_date(release_date),
+        "duration": format_duration(duration),
+        "language": language,
+        "language_full": full_language,
+        "genres": genres or "N/A",
+        "poster": poster,
+        "overview": overview,
+        "type": media_type_readable
+    }
 
 
 async def broadcast_messages(user_id, message):
