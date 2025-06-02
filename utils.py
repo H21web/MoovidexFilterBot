@@ -16,6 +16,7 @@ from database.users_chats_db import db
 from database.join_reqs import JoinReqs
 from bs4 import BeautifulSoup
 from shortzy import Shortzy
+import httpx
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -93,9 +94,6 @@ async def is_subscribed(bot, query):
                 return True
         return False
 
-
-import httpx
-import re
 
 def list_to_str(data):
     if isinstance(data, list):
