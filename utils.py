@@ -93,87 +93,99 @@ async def is_subscribed(bot, query):
                 return True
         return False
 
+TMDB_API_KEY = "b3d10dab8e82525e3a2ed8ed8bc38874"
+TMDB_BASE_URL = "https://api.themoviedb.org/3"
+TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/w500"
+
 def safe_get(d, key, default="N/A"):
     return d.get(key, default) or default
 
 def list_to_str(value):
     if isinstance(value, list):
-        return ", ".join(map(str, value))
+        return ", ".join(str(v.get("name", v)) for v in value)
     elif isinstance(value, str):
         return value
     return "N/A"
 
+async def tmdb_search(query, year=None):
+    async with aiohttp.ClientSession() as session:
+        params = {
+            "api_key": TMDB_API_KEY,
+            "query": query,
+            "include_adult": "false",
+        }
+        if year:
+            params["year"] = year
+
+        async with session.get(f"{TMDB_BASE_URL}/search/movie", params=params) as response:
+            if response.status != 200:
+                return None
+            data = await response.json()
+            return data.get("results")
+
+async def tmdb_get_movie_details(movie_id):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{TMDB_BASE_URL}/movie/{movie_id}", params={"api_key": TMDB_API_KEY}) as response:
+            if response.status != 200:
+                return None
+            return await response.json()
+
 async def get_poster(query, bulk=False, id=False, file=None):
     if not id:
-        query = query.strip().lower()
-        title = query
-        year = re.findall(r'[1-2]\d{3}$', query)
-        if year:
-            year = year[0]
-            title = query.replace(year, "").strip()
-        elif file:
-            year = re.findall(r'[1-2]\d{3}', file)
-            if year:
-                year = year[0]
-        else:
-            year = None
+        query = query.strip()
+        year_match = re.findall(r'(19|20)\d{2}$', query)
+        year = year_match[0] if year_match else None
+        title = query.replace(year, "").strip() if year else query
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://imdb.iamidiotareyoutoo.com/search?q={title}") as response:
-                if response.status != 200:
-                    return None
-                data = await response.json()
+        if not year and file:
+            file_year = re.findall(r'(19|20)\d{2}', file)
+            year = file_year[0] if file_year else None
 
-        if not data.get("ok") or not data.get("description"):
+        results = await tmdb_search(title, year)
+        if not results:
             return None
 
-        results = data["description"]
-        if year:
-            filtered = [r for r in results if str(r.get("#YEAR")) == str(year)]
-            if not filtered:
-                filtered = results
-        else:
-            filtered = results
-
         if bulk:
-            return filtered
+            return results
 
-        movie = filtered[0]
+        movie = results[0]
+        movie_id = movie.get("id")
+        movie_details = await tmdb_get_movie_details(movie_id)
+        if not movie_details:
+            return None
     else:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://imdb.iamidiotareyoutoo.com/title/{query}") as response:
-                if response.status != 200:
-                    return None
-                movie = await response.json()
+        movie_details = await tmdb_get_movie_details(query)
+        if not movie_details:
+            return None
 
     return {
-        'title': safe_get(movie, "#TITLE"),
-        'votes': "N/A",
-        'aka': safe_get(movie, "#AKA"),
+        'title': safe_get(movie_details, "title"),
+        'votes': safe_get(movie_details, "vote_count"),
+        'aka': safe_get(movie_details, "original_title"),
         'seasons': "N/A",
-        'box_office': "N/A",
-        'localized_title': safe_get(movie, "#TITLE"),
-        'kind': "N/A",
-        'imdb_id': safe_get(movie, "#IMDB_ID"),
-        'cast': safe_get(movie, "#ACTORS"),
-        'runtime': "N/A",
-        'countries': "N/A",
-        'certificates': "N/A",
-        'languages': "N/A",
-        'director': "N/A",
+        'box_office': safe_get(movie_details, "revenue"),
+        'localized_title': safe_get(movie_details, "title"),
+        'kind': "Movie",
+        'imdb_id': safe_get(movie_details, "imdb_id"),
+        'cast': "N/A",  # You can add another TMDb call for credits if needed
+        'runtime': safe_get(movie_details, "runtime"),
+        'countries': list_to_str(movie_details.get("production_countries", [])),
+        'certificates': "N/A",  # Can be fetched via `/movie/{id}/release_dates`
+        'languages': list_to_str(movie_details.get("spoken_languages", [])),
+        'director': "N/A",  # Needs credits endpoint
         'writer': "N/A",
         'producer': "N/A",
         'composer': "N/A",
         'cinematographer': "N/A",
         'music_team': "N/A",
         'distributors': "N/A",
-        'release_date': safe_get(movie, "#YEAR"),
-        'year': safe_get(movie, "#YEAR"),
-        'genres': "N/A",
-        'poster': safe_get(movie, "#IMG_POSTER"),
-        'plot': "N/A",
-        'rating': "N/A",
-        'url': safe_get(movie, "#IMDB_URL")
+        'release_date': safe_get(movie_details, "release_date"),
+        'year': safe_get(movie_details, "release_date", "N/A")[:4],
+        'genres': list_to_str(movie_details.get("genres", [])),
+        'poster': f"{TMDB_IMAGE_URL}{movie_details['poster_path']}" if movie_details.get("poster_path") else "N/A",
+        'plot': safe_get(movie_details, "overview"),
+        'rating': safe_get(movie_details, "vote_average"),
+        'url': f"https://www.themoviedb.org/movie/{movie_details.get('id')}"
     }
     
 async def broadcast_messages(user_id, message):
