@@ -95,6 +95,7 @@ async def is_subscribed(bot, query):
 
 
 
+
 TMDB_API_KEY = "b3d10dab8e82525e3a2ed8ed8bc38874"
 TMDB_API_URL = "https://api.themoviedb.org/3"
 IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
@@ -147,7 +148,22 @@ async def get_poster(query, file=None):
                 return None
             details = await detail_response.json()
 
-    # 3. Format data
+        # 3. Get credits
+        credits_url = f"{TMDB_API_URL}/{media_type}/{item_id}/credits?api_key={TMDB_API_KEY}&language=en-US"
+        async with session.get(credits_url) as credits_response:
+            credits = await credits_response.json() if credits_response.status == 200 else {}
+
+    # Extract cast and crew info
+    cast_list = [person["name"] for person in credits.get("cast", [])[:6]]
+    cast = ", ".join(cast_list) if cast_list else "N/A"
+
+    crew = credits.get("crew", [])
+    director = next((p["name"] for p in crew if p["job"] == "Director"), "N/A")
+    writer = next((p["name"] for p in crew if p["job"] == "Writer"), "N/A")
+    producer = next((p["name"] for p in crew if p["job"] == "Producer"), "N/A")
+    composer = next((p["name"] for p in crew if p["job"] == "Original Music Composer"), "N/A")
+    cinematographer = next((p["name"] for p in crew if p["job"] == "Director of Photography"), "N/A")
+
     title = details.get("title") or details.get("name") or "N/A"
     rating = details.get("vote_average")
     rating = f"{rating:.1f}/10" if isinstance(rating, (int, float)) else "N/A"
@@ -165,19 +181,30 @@ async def get_poster(query, file=None):
     poster = IMAGE_BASE_URL + poster_path if poster_path else None
     overview = details.get("overview", "N/A")
     media_type_readable = get_type_from_media_type(media_type)
+    imdb_id = details.get("imdb_id", "")
+    imdb_url = f"https://www.imdb.com/title/{imdb_id}" if imdb_id else "N/A"
 
     return {
         "title": title,
         "rating": rating,
         "release_date": format_date(release_date),
         "duration": format_duration(duration),
-        "language": language,
-        "language_full": full_language,
+        "language": full_language,
         "genres": genres or "N/A",
         "poster": poster,
         "overview": overview,
-        "type": media_type_readable
+        "type": media_type_readable,
+        "cast": cast,
+        "director": director,
+        "writer": writer,
+        "producer": producer,
+        "composer": composer,
+        "cinematographer": cinematographer,
+        "imdb_url": imdb_url,
+        "imdb_id": imdb_id
     }
+
+
 
 
 async def broadcast_messages(user_id, message):
