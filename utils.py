@@ -93,6 +93,7 @@ async def is_subscribed(bot, query):
                 return True
         return False
 
+
 TMDB_API_KEY = "b3d10dab8e82525e3a2ed8ed8bc38874"
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/w500"
@@ -102,91 +103,90 @@ def safe_get(d, key, default="N/A"):
 
 def list_to_str(value):
     if isinstance(value, list):
-        return ", ".join(str(v.get("name", v)) for v in value)
+        # Handle list of dicts with a 'name' field
+        if all(isinstance(v, dict) and 'name' in v for v in value):
+            return ", ".join(v["name"] for v in value)
+        return ", ".join(map(str, value))
     elif isinstance(value, str):
         return value
     return "N/A"
 
-async def tmdb_search(query, year=None):
+async def search_multi(query, year=None):
     async with aiohttp.ClientSession() as session:
         params = {
             "api_key": TMDB_API_KEY,
             "query": query,
             "include_adult": "false",
         }
-        if year:
-            params["year"] = year
-
-        async with session.get(f"{TMDB_BASE_URL}/search/movie", params=params) as response:
+        async with session.get(f"{TMDB_BASE_URL}/search/multi", params=params) as response:
             if response.status != 200:
                 return None
             data = await response.json()
-            return data.get("results")
+            results = data.get("results", [])
+            # Filter to only movies or TV shows (skip people)
+            return [r for r in results if r.get("media_type") in ["movie", "tv"]]
 
-async def tmdb_get_movie_details(movie_id):
+async def get_details(media_id, media_type):
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"{TMDB_BASE_URL}/movie/{movie_id}", params={"api_key": TMDB_API_KEY}) as response:
+        async with session.get(f"{TMDB_BASE_URL}/{media_type}/{media_id}", params={"api_key": TMDB_API_KEY}) as response:
             if response.status != 200:
                 return None
             return await response.json()
 
 async def get_poster(query, bulk=False, id=False, file=None):
-    if not id:
-        query = query.strip()
-        year_match = re.findall(r'(19|20)\d{2}$', query)
-        year = year_match[0] if year_match else None
-        title = query.replace(year, "").strip() if year else query
+    query = query.strip()
+    year_match = re.findall(r'(19|20)\d{2}$', query)
+    year = year_match[0] if year_match else None
+    title = query.replace(year, "").strip() if year else query
 
-        if not year and file:
-            file_year = re.findall(r'(19|20)\d{2}', file)
-            year = file_year[0] if file_year else None
+    if not year and file:
+        file_year = re.findall(r'(19|20)\d{2}', file)
+        year = file_year[0] if file_year else None
 
-        results = await tmdb_search(title, year)
-        if not results:
-            return None
+    results = await search_multi(title, year)
+    if not results:
+        return None
 
-        if bulk:
-            return results
+    if bulk:
+        return results
 
-        movie = results[0]
-        movie_id = movie.get("id")
-        movie_details = await tmdb_get_movie_details(movie_id)
-        if not movie_details:
-            return None
-    else:
-        movie_details = await tmdb_get_movie_details(query)
-        if not movie_details:
-            return None
+    result = results[0]
+    media_type = result["media_type"]
+    media_id = result["id"]
+
+    details = await get_details(media_id, media_type)
+    if not details:
+        return None
 
     return {
-        'title': safe_get(movie_details, "title"),
-        'votes': safe_get(movie_details, "vote_count"),
-        'aka': safe_get(movie_details, "original_title"),
-        'seasons': "N/A",
-        'box_office': safe_get(movie_details, "revenue"),
-        'localized_title': safe_get(movie_details, "title"),
-        'kind': "Movie",
-        'imdb_id': safe_get(movie_details, "imdb_id"),
-        'cast': "N/A",  # You can add another TMDb call for credits if needed
-        'runtime': safe_get(movie_details, "runtime"),
-        'countries': list_to_str(movie_details.get("production_countries", [])),
-        'certificates': "N/A",  # Can be fetched via `/movie/{id}/release_dates`
-        'languages': list_to_str(movie_details.get("spoken_languages", [])),
-        'director': "N/A",  # Needs credits endpoint
-        'writer': "N/A",
-        'producer': "N/A",
-        'composer': "N/A",
-        'cinematographer': "N/A",
-        'music_team': "N/A",
-        'distributors': "N/A",
-        'release_date': safe_get(movie_details, "release_date"),
-        'year': safe_get(movie_details, "release_date", "N/A")[:4],
-        'genres': list_to_str(movie_details.get("genres", [])),
-        'poster': f"{TMDB_IMAGE_URL}{movie_details['poster_path']}" if movie_details.get("poster_path") else "N/A",
-        'plot': safe_get(movie_details, "overview"),
-        'rating': safe_get(movie_details, "vote_average"),
-        'url': f"https://www.themoviedb.org/movie/{movie_details.get('id')}"
+        'title': safe_get(details, "title") if media_type == "movie" else safe_get(details, "name"),
+        'aka': safe_get(details, "original_title") if media_type == "movie" else safe_get(details, "original_name"),
+        'localized_title': safe_get(details, "title") if media_type == "movie" else safe_get(details, "name"),
+        'imdb_id': safe_get(details, "imdb_id", "N/A"),
+        'votes': safe_get(details, "vote_count"),
+        'box_office': safe_get(details, "revenue", "N/A"),
+        'runtime': safe_get(details, "runtime") if media_type == "movie" else (
+            safe_get(details, "episode_run_time", ["N/A"])[0] if details.get("episode_run_time") else "N/A"
+        ),
+        'countries': list_to_str(details.get("production_countries", []) if media_type == "movie" else details.get("origin_country", [])),
+        'languages': list_to_str(details.get("spoken_languages", [])),
+        'release_date': safe_get(details, "release_date") if media_type == "movie" else safe_get(details, "first_air_date"),
+        'year': (safe_get(details, "release_date", "") if media_type == "movie" else safe_get(details, "first_air_date", ""))[:4],
+        'genres': list_to_str(details.get("genres", [])),
+        'poster': f"{TMDB_IMAGE_URL}{details['poster_path']}" if details.get("poster_path") else "N/A",
+        'plot': safe_get(details, "overview"),
+        'rating': safe_get(details, "vote_average"),
+        'kind': "Movie" if media_type == "movie" else "TV Show",
+        'url': f"https://www.themoviedb.org/{media_type}/{media_id}",
+        'cast': "N/A",  # Optional: can add /credits
+        'seasons': safe_get(details, "number_of_seasons", "N/A") if media_type == "tv" else "N/A",
+        'certificates': "N/A",  # Optional: requires extra endpoint
+        'director': "N/A", 'writer': "N/A", 'producer': "N/A",
+        'composer': "N/A", 'cinematographer': "N/A", 'music_team': "N/A",
+        'distributors': "N/A"
     }
+    
+
     
 async def broadcast_messages(user_id, message):
     try:
