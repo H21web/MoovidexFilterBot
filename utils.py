@@ -143,20 +143,31 @@ async def get_poster(query, bulk=False, id=False, file=None):
         file_year = re.findall(r'(19|20)\d{2}', file)
         year = file_year[0] if file_year else None
 
-    results = await search_multi(title, year)
-    if not results:
-        return None
+    async with aiohttp.ClientSession() as session:
+        # Search
+        search_url = f"{TMDB_BASE_URL}/search/multi"
+        params = {"api_key": TMDB_API_KEY, "query": title, "include_adult": "false"}
+        async with session.get(search_url, params=params) as response:
+            if response.status != 200:
+                return None
+            data = await response.json()
+            results = [r for r in data.get("results", []) if r.get("media_type") in ["movie", "tv"]]
 
-    if bulk:
-        return results
+        if not results:
+            return None
+        if bulk:
+            return results
 
-    result = results[0]
-    media_type = result["media_type"]
-    media_id = result["id"]
+        result = results[0]
+        media_id = result["id"]
+        media_type = result["media_type"]
 
-    details = await get_details(media_id, media_type)
-    if not details:
-        return None
+        # Details
+        details_url = f"{TMDB_BASE_URL}/{media_type}/{media_id}"
+        async with session.get(details_url, params={"api_key": TMDB_API_KEY}) as response:
+            if response.status != 200:
+                return None
+            details = await response.json()
 
     return {
         'title': safe_get(details, "title") if media_type == "movie" else safe_get(details, "name"),
@@ -178,15 +189,13 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'rating': safe_get(details, "vote_average"),
         'kind': "Movie" if media_type == "movie" else "TV Show",
         'url': f"https://www.themoviedb.org/{media_type}/{media_id}",
-        'cast': "N/A",  # Optional: can add /credits
+        'cast': "N/A",
         'seasons': safe_get(details, "number_of_seasons", "N/A") if media_type == "tv" else "N/A",
-        'certificates': "N/A",  # Optional: requires extra endpoint
+        'certificates': "N/A",
         'director': "N/A", 'writer': "N/A", 'producer': "N/A",
         'composer': "N/A", 'cinematographer': "N/A", 'music_team': "N/A",
         'distributors': "N/A"
     }
-    
-
     
 async def broadcast_messages(user_id, message):
     try:
