@@ -4,7 +4,7 @@
 
 import logging, asyncio, os, re, random, pytz, aiohttp, requests, string, json, http.client
 from info import *
-from imdb import Cinemagoer 
+from imdb import IMDb 
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram import enums
 from pyrogram.errors import *
@@ -95,94 +95,146 @@ async def is_subscribed(bot, query):
 
 
 
-API_BASE = "https://imdb.iamidiotareyoutoo.com"
+TMDB_API_KEY = "b3d10dab8e82525e3a2ed8ed8bc38874"
+TMDB_API_URL = "https://api.themoviedb.org/3"
+IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
 
-def list_to_str(val):
-    if isinstance(val, list):
-        return ', '.join(map(str, val))
-    return str(val) if val else "N/A"
+def format_duration(minutes):
+    if not minutes:
+        return "N/A"
+    hours = minutes // 60
+    mins = minutes % 60
+    return f"{hours}h {mins}min" if hours else f"{mins}min"
 
-def extract_names(items):
-    return list_to_str([i.get("name") for i in items if isinstance(i, dict) and i.get("name")])
+def format_date(date_str):
+    try:
+        date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+        return date_obj.strftime("%d %B %Y")
+    except:
+        return "N/A"
 
-async def get_poster(query, bulk=False, id=False, file=None):
-    imdb_id = None
+def list_to_str(value):
+    if isinstance(value, list):
+        return ", ".join(map(str, value))
+    elif isinstance(value, str):
+        return value
+    return "N/A"
 
-    if not id:
-        query = query.strip().lower()
-        year = None
-        year_match = re.findall(r'[1-2]\d{3}$', query)
-        title = query
+async def get_poster(query):
+    query = query.strip()
 
-        if year_match:
-            year = year_match[0]
-            title = query.replace(year, "").strip()
-        elif file:
-            year_in_file = re.findall(r'[1-2]\d{3}', file)
-            if year_in_file:
-                year = year_in_file[0]
-
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{API_BASE}/search", params={"query": title}) as r:
-                if r.status != 200:
-                    return None
-                result = await r.json()
-                results = result.get("results", [])
-                if not results:
-                    return None
-                if year:
-                    results = [m for m in results if str(m.get("year")) == year] or results
-                if bulk:
-                    return results
-                imdb_id = results[0].get("id")
-    else:
-        imdb_id = query
-
-    # Fetch detailed metadata
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"{API_BASE}/search", params={"tt": imdb_id}) as r:
-            if r.status != 200:
+        # Search TMDb
+        search_url = f"{TMDB_API_URL}/search/multi?api_key={TMDB_API_KEY}&query={query}"
+        async with session.get(search_url) as search_response:
+            if search_response.status != 200:
                 return None
-            data = await r.json()
+            search_results = await search_response.json()
 
-    short = data.get("short", {})
-    rating_info = short.get("aggregateRating", {})
-    actors = short.get("actor", [])
-    directors = short.get("director", [])
-    creators = short.get("creator", [])
-    genres = short.get("genre", [])
-    trailer = short.get("trailer", {})
+        results = search_results.get("results", [])
+        if not results:
+            return None
 
-    return {
-        'title': short.get("name", "N/A"),
-        'votes': rating_info.get("ratingCount", "N/A"),
-        'aka': "N/A",  # Not available
-        'seasons': "N/A",
-        'box_office': "N/A",
-        'localized_title': short.get("name", "N/A"),
-        'kind': short.get("@type", "N/A"),
-        'imdb_id': imdb_id,
-        'cast': extract_names(actors),
-        'runtime': short.get("duration", "N/A").replace("PT", "").lower(),
-        'countries': data.get("top", {}).get("releaseDate", {}).get("country", {}).get("text", "N/A"),
-        'certificates': "N/A",
-        'languages': short.get("inLanguage", "N/A"),
-        'director': extract_names(directors),
-        'writer': extract_names([c for c in creators if c.get("@type") == "Person"]),
-        'producer': "N/A",
-        'composer': "N/A",
-        'cinematographer': "N/A",
-        'music_team': "N/A",
-        'distributors': "N/A",
-        'release_date': short.get("datePublished", "N/A"),
-        'year': short.get("datePublished", "N/A")[:4],
-        'genres': list_to_str(genres),
-        'poster': short.get("image", "N/A"),
-        'plot': short.get("description", "N/A")[:800] + "...",
-        'rating': str(rating_info.get("ratingValue", "N/A")),
-        'url': short.get("url", f"https://www.imdb.com/title/{imdb_id}"),
-        'trailer_url': trailer.get("embedUrl", "N/A")
+        # Pick the top result
+        item = results[0]
+        media_type = item.get("media_type", "movie")
+        item_id = item.get("id")
+
+        # Get details with credits
+        details_url = f"{TMDB_API_URL}/{media_type}/{item_id}?api_key={TMDB_API_KEY}&language=en-US&append_to_response=credits"
+        async with session.get(details_url) as detail_response:
+            if detail_response.status != 200:
+                return None
+            details = await detail_response.json()
+
+    # Extract TMDb data
+    title = details.get("title") or details.get("name") or "N/A"
+    rating = details.get("vote_average")
+    rating = f"{rating:.1f}/10" if isinstance(rating, (int, float)) else "N/A"
+    release_date = details.get("release_date") or details.get("first_air_date") or ""
+    duration = (
+        details.get("runtime") or
+        (details.get("episode_run_time", [None])[0] if details.get("episode_run_time") else None)
+    )
+    genres = ", ".join([genre.get("name") for genre in details.get("genres", [])]) or "N/A"
+    language = details.get("original_language", "N/A").title()
+    spoken_languages = details.get("spoken_languages", [])
+    full_language = spoken_languages[0].get("english_name", "N/A") if spoken_languages else "N/A"
+    poster_path = details.get("poster_path")
+    poster = IMAGE_BASE_URL + poster_path if poster_path else None
+    overview = details.get("overview", "N/A")
+    imdb_id = details.get("imdb_id", "")
+    imdb_url = f"https://www.imdb.com/title/{imdb_id}" if imdb_id else "N/A"
+
+    # Extract credits
+    credits = details.get("credits", {})
+    cast_list = [person["name"] for person in credits.get("cast", [])[:6]]
+    cast = ", ".join(cast_list) if cast_list else "N/A"
+    crew = credits.get("crew", [])
+    director = next((p["name"] for p in crew if p["job"] == "Director"), "N/A")
+    writer = next((p["name"] for p in crew if p["job"] == "Writer"), "N/A")
+    producer = next((p["name"] for p in crew if p["job"] == "Producer"), "N/A")
+    composer = next((p["name"] for p in crew if p["job"] == "Original Music Composer"), "N/A")
+    cinematographer = next((p["name"] for p in crew if p["job"] == "Director of Photography"), "N/A")
+
+    # Use IMDbPY for additional data
+    ia = IMDb()
+    imdb_data = {}
+    if imdb_id:
+        imdb_id_clean = imdb_id.replace("tt", "")
+        try:
+            movie = ia.get_movie(imdb_id_clean)
+            ia.update(movie, info=['main', 'plot', 'release dates', 'business', 'akas', 'runtimes', 'certificates', 'languages', 'countries', 'cast', 'crew'])
+            imdb_data = {
+                "votes": movie.get('votes'),
+                "aka": list_to_str(movie.get("akas")),
+                "seasons": movie.get("number of seasons"),
+                "box_office": movie.get('box office'),
+                "localized_title": movie.get('localized title'),
+                "kind": movie.get("kind"),
+                "cast": list_to_str(movie.get("cast")),
+                "runtime": list_to_str(movie.get("runtimes")),
+                "countries": list_to_str(movie.get("countries")),
+                "certificates": list_to_str(movie.get("certificates")),
+                "languages": list_to_str(movie.get("languages")),
+                "director": list_to_str(movie.get("director")),
+                "writer": list_to_str(movie.get("writer")),
+                "producer": list_to_str(movie.get("producer")),
+                "composer": list_to_str(movie.get("composer")),
+                "cinematographer": list_to_str(movie.get("cinematographer")),
+                "music_team": list_to_str(movie.get("music department")),
+                "distributors": list_to_str(movie.get("distributors")),
+                "year": movie.get('year'),
+                "plot": movie.get("plot")[0] if movie.get("plot") else overview,
+            }
+        except Exception as e:
+            print(f"Error fetching IMDb data: {e}")
+
+    # Merge data
+    result = {
+        "title": title,
+        "rating": rating,
+        "release_date": format_date(release_date),
+        "duration": format_duration(duration),
+        "language": full_language,
+        "genres": genres,
+        "poster": poster,
+        "overview": overview,
+        "type": media_type.title(),
+        "cast": cast,
+        "director": director,
+        "writer": writer,
+        "producer": producer,
+        "composer": composer,
+        "cinematographer": cinematographer,
+        "imdb_url": imdb_url,
+        "imdb_id": imdb_id,
     }
+
+   
+::contentReference[oaicite:5]{index=5}
+ 
+
 
 
 async def broadcast_messages(user_id, message):
