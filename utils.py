@@ -103,13 +103,15 @@ def safe_get(d, key, default="N/A"):
 
 def list_to_str(value):
     if isinstance(value, list):
-        # Handle list of dicts with a 'name' field
-        if all(isinstance(v, dict) and 'name' in v for v in value):
+        # If it's a list of dicts, try to extract the 'name' key
+        if all(isinstance(v, dict) and "name" in v for v in value):
             return ", ".join(v["name"] for v in value)
-        return ", ".join(map(str, value))
+        elif all(isinstance(v, str) for v in value):
+            return ", ".join(value)
     elif isinstance(value, str):
         return value
     return "N/A"
+
 
 async def search_multi(query, year=None):
     async with aiohttp.ClientSession() as session:
