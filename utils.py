@@ -94,23 +94,12 @@ async def is_subscribed(bot, query):
         return False
 
 
-
 TMDB_API_KEY = "b3d10dab8e82525e3a2ed8ed8bc38874"
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/w500"
 
 def safe_get(d, key, default="N/A"):
     return d.get(key) or default
-
-def list_to_str(value):
-    if isinstance(value, list):
-        if all(isinstance(v, dict) and "name" in v for v in value):
-            return ", ".join(v["name"] for v in value if v.get("name"))
-        elif all(isinstance(v, str) for v in value):
-            return ", ".join(value)
-    elif isinstance(value, str):
-        return value
-    return "N/A"
 
 def format_duration(minutes):
     try:
@@ -127,6 +116,16 @@ def format_date(date_str):
         return date.strftime("%d %B %Y")
     except:
         return "N/A"
+
+def extract_language_names(lang_list):
+    if isinstance(lang_list, list):
+        return ", ".join(l.get("english_name") for l in lang_list if l.get("english_name"))
+    return "N/A"
+
+def extract_genre_names(genres):
+    if isinstance(genres, list):
+        return ", ".join(g.get("name") for g in genres if g.get("name"))
+    return "N/A"
 
 async def get_poster(query, bulk=False, id=False, file=None):
     query = query.strip()
@@ -177,14 +176,14 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'votes': safe_get(details, "vote_count"),
         'box_office': safe_get(details, "revenue"),
         'runtime': format_duration(duration),
-        'countries': list_to_str(details.get("production_countries", []) if media_type == "movie" else details.get("origin_country", [])),
-        'languages': list_to_str(details.get("spoken_languages", [])),
+        'countries': ", ".join(details.get("origin_country", [])),
+        'languages': extract_language_names(details.get("spoken_languages", [])),
         'release_date': format_date(release_date),
         'year': release_date[:4] if release_date else "N/A",
-        'genres': list_to_str(details.get("genres", [])),
+        'genres': extract_genre_names(details.get("genres", [])),
         'poster': f"{TMDB_IMAGE_URL}{details['poster_path']}" if details.get("poster_path") else "N/A",
         'plot': safe_get(details, "overview"),
-        'rating': safe_get(details, "vote_average"),
+        'rating': f"{float(details['vote_average']):.1f}/10" if details.get("vote_average") is not None else "N/A",
         'kind': "Movie" if media_type == "movie" else "TV Show",
         'url': f"https://www.themoviedb.org/{media_type}/{media_id}",
         'cast': "N/A",
@@ -194,6 +193,8 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'composer': "N/A", 'cinematographer': "N/A", 'music_team': "N/A",
         'distributors': "N/A"
     }
+
+
 
 async def broadcast_messages(user_id, message):
     try:
