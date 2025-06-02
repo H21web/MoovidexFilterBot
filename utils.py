@@ -94,46 +94,39 @@ async def is_subscribed(bot, query):
         return False
 
 
+
 TMDB_API_KEY = "b3d10dab8e82525e3a2ed8ed8bc38874"
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/w500"
 
 def safe_get(d, key, default="N/A"):
-    return d.get(key, default) or default
+    return d.get(key) or default
 
 def list_to_str(value):
     if isinstance(value, list):
-        # If it's a list of dicts, try to extract the 'name' key
         if all(isinstance(v, dict) and "name" in v for v in value):
-            return ", ".join(v["name"] for v in value)
+            return ", ".join(v["name"] for v in value if v.get("name"))
         elif all(isinstance(v, str) for v in value):
             return ", ".join(value)
     elif isinstance(value, str):
         return value
     return "N/A"
 
+def format_duration(minutes):
+    try:
+        minutes = int(minutes)
+        hours = minutes // 60
+        mins = minutes % 60
+        return f"{hours}h {mins}min" if hours else f"{mins}min"
+    except:
+        return "N/A"
 
-async def search_multi(query, year=None):
-    async with aiohttp.ClientSession() as session:
-        params = {
-            "api_key": TMDB_API_KEY,
-            "query": query,
-            "include_adult": "false",
-        }
-        async with session.get(f"{TMDB_BASE_URL}/search/multi", params=params) as response:
-            if response.status != 200:
-                return None
-            data = await response.json()
-            results = data.get("results", [])
-            # Filter to only movies or TV shows (skip people)
-            return [r for r in results if r.get("media_type") in ["movie", "tv"]]
-
-async def get_details(media_id, media_type):
-    async with aiohttp.ClientSession() as session:
-        async with session.get(f"{TMDB_BASE_URL}/{media_type}/{media_id}", params={"api_key": TMDB_API_KEY}) as response:
-            if response.status != 200:
-                return None
-            return await response.json()
+def format_date(date_str):
+    try:
+        date = datetime.strptime(date_str, "%Y-%m-%d")
+        return date.strftime("%d %B %Y")
+    except:
+        return "N/A"
 
 async def get_poster(query, bulk=False, id=False, file=None):
     query = query.strip()
@@ -146,7 +139,7 @@ async def get_poster(query, bulk=False, id=False, file=None):
         year = file_year[0] if file_year else None
 
     async with aiohttp.ClientSession() as session:
-        # Search
+        # Search request
         search_url = f"{TMDB_BASE_URL}/search/multi"
         params = {"api_key": TMDB_API_KEY, "query": title, "include_adult": "false"}
         async with session.get(search_url, params=params) as response:
@@ -164,27 +157,30 @@ async def get_poster(query, bulk=False, id=False, file=None):
         media_id = result["id"]
         media_type = result["media_type"]
 
-        # Details
+        # Details request
         details_url = f"{TMDB_BASE_URL}/{media_type}/{media_id}"
         async with session.get(details_url, params={"api_key": TMDB_API_KEY}) as response:
             if response.status != 200:
                 return None
             details = await response.json()
 
+    release_date = safe_get(details, "release_date") if media_type == "movie" else safe_get(details, "first_air_date")
+    duration = safe_get(details, "runtime") if media_type == "movie" else (
+        details.get("episode_run_time", [None])[0]
+    )
+
     return {
         'title': safe_get(details, "title") if media_type == "movie" else safe_get(details, "name"),
         'aka': safe_get(details, "original_title") if media_type == "movie" else safe_get(details, "original_name"),
         'localized_title': safe_get(details, "title") if media_type == "movie" else safe_get(details, "name"),
-        'imdb_id': safe_get(details, "imdb_id", "N/A"),
+        'imdb_id': safe_get(details, "imdb_id"),
         'votes': safe_get(details, "vote_count"),
-        'box_office': safe_get(details, "revenue", "N/A"),
-        'runtime': safe_get(details, "runtime") if media_type == "movie" else (
-            safe_get(details, "episode_run_time", ["N/A"])[0] if details.get("episode_run_time") else "N/A"
-        ),
+        'box_office': safe_get(details, "revenue"),
+        'runtime': format_duration(duration),
         'countries': list_to_str(details.get("production_countries", []) if media_type == "movie" else details.get("origin_country", [])),
         'languages': list_to_str(details.get("spoken_languages", [])),
-        'release_date': safe_get(details, "release_date") if media_type == "movie" else safe_get(details, "first_air_date"),
-        'year': (safe_get(details, "release_date", "") if media_type == "movie" else safe_get(details, "first_air_date", ""))[:4],
+        'release_date': format_date(release_date),
+        'year': release_date[:4] if release_date else "N/A",
         'genres': list_to_str(details.get("genres", [])),
         'poster': f"{TMDB_IMAGE_URL}{details['poster_path']}" if details.get("poster_path") else "N/A",
         'plot': safe_get(details, "overview"),
@@ -198,7 +194,7 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'composer': "N/A", 'cinematographer': "N/A", 'music_team': "N/A",
         'distributors': "N/A"
     }
-    
+
 async def broadcast_messages(user_id, message):
     try:
         await message.copy(chat_id=user_id)
