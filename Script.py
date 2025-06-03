@@ -158,35 +158,45 @@ Cᴏᴍᴍᴀɴᴅs Aɴᴅ Usᴀɢᴇ:
 ★ Usᴇᴅ Sᴛᴏʀᴀɢᴇ: <code>{} MB</code>
 ★ Fʀᴇᴇ Sᴛᴏʀᴀɢᴇ: <code>{} MB</code></b>"""
     
-    STATUS_TXT = """<b>📊 Total Files From All DBs: <code>{}</code></b>
+    STATUS_TXT = """<b>📊 SYSTEM STATUS</b>
+━━━━━━━━━━━━━━━━━━━━
+<b>🔹 Total Files Across Databases:</b> <code>{}</code>
 
-<b><u>⚙ BOT STATUS :</u></b>
-• 👤 Users: <code>{}</code>  
-• 💬 Chats: <code>{}</code>
+<b>⚙ BOT STATUS</b>
+━━━━━━━━━━━━━━━━━━━━
+• 👤 <b>Users:</b> <code>{}</code>  
+• 💬 <b>Chats:</b> <code>{}</code>
 
-<b><u>🗃 DB 1 :</u></b>
-• 🗂️ Files: <code>{}</code>  
-• 📦 Storage: <code>{} MB / {} MB</code>  
+<b>🗃 DATABASE 1</b>
+━━━━━━━━━━━━━━━━━━━━
+• 🗂️ <b>Stored Files:</b> <code>{}</code>
+• 📈 <b>Used Storage:</b> <code>{} MB</code>
+• 📉 <b>Free Storage:</b> <code>{} MB</code>
 
-<b><u>🗃 DB 2 :</u></b>
-• 🗂️ Files: <code>{}</code>  
-• 📦 Storage: <code>{} MB / {} MB</code>  
+<b>🗃 DATABASE 2</b>
+━━━━━━━━━━━━━━━━━━━━
+• 🗂️ <b>Stored Files:</b> <code>{}</code>
+• 📈 <b>Used Storage:</b> <code>{} MB</code>
+• 📉 <b>Free Storage:</b> <code>{} MB</code>
 
-<b><u>📦 OTHER DB :</u></b>
-• 🔸 Storage: <code>{} MB / {} MB</code> """
+<b>📦 OTHER DATABASE</b>
+━━━━━━━━━━━━━━━━━━━━
+• 📈 <b>Used Storage:</b> <code>{} MB</code>
+• 📉 <b>Free Storage:</b> <code>{} MB</code>
+ """
 
     
     LOG_TEXT_G = """<b>𝙱𝙾𝚃 𝙰𝙳𝙳𝙴𝙳 𝚃𝙾 𝙽𝙴𝚆 𝙶𝚁𝙾𝚄𝙿</b>                      🚨
 <blockquote>𝙶𝚁𝙾𝚄𝙿 :  <code>{}</code>
  𝙸𝙳 : ||<code>{}</code>||               
 𝙼𝙴𝙼𝙱𝙴𝚁𝚂 : <code>{}</code>
-𝙰𝙳𝙳𝙴𝙳 𝙱𝚈 : <code>{}</code></blockquote>
+𝙰𝙳𝙳𝙴𝙳 𝙱𝚈 : {}</blockquote>
 
 """
 
     LOG_TEXT_P = """<b>𝙽𝚎𝚠 𝚄𝚜𝚎𝚛 </b>                                       🛎️ 
-<blockquote>👤 𝙸𝙳 : <code>{}</code>                                       
-🛡️ 𝙽𝚊𝚖𝚎 : <code>{}</code></blockquote>"""
+👤 𝙸𝙳 : <code>{}</code>                                    
+🛡️ 𝙽𝚊𝚖𝚎 : {}"""
 
 
     ALRT_TXT = """ʜᴇʟʟᴏ {},
