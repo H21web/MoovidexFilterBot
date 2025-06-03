@@ -144,19 +144,15 @@
     })
     .use([
       OUI({
-        fullscreen: true,
-        coverButton: true,
-        miniProgressBar: true,
-        autoFocus: true,
-        forceLandscapeOnFullscreen: true,
-        pictureInPicture: true,
-        showControls: 'always',
-        keyboard: { focused: true, global: false },
-        settings: ['loop'],
-        speeds: ['2.0', '1.75', '1.25', '1.0', '0.75', '0.5'],
-        slideToSeek: 'long-touch',
-        controlBar: false,
-        topSetting: false,
+    fullscreen: true,
+    coverButton: true,
+    miniProgressBar: true,
+    autoFocus: true,
+    forceLandscapeOnFullscreen: true,
+    screenshot: false,
+    pictureInPicture: true,
+    showControls: 'always',
+    keyboard: { focused: true, global: false },
         theme: {
           primaryColor: 'red',
           watermark: {
@@ -182,9 +178,15 @@
     <script>
 
     
+const videolink = window.location.href;
+const lazyLink = videolink.replace("/watch/", "/");
 
-        const videolink = window.location.href;
-        const  lazyLink = videolink.replace("/watch/", "/");
+// Helper to clean protocol from URL
+function stripProtocol(url) {
+    return url.replace(/^https?:\/\//, '');
+}
+	    
+        
 
         function vlc_player() {
             const openLazyLink = lazyLink;
