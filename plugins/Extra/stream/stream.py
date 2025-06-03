@@ -1,6 +1,6 @@
 from pyrogram import Client, filters, enums
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ForceReply, CallbackQuery
-from info import STREAM_MODE, URL, LOG_CHANNEL
+from info import STREAM_MODE, URL, LOG_CHANNEL, STREAM_FILES_CHANNEL
 from urllib.parse import quote_plus
 from TechVJ.util.file_properties import get_name, get_hash, get_media_file_size
 from TechVJ.util.human_readable import humanbytes
@@ -23,7 +23,7 @@ async def stream_start(client, message):
         username =  message.from_user.mention 
 
         log_msg = await client.send_cached_media(
-            chat_id=LOG_CHANNEL,
+            chat_id=STREAM_FILES_CHANNEL,
             file_id=fileid,
         )
         fileName = {quote_plus(get_name(log_msg))}
