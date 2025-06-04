@@ -142,8 +142,10 @@ async def get_poster(query, bulk=False, id=False, file=None):
     backdrops = result.get("backdrops", [])
     poster = backdrops[0] if backdrops else (result.get("photo_url") or [None])[0]
     
+    # Move this up here before using `offers`
     offers = result.get("offers", [])
-   # Get first streaming platform if available
+
+    # Now use it safely
     first_offer = next((offer for offer in offers if 'name' in offer and 'url' in offer), None)
     streaming_name = first_offer['name'] if first_offer else "N/A"
     streaming_link = first_offer['url'] if first_offer else "N/A"
@@ -159,6 +161,7 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'streaming_name': streaming_name,
         'streaming_link': streaming_link
     }
+
 
 
 async def broadcast_messages(user_id, message):
