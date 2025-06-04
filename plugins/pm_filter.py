@@ -2487,34 +2487,17 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         cap = TEMPLATE.format(
             qurey=search,
             title=imdb['title'],
-            votes=imdb['votes'],
-            aka=imdb["aka"],
-            seasons=imdb["seasons"],
-            box_office=imdb['box_office'],
-            localized_title=imdb['localized_title'],
-            kind=imdb['kind'],
-            imdb_id=imdb["imdb_id"],
-            cast=imdb["cast"],
-            runtime=imdb["runtime"],
-            countries=imdb["countries"],
-            certificates=imdb["certificates"],
-            languages=imdb["languages"],
-            director=imdb["director"],
-            writer=imdb["writer"],
-            producer=imdb["producer"],
-            composer=imdb["composer"],
-            cinematographer=imdb["cinematographer"],
-            music_team=imdb["music_team"],
-            distributors=imdb["distributors"],
-            release_date=imdb['release_date'],
             year=imdb['year'],
-            genres=imdb['genres'],
+            type=imdb['type'],
             poster=imdb['poster'],
-            plot=imdb['plot'],
+            runtime=imdb['runtime'],
             rating=imdb['rating'],
             url=imdb['url'],
+            streaming_names=", ".join(imdb['streaming_names']),
+            streaming_links="\\n".join(imdb['streaming_links']),
             **locals()
         )
+
         temp.IMDB_CAP[message.from_user.id] = cap
         if not settings["button"]:
             for file in files:
