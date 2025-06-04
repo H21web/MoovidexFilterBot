@@ -96,121 +96,94 @@ async def is_subscribed(bot, query):
         return False
 
 
-
-
-# Convert list to comma-separated string
 def list_to_str(lst):
+    """Convert a list to a comma-separated string; leave other types unchanged."""
     if isinstance(lst, list):
         return ", ".join(map(str, lst))
     return lst
 
-# Convert runtime in minutes to readable format
-def format_runtime(minutes):
-    if not isinstance(minutes, int):
-        return "N/A"
-    hours, mins = divmod(minutes, 60)
-    return f"{hours}h {mins}m" if hours else f"{mins}m"
+async def fetch_json(session, url):
+    """Helper to GET JSON from a URL, returning an empty dict on failure."""
+    async with session.get(url) as resp:
+        if resp.status == 200:
+            return await resp.json()
+        return {}
 
 async def get_poster(query, bulk=False, id=False, file=None):
-    # 1) Parse title and optional year out of "query" or "file"
-    use_imdb = False
-    year = None
-
+    """
+    Fetch movie details (title, year, IMDb URL, poster, cast) from the IMDb proxy.
+    1) Try /search endpoint.
+    2) If poster or cast is missing, fall back to /justwatch endpoint.
+    Missing values are returned as "N/A".
+    """
+    # 1) Parse title and optional year from query or filename
     if not id:
-        query = query.strip().lower()
-        title = query
+        query_clean = query.strip().lower()
+        title = query_clean
 
-        # Check if the query ends in a four-digit year (e.g., "inception 2010")
-        year_match = re.findall(r'([1-2]\d{3})$', query)
+        # If query ends with a 4-digit year, separate it
+        year_match = re.search(r'([1-2]\d{3})$', query_clean)
         if year_match:
-            year = year_match[0]
-            title = query.replace(year, "").strip()
-            use_imdb = True
-        elif file is not None:
-            # Otherwise, try to find a year inside the filename
-            year_inside = re.findall(r'([1-2]\d{3})', file)
-            if year_inside:
-                year = year_inside[0]
-                use_imdb = True
-            else:
-                year = None
+            year = year_match.group(1)
+            title = query_clean[: -len(year)].strip()
+        elif file:
+            year_inside = re.search(r'([1-2]\d{3})', file)
+            year = year_inside.group(1) if year_inside else None
         else:
             year = None
     else:
-        # If "id" is True, treat the entire "query" as a title/ID
-        title = query
-        use_imdb = False
+        title = query.strip()
+        year = None
+
+    # Initialize default response values
+    result = {
+        "title": "N/A",
+        "year": "N/A",
+        "url": "N/A",
+        "poster": "N/A",
+        "cast": "N/A"
+    }
 
     async with aiohttp.ClientSession() as session:
-        result = None
+        # 2) Attempt search endpoint
+        search_url = f"https://imdb.iamidiotareyoutoo.com/search?q={title}"
+        search_data = await fetch_json(session, search_url)
 
-        # 2) If year is provided, fetch directly from IMDb search endpoint
-        if use_imdb:
-            imdb_query = f"{title} {year}"
-            search_url = f"https://imdb.iamidiotareyoutoo.com/search?q={imdb_query}"
-            async with session.get(search_url) as search_resp:
-                if search_resp.status == 200:
-                    search_data = await search_resp.json()
-                else:
-                    search_data = {}
-
-            if search_data.get("ok") and search_data.get("description"):
-                result = search_data["description"][0]
-
-        # 3) If no result from IMDb (or no year was provided), try the JustWatch proxy
-        if not result:
+        if search_data.get("ok") and isinstance(search_data.get("description"), list):
+            first = search_data["description"][0]
+            result["title"] = first.get("#TITLE", result["title"])
+            result["year"] = first.get("#YEAR", result["year"])
+            result["url"] = first.get("#IMDB_URL") or (
+                f"https://www.imdb.com/title/{first.get('#IMDB_ID')}"
+                if first.get("#IMDB_ID") else result["url"]
+            )
+            result["poster"] = first.get("#IMG_POSTER", result["poster"])
+            actors = first.get("#ACTORS")
+            if actors:
+                # Keep as a comma-separated string
+                result["cast"] = actors
+        # 3) If poster or cast is missing, try fallback JustWatch endpoint
+        if result["poster"] == "N/A" or result["cast"] == "N/A":
             jw_url = f"https://imdb.iamidiotareyoutoo.com/justwatch?q={title}"
-            async with session.get(jw_url) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                else:
-                    data = {}
+            jw_data = await fetch_json(session, jw_url)
 
-            if data.get("ok") and data.get("description"):
-                result = data["description"][0]
+            if jw_data.get("ok") and isinstance(jw_data.get("description"), list):
+                jw_first = jw_data["description"][0]
+                # Only override missing values
+                if result["title"] == "N/A":
+                    result["title"] = jw_first.get("title", result["title"])
+                if result["year"] == "N/A":
+                    result["year"] = jw_first.get("year", result["year"])
+                if result["url"] == "N/A" and jw_first.get("imdbId"):
+                    result["url"] = f"https://www.imdb.com/title/{jw_first['imdbId']}"
+                if result["poster"] == "N/A":
+                    backdrops = jw_first.get("backdrops", [])
+                    result["poster"] = backdrops[0] if backdrops else (
+                        jw_first.get("photo_url", [None])[0] or "N/A"
+                    )
+                # JustWatch response typically doesn’t include cast, so leave as "N/A"
 
-        # 4) If still no result, return None
-        if not result:
-            return None
-
-        # 5) Extract poster: prefer "backdrops" first, else fall back to "photo_url"
-        backdrops = result.get("backdrops", [])
-        poster = backdrops[0] if backdrops else (result.get("photo_url") or [None])[0]
-
-        # 6) Format runtime (e.g., 162 → "2h 42m")
-        runtime_str = format_runtime(result.get("runtime"))
-
-        # 7) Streaming info: grab only the first offer
-        offers = result.get("offers") or []
-        if offers and isinstance(offers, list):
-            first_offer = offers[0] if isinstance(offers[0], dict) else {}
-            name_val = first_offer.get("name", None)
-            streaming_name = str(name_val) if name_val is not None else "N/A"
-
-            url_val = first_offer.get("url", None)
-            streaming_url = str(url_val) if url_val is not None else "N/A"
-        else:
-            streaming_name = "N/A"
-            streaming_url = "N/A"
-
-        # Helper to safely extract individual fields, returning "N/A" if missing
-        def safe_get(field):
-            val = result.get(field)
-            return val if val is not None else "N/A"
-
-        # 8) Build the final dictionary
-        return {
-            'title':           safe_get("title"),
-            'year':            safe_get("year"),
-            'url':             f"https://www.imdb.com/title/{result.get('imdbId')}" if result.get('imdbId') else "N/A",
-            'type':            safe_get("type"),
-            'poster':          poster or "N/A",
-            'rating':          (f"{round(result.get('jwRating', 0) * 10, 1)}/10" 
-                                 if result.get('jwRating') is not None else "N/A"),
-            'runtime':         runtime_str,
-            'streaming_names': streaming_name,
-            'streaming_links': streaming_url
-        }
+    return result
 
 
 
