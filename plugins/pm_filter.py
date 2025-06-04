@@ -2563,143 +2563,175 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             await fuk.delete()
             await message.delete()
 
-async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
-    mv_id     = msg.id
-    mv_rqst   = name
-    reqstr1   = msg.from_user.id if msg.from_user else 0
-    reqstr    = await client.get_users(reqstr1)
-    settings  = await get_settings(msg.chat.id)
 
-    # Clean up the incoming text, e.g. remove “please”, “movie”, etc.
+
+async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
+    """
+    1) Clean up msg.text into `query`.
+    2) Attempt get_poster(query).
+       • If the first returned title exactly matches query (ignoring case), call auto_filter(...) and return.
+       • Otherwise, gather suggestions and show a keyboard. Optionally try a “first‐letter” check if AI_SPELL_CHECK is on.
+    3) If no results, show Google button fallback.
+    4) Auto‐delete the “couldn't find” message after 10 minutes if settings['auto_delete'] is True.
+    """
+    mv_id   = msg.id
+    mv_rqst = name  # original “name” param
+    reqstr1 = msg.from_user.id if msg.from_user else 0
+    reqstr  = await client.get_users(reqstr1)
+    settings = await get_settings(msg.chat.id)
+
+    # ── 1) Clean up `msg.text` ──────────────────────────────────────────────────
+    #    (Remove filler words like “please,” “movie,” etc.)
     query = re.sub(
-        r"\b(pl(i|e)*?(s|z+|ease|se|ese|(e+)s(e)?)|((send|snd|giv(e)?|gib)(\sme)?)|movie(s)?|new|latest|br((o|u)h?)*|^h(e|a)?(l)*(o)*|mal(ayalam)?|t(h)?amil|file|that|find|und(o)*|kit(t(i|y)?)?o(w)?|thar(u)?(o)*w?|kittum(o)*|aya(k)*(um(o)*)?|full\smovie|any(one)|with\ssubtitle(s)?)",
-        "", 
-        msg.text, 
+        r"\b(pl(i|e)*?(s|z+|ease|se|ese|(e+)s(e)?)|((send|snd|giv(e)?|gib)(\sme)?)"
+        r"|movie(s)?|new|latest|br((o|u)h?)*|^h(e|a)?(l)*(o)*|mal(ayalam)?|t(h)?amil"
+        r"|file|that|find|und(o)*|kit(t(i|y)?)?o(w)?|thar(u)?(o)*w?|kittum(o)*|aya(k)*(um(o)*)?"
+        r"|full\smovie|any(one)|with\ssubtitle(s)?)",
+        "",
+        msg.text,
         flags=re.IGNORECASE
     )
-    query = query.strip() + " movie"
+    query = query.strip()
+    # If the user typed nothing meaningful, fallback to using `name`:
+    if not query:
+        query = mv_rqst.strip()
+    query += " movie"
 
-    # 1) Fetch “movies” via get_poster(..., bulk=True). In your code, get_poster
-    #    always returns a dict (single movie) even if bulk=True. So we need to wrap it.
+    # ── 2) Fetch from get_poster(...) ──────────────────────────────────────────
     try:
-        movies = await get_poster(mv_rqst, bulk=True)
+        # **USE** the cleaned‐up `query` here (not `mv_rqst`)
+        movie_data = await get_poster(query, bulk=True)
     except Exception as e:
         logger.exception(e)
-        # Fallback → show a Google button if IMDb fails
-        reqst_gle = mv_rqst.replace(" ", "+")
-        button = [[
-            InlineKeyboardButton("Gᴏᴏɢʟᴇ", url=f"https://www.google.com/search?q={reqst_gle}")
-        ]]
+        # If get_poster itself fails (network error, JSON error, etc.), show Google fallback
+        reqst_gle = query.replace(" ", "+")
+        button = [
+            [InlineKeyboardButton("Gᴏᴏɢʟᴇ", url=f"https://www.google.com/search?q={reqst_gle}")]
+        ]
         if NO_RESULTS_MSG:
             await client.send_message(
                 chat_id=LOG_CHANNEL,
-                text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst))
+                text=(script.NORSLTS.format(reqstr.id, reqstr.mention, query))
             )
         k = await reply_msg.edit_text(
-            text=script.I_CUDNT.format(mv_rqst), 
+            text=script.I_CUDNT.format(query),
             reply_markup=InlineKeyboardMarkup(button)
         )
         await asyncio.sleep(30)
         await k.delete()
         return
 
-    # 2) If get_poster returned a dict, wrap it into a list. If it returned anything else
-    #    (e.g. None or a string), coerce to empty list so “for movie in movies” never fails.
-    if isinstance(movies, dict):
-        movies = [movies]
-    elif not isinstance(movies, list):
+    # get_poster(...) always returns a dict or "N/A" fields; if bulk=True, we wrap it into a list:
+    if isinstance(movie_data, dict):
+        movies = [movie_data]
+    else:
+        # (In case get_poster returned something unexpected)
         movies = []
 
-    # 3) If no movies found, show the same “I couldn't find” UI
+    # ── 3) If no movies returned → Google fallback ───────────────────────────────
     if not movies:
-        reqst_gle = mv_rqst.replace(" ", "+")
-        button = [[
-            InlineKeyboardButton("Gᴏᴏɢʟᴇ", url=f"https://www.google.com/search?q={reqst_gle}")
-        ]]
+        reqst_gle = query.replace(" ", "+")
+        button = [
+            [InlineKeyboardButton("Gᴏᴏɢʟᴇ", url=f"https://www.google.com/search?q={reqst_gle}")]
+        ]
         if NO_RESULTS_MSG:
             await client.send_message(
                 chat_id=LOG_CHANNEL,
-                text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst))
+                text=(script.NORSLTS.format(reqstr.id, reqstr.mention, query))
             )
         k = await reply_msg.edit_text(
-            text=script.I_CUDNT.format(mv_rqst), 
+            text=script.I_CUDNT.format(query),
             reply_markup=InlineKeyboardMarkup(button)
         )
         await asyncio.sleep(30)
         await k.delete()
         return
 
-    # 4) Build movielist = [ titles ... , titles+years ... ]
-    movielist = []
-    movielist += [ movie.get('title', "N/A") for movie in movies ]
-    movielist += [ f"{movie.get('title', 'N/A')} {movie.get('year', 'N/A')}" for movie in movies ]
+    # ── 4) FAST‐PATH: If the first returned title exactly matches `query` (case‐insensitive), call auto_filter immediately ──
+    first_movie = movies[0]
+    first_title = first_movie.get("title", "N/A").strip().lower()
+    if first_title == query.strip().lower():
+        # We have an exact match—no need for spell‐check UI
+        await auto_filter(client, first_movie["title"], msg, reply_msg, vj_search)
+        return
 
-    # Store for later spell-check logic
+    # ── 5) Otherwise, build a list of “suggested” strings (title, title+year) for the keyboard ─────────────────
+    movielist = []
+    for m in movies:
+        movielist.append(m.get("title", "N/A"))
+        movielist.append(f"{m.get('title', 'N/A')} {m.get('year', 'N/A')}")
+
+    # Store in global SPELL_CHECK dict for later callback handling
     SPELL_CHECK[mv_id] = movielist
 
-    # 5) If AI-based spell-check is enabled, attempt to match the first letter
+    # ── 6) If AI_SPELL_CHECK is enabled AND vj_search is True, attempt a first‐letter heuristic ──────────
     if AI_SPELL_CHECK and vj_search:
-        vj_search_new = False
+        # Show “trying to find…” prompt
         await reply_msg.edit_text("<b><i>I Am Trying To Find Your Movie With Your Wrong Spelling.</i></b>")
-        movienamelist = [ movie.get('title', "N/A") for movie in movies ]
+
+        # Capitalize mv_rqst once (not inside loop)
+        try:
+            mv_rqst = mv_rqst.capitalize()
+        except Exception:
+            pass
+
+        # Extract just the titles from `movies` into a list
+        movienamelist = [m.get("title", "N/A") for m in movies]
 
         for techvj in movienamelist:
-            try:
-                mv_rqst = mv_rqst.capitalize()
-            except:
-                pass
-            # If the user’s (possibly misspelled) request starts with the same letter as any correct title:
             if mv_rqst.startswith(techvj[0]):
-                await auto_filter(client, techvj, msg, reply_msg, vj_search_new)
-                return  # Stop after first match
+                # Found a first‐letter match → call auto_filter on that exact title
+                await auto_filter(client, techvj, msg, reply_msg, False)
+                return
 
-        # If nothing matched, fall through to “No result” block:
-        reqst_gle = mv_rqst.replace(" ", "+")
-        button = [[
-            InlineKeyboardButton("Gᴏᴏɢʟᴇ", url=f"https://www.google.com/search?q={reqst_gle}")
-        ]]
+        # If we get here, no first‐letter match succeeded → fall through to “no result” block:
+        reqst_gle = query.replace(" ", "+")
+        button = [
+            [InlineKeyboardButton("Gᴏᴏɢʟᴇ", url=f"https://www.google.com/search?q={reqst_gle}")]
+        ]
         if NO_RESULTS_MSG:
             await client.send_message(
                 chat_id=LOG_CHANNEL,
-                text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst))
+                text=(script.NORSLTS.format(reqstr.id, reqstr.mention, query))
             )
         k = await reply_msg.edit_text(
-            text=script.I_CUDNT.format(mv_rqst), 
+            text=script.I_CUDNT.format(query),
             reply_markup=InlineKeyboardMarkup(button)
         )
         await asyncio.sleep(30)
         await k.delete()
         return
 
-    # 6) Otherwise, show a keyboard with all suggestions
-    btn = [
-        [
+    # ── 7) Build “spell‐check” keyboard (title / title+year) ────────────────────────────────────────────────
+    btn = []
+    for idx, movie_name in enumerate(movielist):
+        btn.append([
             InlineKeyboardButton(
                 text=movie_name.strip(),
                 callback_data=f"spol#{reqstr1}#{idx}"
             )
-        ]
-        for idx, movie_name in enumerate(movielist)
-    ]
-    btn.append([InlineKeyboardButton(text="Close", callback_data=f"spol#{reqstr1}#close_spellcheck")])
+        ])
+    btn.append([
+        InlineKeyboardButton(text="Close", callback_data=f"spol#{reqstr1}#close_spellcheck")
+    ])
 
-    spell_check_del = await reply_msg.edit_text(
-        text=script.CUDNT_FND.format(mv_rqst),
+    spell_check_msg = await reply_msg.edit_text(
+        text=script.CUDNT_FND.format(query),
         reply_markup=InlineKeyboardMarkup(btn)
     )
 
-    # 7) Auto‐delete after 10 minutes if setting is enabled
-    try:
-        if settings.get('auto_delete'):
-            await asyncio.sleep(600)
-            await spell_check_del.delete()
-    except KeyError:
-        grpid = await active_connection(str(msg.from_user.id))
-        await save_group_settings(grpid, 'auto_delete', True)
-        settings = await get_settings(msg.chat.id)
-        if settings.get('auto_delete'):
-            await asyncio.sleep(600)
-            await spell_check_del.delete()
+    # ── 8) Auto‐delete after 10 min if setting enabled ────────────────────────────────────────────────────
+    if settings.get('auto_delete'):
+        await asyncio.sleep(600)
+        try:
+            await spell_check_msg.delete()
+        except Exception:
+            pass
+
+    # Note: I removed the `try/except KeyError` around settings.get('auto_delete') 
+    # because `dict.get()` never raises KeyError if the key is missing—it just returns None.
+
+    return
 
 async def manual_filters(client, message, text=False):
     settings = await get_settings(message.chat.id)
