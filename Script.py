@@ -277,15 +277,13 @@ Series Format:
 <b>Update Channel : @MooviDex</b>""" 
 
     IMDB_TEMPLATE_TXT = """
-🎬 <b>{title} ({year})</b> [{type}]
+🎬 <b>{title} ({year})</b> 
 
-⭐ <b>Rating:</b> <code>{rating}</code>
-⏳ <b>Duration:</b> <code>{runtime}</code>
+⏳ <b>Cast:</b> <code>{cast}</code>
 ⏱️ <b>Search Time:</b> <code>{remaining_seconds} seconds</code>
 👤 <b>Requested by:</b> {message.from_user.mention}
 
-<blockquote>
-🔗 IMDB: <b><a href="{url}">Click here</a></b></blockquote>
+<blockquote>🔗 IMDB: <b><a href="{url}">Click here</a></b></blockquote>
 
 """
     
