@@ -141,7 +141,8 @@ async def get_poster(query, bulk=False, id=False, file=None):
     runtime_str = format_runtime(result.get("runtime"))
     backdrops = result.get("backdrops", [])
     poster = backdrops[0] if backdrops else (result.get("photo_url") or [None])[0]
-
+    
+    offers = result.get("offers", [])
    # Get first streaming platform if available
     first_offer = next((offer for offer in offers if 'name' in offer and 'url' in offer), None)
     streaming_name = first_offer['name'] if first_offer else "N/A"
