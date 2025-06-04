@@ -277,16 +277,15 @@ Series Format:
 <b>Update Channel : @MooviDex</b>""" 
 
     IMDB_TEMPLATE_TXT = """
-<b>🎪 {kind} : {title} ({year})</b>
+🎬 <b>{title} ({year})</b> [{type}]
 
-⭐<b> Rᴀᴛɪɴɢs: </b> <code>{rating}</code>
-🗓 <b>Rᴇʟᴇᴀsᴇ Iɴғᴏ: </b><code>{release_date}</code>
-🕰 <b>Dᴜʀᴀᴛɪᴏɴ: </b><code>{runtime}</code>
-🎧 <b>Lᴀɴɢᴜᴀɢᴇ: </b><code>{languages}</code>
-🎭 <b>Gᴇɴʀᴇs: </b><code>{genres}</code>
+⭐ Rating: <code>{rating}</code>
+⏳ Duration: <code>{runtime}</code>
+⏱️ Search Time: <code>{remaining_seconds} seconds</code>
+👤 Requested by {user_mention}
 
-<blockquote>⏱️ Rᴇsᴜʟᴛ sʜᴏᴡɴ ɪɴ: {remaining_seconds} <i>seconds</i> 
-🐱 Rᴇǫᴜᴇsᴛᴇᴅ ʙʏ : {message.from_user.mention}</b></blockquote>
+<blockquote>🌐 Available on: <b><a href="{streaming_links}">{streaming_names}</a></b>
+🔗 IMDB Link: <b><a href="{url}">Click here</a></b></blockquote>
 
 """
     
