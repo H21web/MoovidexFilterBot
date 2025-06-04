@@ -40,3 +40,4 @@ ffmpeg-python>=0.2.0
 openai==0.25.0
 git+https://github.com/Joelkb/cinemagoer
 SpeechRecognition==3.8.1
+difflib
