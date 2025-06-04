@@ -99,7 +99,9 @@ async def is_subscribed(bot, query):
 
 # Convert list to comma-separated string
 def list_to_str(lst):
-    return ", ".join(lst) if isinstance(lst, list) else str(lst)
+    if isinstance(lst, list):
+        return ", ".join(map(str, lst))
+    return lst  # Return the string as-is if not a list
 
 # Convert runtime in minutes to readable format
 def format_runtime(minutes):
