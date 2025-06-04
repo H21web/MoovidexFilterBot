@@ -684,11 +684,8 @@ async def get_cap(settings, remaining_seconds, files, query, total_results, sear
                     qurey=search,
                     title=imdb['title'],
                     year=imdb['year'],
-                    rating=imdb['rating'],
-                    runtime=imdb['runtime'],
                     poster=imdb['poster'],
-                    streaming_names=imdb['streaming_names'],
-                    streaming_links=imdb['streaming_links'],
+                    cast=imdb['cast'],
                     url=imdb['url'],
                     **locals()
                 )
