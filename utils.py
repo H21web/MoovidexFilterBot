@@ -96,8 +96,7 @@ async def is_subscribed(bot, query):
         return False
 
 
-import re
-import aiohttp
+
 
 # Convert list to comma-separated string
 def list_to_str(lst):
@@ -113,21 +112,30 @@ def format_runtime(minutes):
     return f"{hours}h {mins}m" if hours else f"{mins}m"
 
 async def get_poster(query, bulk=False, id=False, file=None):
+    # 1) Parse title and optional year out of "query" or "file"
     if not id:
         query = query.strip().lower()
         title = query
-        year = re.findall(r'[1-2]\d{3}$', query)
-        if year:
-            year = year[0]
+
+        # Check if the query ends in a four-digit year (e.g., "inception 2010")
+        year_match = re.findall(r'[1-2]\d{3}$', query)
+        if year_match:
+            year = year_match[0]
             title = query.replace(year, "").strip()
         elif file is not None:
-            year = re.findall(r'[1-2]\d{3}', file)
-            year = year[0] if year else None
+            # Otherwise, try to find a year inside the filename
+            year_inside = re.findall(r'[1-2]\d{3}', file)
+            year = year_inside[0] if year_inside else None
+        else:
+            year = None
     else:
+        # If "id" is True, treat the entire "query" as a title/ID
         title = query
 
+    # 2) Build the JustWatch/IMDb proxy URL
     url = f"https://imdb.iamidiotareyoutoo.com/justwatch?q={title}"
 
+    # 3) Fetch and parse JSON
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
             if resp.status != 200:
@@ -139,33 +147,42 @@ async def get_poster(query, bulk=False, id=False, file=None):
 
     result = data["description"][0]
 
-    # Poster image
+    # 4) Extract poster: prefer "backdrops" first, else fall back to "photo_url"
     backdrops = result.get("backdrops", [])
     poster = backdrops[0] if backdrops else (result.get("photo_url") or [None])[0]
 
-    # Runtime formatting
+    # 5) Format runtime (e.g., 162 → "2h 42m")
     runtime_str = format_runtime(result.get("runtime"))
 
-    # Streaming info
-    offers = result.get("offers", [])
-    if offers:
-        streaming_name = offers[0].get("name", "N/A")
-        streaming_url = offers[0].get("url", "N/A")
+    # 6) Streaming info: grab only the first offer
+    offers = result.get("offers") or []
+    if offers and isinstance(offers, list):
+        first_offer = offers[0] if isinstance(offers[0], dict) else {}
+        # Make sure to coerce to str (in case it’s something weird)
+        name_val = first_offer.get("name", None)
+        streaming_name = str(name_val) if name_val is not None else "N/A"
+
+        url_val = first_offer.get("url", None)
+        streaming_url = str(url_val) if url_val is not None else "N/A"
     else:
         streaming_name = "N/A"
         streaming_url = "N/A"
 
+    # 7) Build the final dictionary
     return {
-        'title': result.get("title", "N/A"),
-        'year': result.get("year", "N/A"),
-        'url': f"https://www.imdb.com/title/{result.get('imdbId')}" if result.get('imdbId') else "N/A",
-        'type': result.get("type", "N/A"),
-        'poster': poster or "N/A",
-        'rating': f"{round(result.get('jwRating', 0) * 10, 1)}/10" if result.get('jwRating') is not None else "N/A",
-        'runtime': runtime_str,
-        'streaming_names': streaming_name,
-        'streaming_links': streaming_url
+        'title':           result.get("title", "N/A"),
+        'year':            result.get("year", "N/A"),
+        'url':             f"https://www.imdb.com/title/{result.get('imdbId')}" 
+                             if result.get('imdbId') else "N/A",
+        'type':            result.get("type", "N/A"),
+        'poster':          poster or "N/A", 
+        'rating':          (f"{round(result.get('jwRating', 0) * 10, 1)}/10"
+                             if result.get('jwRating') is not None else "N/A"),
+        'runtime':         runtime_str,  if runtime_str else "N/A",
+        'streaming_names':  streaming_name,
+        'streaming_links':   streaming_url
     }
+
 
 
 
