@@ -279,13 +279,13 @@ Series Format:
     IMDB_TEMPLATE_TXT = """
 🎬 <b>{title} ({year})</b> [{type}]
 
-⭐ Rating: <code>{rating}</code>
-⏳ Duration: <code>{runtime}</code>
-⏱️ Search Time: <code>{remaining_seconds} seconds</code>
-👤 Requested by: {message.from_user.mention}
+⭐ <b>Rating:</b> <code>{rating}</code>
+⏳ <b>Duration:</b> <code>{runtime}</code>
+⏱️ <b>Search Time:</b> <code>{remaining_seconds} seconds</code>
+👤 <b>Requested by:</b> {message.from_user.mention}
 
-<blockquote>🌐 Available on: <b><a href="{streaming_links}">{streaming_names}</a></b>
-🔗 IMDB Link: <b><a href="{url}">Click here</a></b></blockquote>
+<blockquote>
+🔗 IMDB: <b><a href="{url}">Click here</a></b></blockquote>
 
 """
     
