@@ -113,76 +113,104 @@ def format_runtime(minutes):
 
 async def get_poster(query, bulk=False, id=False, file=None):
     # 1) Parse title and optional year out of "query" or "file"
+    use_imdb = False
+    year = None
+
     if not id:
         query = query.strip().lower()
         title = query
 
         # Check if the query ends in a four-digit year (e.g., "inception 2010")
-        year_match = re.findall(r'[1-2]\d{3}$', query)
+        year_match = re.findall(r'([1-2]\d{3})$', query)
         if year_match:
             year = year_match[0]
             title = query.replace(year, "").strip()
+            use_imdb = True
         elif file is not None:
             # Otherwise, try to find a year inside the filename
-            year_inside = re.findall(r'[1-2]\d{3}', file)
-            year = year_inside[0] if year_inside else None
+            year_inside = re.findall(r'([1-2]\d{3})', file)
+            if year_inside:
+                year = year_inside[0]
+                use_imdb = True
+            else:
+                year = None
         else:
             year = None
     else:
         # If "id" is True, treat the entire "query" as a title/ID
         title = query
+        use_imdb = False
 
-    # 2) Build the JustWatch/IMDb proxy URL
-    url = f"https://imdb.iamidiotareyoutoo.com/justwatch?q={title}"
-
-    # 3) Fetch and parse JSON
     async with aiohttp.ClientSession() as session:
-        async with session.get(url) as resp:
-            if resp.status != 200:
-                return None
-            data = await resp.json()
+        result = None
 
-    if not data.get("ok") or not data.get("description"):
-        return None
+        # 2) If year is provided, fetch directly from IMDb search endpoint
+        if use_imdb:
+            imdb_query = f"{title} {year}"
+            search_url = f"https://imdb.iamidiotareyoutoo.com/search?q={imdb_query}"
+            async with session.get(search_url) as search_resp:
+                if search_resp.status == 200:
+                    search_data = await search_resp.json()
+                else:
+                    search_data = {}
 
-    result = data["description"][0]
+            if search_data.get("ok") and search_data.get("description"):
+                result = search_data["description"][0]
 
-    # 4) Extract poster: prefer "backdrops" first, else fall back to "photo_url"
-    backdrops = result.get("backdrops", [])
-    poster = backdrops[0] if backdrops else (result.get("photo_url") or [None])[0]
+        # 3) If no result from IMDb (or no year was provided), try the JustWatch proxy
+        if not result:
+            jw_url = f"https://imdb.iamidiotareyoutoo.com/justwatch?q={title}"
+            async with session.get(jw_url) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                else:
+                    data = {}
 
-    # 5) Format runtime (e.g., 162 → "2h 42m")
-    runtime_str = format_runtime(result.get("runtime"))
+            if data.get("ok") and data.get("description"):
+                result = data["description"][0]
 
-    # 6) Streaming info: grab only the first offer
-    offers = result.get("offers") or []
-    if offers and isinstance(offers, list):
-        first_offer = offers[0] if isinstance(offers[0], dict) else {}
-        # Make sure to coerce to str (in case it’s something weird)
-        name_val = first_offer.get("name", None)
-        streaming_name = str(name_val) if name_val is not None else "N/A"
+        # 4) If still no result, return None
+        if not result:
+            return None
 
-        url_val = first_offer.get("url", None)
-        streaming_url = str(url_val) if url_val is not None else "N/A"
-    else:
-        streaming_name = "N/A"
-        streaming_url = "N/A"
+        # 5) Extract poster: prefer "backdrops" first, else fall back to "photo_url"
+        backdrops = result.get("backdrops", [])
+        poster = backdrops[0] if backdrops else (result.get("photo_url") or [None])[0]
 
-    # 7) Build the final dictionary
-    return {
-        'title':           result.get("title", "N/A"),
-        'year':            result.get("year", "N/A"),
-        'url':             f"https://www.imdb.com/title/{result.get('imdbId')}" 
-                             if result.get('imdbId') else "N/A",
-        'type':            result.get("type", "N/A"),
-        'poster':          poster or "N/A", 
-        'rating':          (f"{round(result.get('jwRating', 0) * 10, 1)}/10"
-                             if result.get('jwRating') is not None else "N/A"),
-        'runtime':         runtime_str ,
-        'streaming_names':  streaming_name,
-        'streaming_links':   streaming_url
-    }
+        # 6) Format runtime (e.g., 162 → "2h 42m")
+        runtime_str = format_runtime(result.get("runtime"))
 
+        # 7) Streaming info: grab only the first offer
+        offers = result.get("offers") or []
+        if offers and isinstance(offers, list):
+            first_offer = offers[0] if isinstance(offers[0], dict) else {}
+            name_val = first_offer.get("name", None)
+            streaming_name = str(name_val) if name_val is not None else "N/A"
+
+            url_val = first_offer.get("url", None)
+            streaming_url = str(url_val) if url_val is not None else "N/A"
+        else:
+            streaming_name = "N/A"
+            streaming_url = "N/A"
+
+        # Helper to safely extract individual fields, returning "N/A" if missing
+        def safe_get(field):
+            val = result.get(field)
+            return val if val is not None else "N/A"
+
+        # 8) Build the final dictionary
+        return {
+            'title':           safe_get("title"),
+            'year':            safe_get("year"),
+            'url':             f"https://www.imdb.com/title/{result.get('imdbId')}" if result.get('imdbId') else "N/A",
+            'type':            safe_get("type"),
+            'poster':          poster or "N/A",
+            'rating':          (f"{round(result.get('jwRating', 0) * 10, 1)}/10" 
+                                 if result.get('jwRating') is not None else "N/A"),
+            'runtime':         runtime_str,
+            'streaming_names': streaming_name,
+            'streaming_links': streaming_url
+        }
 
 
 
