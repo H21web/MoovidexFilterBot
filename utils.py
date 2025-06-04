@@ -96,12 +96,14 @@ async def is_subscribed(bot, query):
         return False
 
 
+import re
+import aiohttp
 
 # Convert list to comma-separated string
 def list_to_str(lst):
     if isinstance(lst, list):
         return ", ".join(map(str, lst))
-    return lst  # Return the string as-is if not a list
+    return lst
 
 # Convert runtime in minutes to readable format
 def format_runtime(minutes):
@@ -112,18 +114,15 @@ def format_runtime(minutes):
 
 async def get_poster(query, bulk=False, id=False, file=None):
     if not id:
-        query = (query.strip()).lower()
+        query = query.strip().lower()
         title = query
-        year = re.findall(r'[1-2]\d{3}$', query, re.IGNORECASE)
+        year = re.findall(r'[1-2]\d{3}$', query)
         if year:
-            year = list_to_str(year[:1])
-            title = (query.replace(year, "")).strip()
+            year = year[0]
+            title = query.replace(year, "").strip()
         elif file is not None:
-            year = re.findall(r'[1-2]\d{3}', file, re.IGNORECASE)
-            if year:
-                year = list_to_str(year[:1])
-            else:
-                year = None
+            year = re.findall(r'[1-2]\d{3}', file)
+            year = year[0] if year else None
     else:
         title = query
 
@@ -140,25 +139,30 @@ async def get_poster(query, bulk=False, id=False, file=None):
 
     result = data["description"][0]
 
-    runtime_str = format_runtime(result.get("runtime"))
+    # Poster image
     backdrops = result.get("backdrops", [])
     poster = backdrops[0] if backdrops else (result.get("photo_url") or [None])[0]
-    
-   # Get first streaming offer
+
+    # Runtime formatting
+    runtime_str = format_runtime(result.get("runtime"))
+
+    # Streaming info
     offers = result.get("offers", [])
-    streaming_name = streaming_url = "N/A"
     if offers:
         streaming_name = offers[0].get("name", "N/A")
         streaming_url = offers[0].get("url", "N/A")
+    else:
+        streaming_name = "N/A"
+        streaming_url = "N/A"
 
     return {
         'title': result.get("title", "N/A"),
         'year': result.get("year", "N/A"),
-        'url': f"https://www.imdb.com/title/{result.get('imdbId')}" if result.get("imdbId") else "N/A",
+        'url': f"https://www.imdb.com/title/{result.get('imdbId')}" if result.get('imdbId') else "N/A",
         'type': result.get("type", "N/A"),
         'poster': poster or "N/A",
         'rating': f"{round(result.get('jwRating', 0) * 10, 1)}/10" if result.get('jwRating') is not None else "N/A",
-        'runtime': runtime_str if runtime_str else "N/A",
+        'runtime': runtime_str,
         'streaming_names': streaming_name,
         'streaming_links': streaming_url
     }
