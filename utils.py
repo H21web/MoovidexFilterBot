@@ -96,6 +96,7 @@ async def is_subscribed(bot, query):
         return False
 
 
+
 # Convert list to comma-separated string
 def list_to_str(lst):
     return ", ".join(lst) if isinstance(lst, list) else str(lst)
@@ -142,7 +143,8 @@ async def get_poster(query, bulk=False, id=False, file=None):
     poster = backdrops[0] if backdrops else (result.get("photo_url") or [None])[0]
 
     offers = result.get("offers", [])
-    streaming = [f"{offer['name']}: {offer['url']}" for offer in offers if 'name' in offer and 'url' in offer]
+    streaming_names = [offer['name'] for offer in offers if 'name' in offer and 'url' in offer]
+    streaming_links = [offer['url'] for offer in offers if 'name' in offer and 'url' in offer]
 
     return {
         'title': result.get("title"),
@@ -152,9 +154,9 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'poster': poster,
         'rating': f"{round(result.get('jwRating', 0) * 10, 1)}/10",
         'runtime': runtime_str,
-        'streaming_on': list_to_str(streaming)
+        'streaming_names': streaming_names,
+        'streaming_links': streaming_links
     }
-
 
 
 async def broadcast_messages(user_id, message):
@@ -653,31 +655,13 @@ async def get_cap(settings, remaining_seconds, files, query, total_results, sear
                 cap = TEMPLATE.format(
                     qurey=search,
                     title=imdb['title'],
-                    votes=imdb['votes'],
-                    aka=imdb["aka"],
-                    seasons=imdb["seasons"],
-                    box_office=imdb['box_office'],
-                    localized_title=imdb['localized_title'],
-                    kind=imdb['kind'],
-                    imdb_id=imdb["imdb_id"],
-                    cast=imdb["cast"],
-                    runtime=imdb["runtime"],
-                    countries=imdb["countries"],
-                    certificates=imdb["certificates"],
-                    languages=imdb["languages"],
-                    director=imdb["director"],
-                    writer=imdb["writer"],
-                    producer=imdb["producer"],
-                    composer=imdb["composer"],
-                    cinematographer=imdb["cinematographer"],
-                    music_team=imdb["music_team"],
-                    distributors=imdb["distributors"],
-                    release_date=imdb['release_date'],
                     year=imdb['year'],
-                    genres=imdb['genres'],
-                    poster=imdb['poster'],
-                    plot=imdb['plot'],
                     rating=imdb['rating'],
+                    runtime=imdb['runtime'],
+                    year=imdb['streaming_on'],
+                    poster=imdb['poster'],
+                    streaming_names=imdb['streaming_names'],
+                    streaming_links=imdb['streaming_links'],
                     url=imdb['url'],
                     **locals()
                 )
