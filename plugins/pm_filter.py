@@ -2567,94 +2567,147 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             await fuk.delete()
             await message.delete()
 
+import re
+import asyncio
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
 async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
-    mv_id = msg.id
-    mv_rqst = name
-    reqstr1 = msg.from_user.id if msg.from_user else 0
-    reqstr = await client.get_users(reqstr1)
-    settings = await get_settings(msg.chat.id)
+    mv_id     = msg.id
+    mv_rqst   = name
+    reqstr1   = msg.from_user.id if msg.from_user else 0
+    reqstr    = await client.get_users(reqstr1)
+    settings  = await get_settings(msg.chat.id)
+
+    # Clean up the incoming text, e.g. remove “please”, “movie”, etc.
     query = re.sub(
         r"\b(pl(i|e)*?(s|z+|ease|se|ese|(e+)s(e)?)|((send|snd|giv(e)?|gib)(\sme)?)|movie(s)?|new|latest|br((o|u)h?)*|^h(e|a)?(l)*(o)*|mal(ayalam)?|t(h)?amil|file|that|find|und(o)*|kit(t(i|y)?)?o(w)?|thar(u)?(o)*w?|kittum(o)*|aya(k)*(um(o)*)?|full\smovie|any(one)|with\ssubtitle(s)?)",
-        "", msg.text, flags=re.IGNORECASE)  # plis contribute some common words
+        "", 
+        msg.text, 
+        flags=re.IGNORECASE
+    )
     query = query.strip() + " movie"
+
+    # 1) Fetch “movies” via get_poster(..., bulk=True). In your code, get_poster
+    #    always returns a dict (single movie) even if bulk=True. So we need to wrap it.
     try:
         movies = await get_poster(mv_rqst, bulk=True)
     except Exception as e:
         logger.exception(e)
+        # Fallback → show a Google button if IMDb fails
         reqst_gle = mv_rqst.replace(" ", "+")
         button = [[
             InlineKeyboardButton("Gᴏᴏɢʟᴇ", url=f"https://www.google.com/search?q={reqst_gle}")
         ]]
         if NO_RESULTS_MSG:
-            await client.send_message(chat_id=LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst)))
-        k = await reply_msg.edit_text(text=script.I_CUDNT.format(mv_rqst), reply_markup=InlineKeyboardMarkup(button))
+            await client.send_message(
+                chat_id=LOG_CHANNEL,
+                text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst))
+            )
+        k = await reply_msg.edit_text(
+            text=script.I_CUDNT.format(mv_rqst), 
+            reply_markup=InlineKeyboardMarkup(button)
+        )
         await asyncio.sleep(30)
         await k.delete()
         return
-    movielist = []
+
+    # 2) If get_poster returned a dict, wrap it into a list. If it returned anything else
+    #    (e.g. None or a string), coerce to empty list so “for movie in movies” never fails.
+    if isinstance(movies, dict):
+        movies = [movies]
+    elif not isinstance(movies, list):
+        movies = []
+
+    # 3) If no movies found, show the same “I couldn't find” UI
     if not movies:
         reqst_gle = mv_rqst.replace(" ", "+")
         button = [[
             InlineKeyboardButton("Gᴏᴏɢʟᴇ", url=f"https://www.google.com/search?q={reqst_gle}")
         ]]
         if NO_RESULTS_MSG:
-            await client.send_message(chat_id=LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst)))
-        k = await reply_msg.edit_text(text=script.I_CUDNT.format(mv_rqst), reply_markup=InlineKeyboardMarkup(button))
+            await client.send_message(
+                chat_id=LOG_CHANNEL,
+                text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst))
+            )
+        k = await reply_msg.edit_text(
+            text=script.I_CUDNT.format(mv_rqst), 
+            reply_markup=InlineKeyboardMarkup(button)
+        )
         await asyncio.sleep(30)
         await k.delete()
         return
-    movielist += [movie.get('title') for movie in movies]
-    movielist += [f"{movie.get('title')} {movie.get('year')}" for movie in movies]
+
+    # 4) Build movielist = [ titles ... , titles+years ... ]
+    movielist = []
+    movielist += [ movie.get('title', "N/A") for movie in movies ]
+    movielist += [ f"{movie.get('title', 'N/A')} {movie.get('year', 'N/A')}" for movie in movies ]
+
+    # Store for later spell-check logic
     SPELL_CHECK[mv_id] = movielist
-    if AI_SPELL_CHECK == True and vj_search == True:
+
+    # 5) If AI-based spell-check is enabled, attempt to match the first letter
+    if AI_SPELL_CHECK and vj_search:
         vj_search_new = False
-        vj_ai_msg = await reply_msg.edit_text("<b><i>I Am Trying To Find Your Movie With Your Wrong Spelling.</i></b>")
-        movienamelist = []
-        movienamelist += [movie.get('title') for movie in movies]
+        await reply_msg.edit_text("<b><i>I Am Trying To Find Your Movie With Your Wrong Spelling.</i></b>")
+        movienamelist = [ movie.get('title', "N/A") for movie in movies ]
+
         for techvj in movienamelist:
             try:
                 mv_rqst = mv_rqst.capitalize()
             except:
                 pass
+            # If the user’s (possibly misspelled) request starts with the same letter as any correct title:
             if mv_rqst.startswith(techvj[0]):
                 await auto_filter(client, techvj, msg, reply_msg, vj_search_new)
-                break
+                return  # Stop after first match
+
+        # If nothing matched, fall through to “No result” block:
         reqst_gle = mv_rqst.replace(" ", "+")
         button = [[
             InlineKeyboardButton("Gᴏᴏɢʟᴇ", url=f"https://www.google.com/search?q={reqst_gle}")
         ]]
         if NO_RESULTS_MSG:
-            await client.send_message(chat_id=LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst)))
-        k = await reply_msg.edit_text(text=script.I_CUDNT.format(mv_rqst), reply_markup=InlineKeyboardMarkup(button))
+            await client.send_message(
+                chat_id=LOG_CHANNEL,
+                text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst))
+            )
+        k = await reply_msg.edit_text(
+            text=script.I_CUDNT.format(mv_rqst), 
+            reply_markup=InlineKeyboardMarkup(button)
+        )
         await asyncio.sleep(30)
         await k.delete()
         return
-    else:
-        btn = [
-            [
-                InlineKeyboardButton(
-                    text=movie_name.strip(),
-                    callback_data=f"spol#{reqstr1}#{k}",
-                )
-            ]
-            for k, movie_name in enumerate(movielist)
+
+    # 6) Otherwise, show a keyboard with all suggestions
+    btn = [
+        [
+            InlineKeyboardButton(
+                text=movie_name.strip(),
+                callback_data=f"spol#{reqstr1}#{idx}"
+            )
         ]
-        btn.append([InlineKeyboardButton(text="Close", callback_data=f'spol#{reqstr1}#close_spellcheck')])
-        spell_check_del = await reply_msg.edit_text(
-            text=script.CUDNT_FND.format(mv_rqst),
-            reply_markup=InlineKeyboardMarkup(btn)
-        )
-        try:
-            if settings['auto_delete']:
-                await asyncio.sleep(600)
-                await spell_check_del.delete()
-        except KeyError:
-            grpid = await active_connection(str(msg.from_user.id))
-            await save_group_settings(grpid, 'auto_delete', True)
-            settings = await get_settings(msg.chat.id)
-            if settings['auto_delete']:
-                await asyncio.sleep(600)
-                await spell_check_del.delete()
+        for idx, movie_name in enumerate(movielist)
+    ]
+    btn.append([InlineKeyboardButton(text="Close", callback_data=f"spol#{reqstr1}#close_spellcheck")])
+
+    spell_check_del = await reply_msg.edit_text(
+        text=script.CUDNT_FND.format(mv_rqst),
+        reply_markup=InlineKeyboardMarkup(btn)
+    )
+
+    # 7) Auto‐delete after 10 minutes if setting is enabled
+    try:
+        if settings.get('auto_delete'):
+            await asyncio.sleep(600)
+            await spell_check_del.delete()
+    except KeyError:
+        grpid = await active_connection(str(msg.from_user.id))
+        await save_group_settings(grpid, 'auto_delete', True)
+        settings = await get_settings(msg.chat.id)
+        if settings.get('auto_delete'):
+            await asyncio.sleep(600)
+            await spell_check_del.delete()
 
 async def manual_filters(client, message, text=False):
     settings = await get_settings(message.chat.id)
