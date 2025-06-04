@@ -142,20 +142,21 @@ async def get_poster(query, bulk=False, id=False, file=None):
     backdrops = result.get("backdrops", [])
     poster = backdrops[0] if backdrops else (result.get("photo_url") or [None])[0]
 
-    offers = result.get("offers", [])
-    streaming_names = [offer['name'] for offer in offers if 'name' in offer and 'url' in offer]
-    streaming_links = [offer['url'] for offer in offers if 'name' in offer and 'url' in offer]
+   # Get first streaming platform if available
+    first_offer = next((offer for offer in offers if 'name' in offer and 'url' in offer), None)
+    streaming_name = first_offer['name'] if first_offer else "N/A"
+    streaming_link = first_offer['url'] if first_offer else "N/A"
 
     return {
-        'title': result.get("title"),
-        'year': result.get("year"),
-        'url': f"https://www.imdb.com/title/{result.get('imdbId')}",
-        'type': result.get("type"),
-        'poster': poster,
-        'rating': f"{round(result.get('jwRating', 0) * 10, 1)}/10",
-        'runtime': runtime_str,
-        'streaming_names': streaming_names,
-        'streaming_links': streaming_links
+        'title': result.get("title", "N/A"),
+        'year': result.get("year", "N/A"),
+        'url': f"https://www.imdb.com/title/{result.get('imdbId')}" if result.get("imdbId") else "N/A",
+        'type': result.get("type", "N/A"),
+        'poster': poster or "N/A",
+        'rating': f"{round(result.get('jwRating', 0) * 10, 1)}/10" if result.get('jwRating') is not None else "N/A",
+        'runtime': runtime_str if runtime_str else "N/A",
+        'streaming_name': streaming_name,
+        'streaming_link': streaming_link
     }
 
 
