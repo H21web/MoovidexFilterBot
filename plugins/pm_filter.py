@@ -2567,10 +2567,6 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             await fuk.delete()
             await message.delete()
 
-import re
-import asyncio
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
 async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
     mv_id     = msg.id
     mv_rqst   = name
