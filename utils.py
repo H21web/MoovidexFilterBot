@@ -142,13 +142,12 @@ async def get_poster(query, bulk=False, id=False, file=None):
     backdrops = result.get("backdrops", [])
     poster = backdrops[0] if backdrops else (result.get("photo_url") or [None])[0]
     
-    # Move this up here before using `offers`
+   # Get first streaming offer
     offers = result.get("offers", [])
-
-    # Now use it safely
-    first_offer = next((offer for offer in offers if 'name' in offer and 'url' in offer), None)
-    streaming_name = first_offer['name'] if first_offer else "N/A"
-    streaming_link = first_offer['url'] if first_offer else "N/A"
+    streaming_name = streaming_url = "N/A"
+    if offers:
+        streaming_name = offers[0].get("name", "N/A")
+        streaming_url = offers[0].get("url", "N/A")
 
     return {
         'title': result.get("title", "N/A"),
@@ -159,7 +158,7 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'rating': f"{round(result.get('jwRating', 0) * 10, 1)}/10" if result.get('jwRating') is not None else "N/A",
         'runtime': runtime_str if runtime_str else "N/A",
         'streaming_names': streaming_name,
-        'streaming_links': streaming_link
+        'streaming_links': streaming_url
     }
 
 
