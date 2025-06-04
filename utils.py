@@ -96,110 +96,64 @@ async def is_subscribed(bot, query):
         return False
 
 
-def convert_runtime(runtime_minutes: int) -> str:
-    """
-    Convert runtime in minutes to a readable string in 'xh ym' format.
-    """
-    hours = runtime_minutes // 60
-    minutes = runtime_minutes % 60
-    return f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+# Convert list to comma-separated string
+def list_to_str(lst):
+    return ", ".join(lst) if isinstance(lst, list) else str(lst)
+
+# Convert runtime in minutes to readable format
+def format_runtime(minutes):
+    if not isinstance(minutes, int):
+        return "N/A"
+    hours, mins = divmod(minutes, 60)
+    return f"{hours}h {mins}m" if hours else f"{mins}m"
 
 async def get_poster(query, bulk=False, id=False, file=None):
-    """
-    Fetch movie details using the JustWatch API.
-    
-    If id is False, this function uses the given query to search.
-    If id is provided, it attempts to find the item with matching 'id'
-    in the returned results.
-    
-    The function returns a transformed dictionary containing:
-      - title: Movie title.
-      - year: Release year.
-      - imdb_url: Construct an IMDb URL from the provided imdbId.
-      - type: Type of title (e.g. MOVIE, TV SERIES).
-      - runtime: A human-readable runtime (like "2h 42m").
-      - poster: The poster image URL (first backdrop image).
-      - rating: A formatted rating based on jwRating (e.g. "1.4/10").
-      - offer_name & offer_url: Name and URL of the first available offer.
-      - justwatch_url: The original JustWatch URL.
-    
-    If bulk is True, the function returns a list of such transformed results.
-    """
-    # Prepare the query string
     if not id:
-        query = query.strip().lower()
-    
-    # API URL – using the query parameter to search
-    api_url = f"https://imdb.iamidiotareyoutoo.com/justwatch?q={query}"
-    
+        query = (query.strip()).lower()
+        title = query
+        year = re.findall(r'[1-2]\d{3}$', query, re.IGNORECASE)
+        if year:
+            year = list_to_str(year[:1])
+            title = (query.replace(year, "")).strip()
+        elif file is not None:
+            year = re.findall(r'[1-2]\d{3}', file, re.IGNORECASE)
+            if year:
+                year = list_to_str(year[:1])
+            else:
+                year = None
+    else:
+        title = query
+
+    url = f"https://imdb.iamidiotareyoutoo.com/justwatch?q={title}"
+
     async with aiohttp.ClientSession() as session:
-        async with session.get(api_url) as resp:
+        async with session.get(url) as resp:
             if resp.status != 200:
                 return None
-            try:
-                data = await resp.json()
-            except Exception:
-                return None
+            data = await resp.json()
 
-    # Ensure we received a positive response
-    if not data.get('ok'):
+    if not data.get("ok") or not data.get("description"):
         return None
 
-    descriptions = data.get('description', [])
-    if not descriptions:
-        return None
+    result = data["description"][0]
 
-    def transform_item(item):
-        # Map the key fields we need
-        title = item.get('title')
-        year = item.get('year')
-        imdb_id = item.get('imdbId')
-        imdb_url = f"https://www.imdb.com/title/{imdb_id}" if imdb_id else None
-        type_val = item.get('type')
-        
-        # Convert runtime (if provided) into a readable format
-        runtime = item.get('runtime')
-        runtime_str = convert_runtime(runtime) if runtime and isinstance(runtime, int) else None
+    runtime_str = format_runtime(result.get("runtime"))
+    backdrops = result.get("backdrops", [])
+    poster = backdrops[0] if backdrops else (result.get("photo_url") or [None])[0]
 
-        # Select poster image: first try 'backdrops', then 'photo_url'
-        backdrops = item.get('backdrops') or []
-        photo_urls = item.get('photo_url') or []
-        poster = backdrops[0] if backdrops else (photo_urls[0] if photo_urls else None)
+    offers = result.get("offers", [])
+    streaming = [f"{offer['name']}: {offer['url']}" for offer in offers if 'name' in offer and 'url' in offer]
 
-        # Format rating, assume jwRating is a fraction; multiply by 10
-        rating = item.get('jwRating')
-        rating_str = f"{round(rating * 10, 1)}/10" if rating is not None else None
-        
-        # Get offer details – using the first available offer if any
-        offers = item.get('offers') or []
-        offer = offers[0] if offers else {}
-        offer_name = offer.get('name')
-        offer_url = offer.get('url')
-        
-        return {
-            "title": title,
-            "year": year,
-            "imdb_url": imdb_url,
-            "type": type_val,
-            "runtime": runtime_str,
-            "poster": poster,
-            "rating": rating_str,
-            "offer_name": offer_name,
-            "offer_url": offer_url,
-            "justwatch_url": item.get('url')
-        }
-    
-    # If id is True, look up the item by its "id" field in the results.
-    if id:
-        item = next((item for item in descriptions if item.get("id") == query), None)
-        if not item:
-            return None
-        return transform_item(item)
-    else:
-        if bulk:
-            return [transform_item(item) for item in descriptions]
-        else:
-            return transform_item(descriptions[0])
+    return {
+        'title': result.get("title"),
+        'year': result.get("year"),
+        'url': f"https://www.imdb.com/title/{result.get('imdbId')}",
+        'type': result.get("type"),
+        'poster': poster,
+        'rating': f"{round(result.get('jwRating', 0) * 10, 1)}/10",
+        'runtime': runtime_str,
+        'streaming_on': list_to_str(streaming)
+    }
 
 
 
