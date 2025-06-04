@@ -2488,13 +2488,9 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             qurey=search,
             title=imdb['title'],
             year=imdb['year'],
-            type=imdb['type'],
             poster=imdb['poster'],
-            runtime=imdb['runtime'],
-            rating=imdb['rating'],
+            cast=imdb['cast'],
             url=imdb['url'],
-            streaming_names=", ".join(imdb['streaming_names']),
-            streaming_links="\\n".join(imdb['streaming_links']),
             **locals()
         )
 
