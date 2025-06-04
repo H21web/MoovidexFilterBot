@@ -7,7 +7,7 @@ from info import *
 
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram import enums
-from imdb import Cinemagoer 
+import difflib
 from pyrogram.errors import *
 from typing import Union
 from Script import script
@@ -98,6 +98,8 @@ async def is_subscribed(bot, query):
 
 
 
+
+
 def list_to_str(lst):
     """Convert a list to a comma-separated string; leave other types unchanged."""
     if isinstance(lst, list):
@@ -116,32 +118,39 @@ async def fetch_json(session, url):
 
 async def get_poster(query, bulk=False, id=False, file=None):
     """
-    Fetch movie details (title, year, IMDb URL, poster, cast) from the IMDb proxy.
-    1) Try /search endpoint.
-       - If description is missing or empty, skip straight to fallback.
-    2) If poster or cast is still missing, fall back to /justwatch endpoint.
-    Missing values are returned as "N/A".
+    Fetch movie details (title, year, IMDb URL, poster, cast) from the IMDb proxy,
+    performing a quick “exact‐match” check first. Only if the first result from /search
+    does NOT exactly match query do we run fuzzy‐matching via difflib.
+
+    1) Hit /search?q=<title>.
+       • If description is non-empty:
+           a) Check if first returned "#TITLE" lowercased == query lowercased.
+              – If yes, extract fields immediately (fast path).
+              – If no, run difflib.get_close_matches() across all returned titles.
+       • If description is empty, return all fields = "N/A" immediately.
+    2) Once we have one “best” record, fill in title/year/url/poster/cast.
+    3) If poster or cast is still missing, fall back to /justwatch.
+    4) Return a dict with keys "title", "year", "url", "poster", "cast", defaulting to "N/A".
     """
-    # 1) Parse title and optional year from query or filename
+    # 1) Parse out the title (and possibly year) exactly as before
     if not id:
         query_clean = query.strip().lower()
         title = query_clean
 
-        # If query ends with a 4-digit year, separate it
+        year = None
         year_match = re.search(r'([1-2]\d{3})$', query_clean)
         if year_match:
             year = year_match.group(1)
             title = query_clean[: -len(year)].strip()
         elif file:
             year_inside = re.search(r'([1-2]\d{3})', file)
-            year = year_inside.group(1) if year_inside else None
-        else:
-            year = None
+            if year_inside:
+                year = year_inside.group(1)
     else:
         title = query.strip()
         year = None
 
-    # 2) Prepare a default “empty” result
+    # Default “not found” result
     result = {
         "title": "N/A",
         "year": "N/A",
@@ -151,48 +160,86 @@ async def get_poster(query, bulk=False, id=False, file=None):
     }
 
     async with aiohttp.ClientSession() as session:
-        # --- Step A: Attempt the /search endpoint first ---
+        # Step A: Hit /search first
         search_url = f"https://imdb.iamidiotareyoutoo.com/search?q={title}"
         search_data = await fetch_json(session, search_url)
 
-        # Check that "description" is a non-empty list
+        # If /search returns a non-empty "description", proceed
         if (
-            isinstance(search_data, dict) 
-            and search_data.get("ok") 
+            isinstance(search_data, dict)
+            and search_data.get("ok")
             and isinstance(search_data.get("description"), list)
             and len(search_data["description"]) > 0
         ):
-            first = search_data["description"][0]
+            descriptions = search_data["description"]
+            first_item = descriptions[0]
+            first_title = first_item.get("#TITLE", "").strip().lower()
 
-            # Extract fields safely, defaulting to "N/A"
-            result["title"] = first.get("#TITLE", "N/A")
-            result["year"] = first.get("#YEAR", "N/A")
-            result["url"] = first.get("#IMDB_URL") or (
-                f"https://www.imdb.com/title/{first.get('#IMDB_ID')}"
-                if first.get("#IMDB_ID")
-                else "N/A"
-            )
-            result["poster"] = first.get("#IMG_POSTER", "N/A")
-            actors = first.get("#ACTORS")
-            if actors:
-                result["cast"] = actors
-        # If "description" was missing or empty, we'll fall back below
+            # ----- FAST PATH: if first_title == user query (both lowercased), skip fuzzy-check -----
+            if first_title == title:
+                result["title"] = first_item.get("#TITLE", "N/A")
+                result["year"] = first_item.get("#YEAR", "N/A")
+                result["url"] = first_item.get("#IMDB_URL") or (
+                    f"https://www.imdb.com/title/{first_item.get('#IMDB_ID')}"
+                    if first_item.get("#IMDB_ID")
+                    else "N/A"
+                )
+                result["poster"] = first_item.get("#IMG_POSTER", "N/A")
+                actors = first_item.get("#ACTORS")
+                if actors:
+                    result["cast"] = actors
 
-        # --- Step B: Fallback to /justwatch endpoint only if needed ---
-        # (We only need this if poster or cast is still "N/A")
+            else:
+                # ----- FUZZY PATH: try to pick the closest match among all returned titles -----
+                returned_titles = []
+                for item in descriptions:
+                    t = item.get("#TITLE")
+                    if isinstance(t, str):
+                        returned_titles.append(t.lower())
+
+                close = difflib.get_close_matches(title, returned_titles, n=1, cutoff=0.6)
+                if close:
+                    # Found a close match → find the corresponding item
+                    matched_item = None
+                    for item in descriptions:
+                        if isinstance(item.get("#TITLE"), str) and item["#TITLE"].lower() == close[0]:
+                            matched_item = item
+                            break
+                    if matched_item:
+                        result["title"] = matched_item.get("#TITLE", "N/A")
+                        result["year"] = matched_item.get("#YEAR", "N/A")
+                        result["url"] = matched_item.get("#IMDB_URL") or (
+                            f"https://www.imdb.com/title/{matched_item.get('#IMDB_ID')}"
+                            if matched_item.get("#IMDB_ID")
+                            else "N/A"
+                        )
+                        result["poster"] = matched_item.get("#IMG_POSTER", "N/A")
+                        actors = matched_item.get("#ACTORS")
+                        if actors:
+                            result["cast"] = actors
+                    # If somehow matched_item is still None, we leave result as "N/A"
+                else:
+                    # No close match above cutoff → bail out now with all "N/A"
+                    return result
+
+        else:
+            # description was empty or missing → no valid search results → return N/A
+            return result
+
+        # Step B: If we still lack poster or cast, fallback to /justwatch
         if result["poster"] == "N/A" or result["cast"] == "N/A":
             jw_url = f"https://imdb.iamidiotareyoutoo.com/justwatch?q={title}"
             jw_data = await fetch_json(session, jw_url)
 
             if (
-                isinstance(jw_data, dict) 
-                and jw_data.get("ok") 
+                isinstance(jw_data, dict)
+                and jw_data.get("ok")
                 and isinstance(jw_data.get("description"), list)
                 and len(jw_data["description"]) > 0
             ):
                 jw_first = jw_data["description"][0]
 
-                # Override only missing values
+                # Only override missing values
                 if result["title"] == "N/A":
                     result["title"] = jw_first.get("title", "N/A")
                 if result["year"] == "N/A":
@@ -201,12 +248,15 @@ async def get_poster(query, bulk=False, id=False, file=None):
                     result["url"] = f"https://www.imdb.com/title/{jw_first['imdbId']}"
                 if result["poster"] == "N/A":
                     backdrops = jw_first.get("backdrops", [])
-                    result["poster"] = backdrops[0] if backdrops else (
-                        (jw_first.get("photo_url") or [None])[0] or "N/A"
-                    )
-                # Note: JustWatch JSON generally doesn't include cast, so we leave cast = "N/A" if it was missing
+                    if backdrops:
+                        result["poster"] = backdrops[0]
+                    else:
+                        photo_arr = jw_first.get("photo_url") or []
+                        result["poster"] = photo_arr[0] if photo_arr else "N/A"
+                # JustWatch payload rarely includes cast, so leave it as “N/A” if still missing
 
     return result
+
 
 
 
