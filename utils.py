@@ -178,7 +178,7 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'poster':          poster or "N/A", 
         'rating':          (f"{round(result.get('jwRating', 0) * 10, 1)}/10"
                              if result.get('jwRating') is not None else "N/A"),
-        'runtime':         runtime_str  if runtime_str else "N/A",
+        'runtime':         runtime_str ,
         'streaming_names':  streaming_name,
         'streaming_links':   streaming_url
     }
