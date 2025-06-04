@@ -96,6 +96,8 @@ async def is_subscribed(bot, query):
         return False
 
 
+
+
 def list_to_str(lst):
     """Convert a list to a comma-separated string; leave other types unchanged."""
     if isinstance(lst, list):
@@ -104,16 +106,20 @@ def list_to_str(lst):
 
 async def fetch_json(session, url):
     """Helper to GET JSON from a URL, returning an empty dict on failure."""
-    async with session.get(url) as resp:
-        if resp.status == 200:
-            return await resp.json()
-        return {}
+    try:
+        async with session.get(url) as resp:
+            if resp.status == 200:
+                return await resp.json()
+    except Exception:
+        pass
+    return {}
 
 async def get_poster(query, bulk=False, id=False, file=None):
     """
     Fetch movie details (title, year, IMDb URL, poster, cast) from the IMDb proxy.
     1) Try /search endpoint.
-    2) If poster or cast is missing, fall back to /justwatch endpoint.
+       - If description is missing or empty, skip straight to fallback.
+    2) If poster or cast is still missing, fall back to /justwatch endpoint.
     Missing values are returned as "N/A".
     """
     # 1) Parse title and optional year from query or filename
@@ -135,7 +141,7 @@ async def get_poster(query, bulk=False, id=False, file=None):
         title = query.strip()
         year = None
 
-    # Initialize default response values
+    # 2) Prepare a default “empty” result
     result = {
         "title": "N/A",
         "year": "N/A",
@@ -145,43 +151,60 @@ async def get_poster(query, bulk=False, id=False, file=None):
     }
 
     async with aiohttp.ClientSession() as session:
-        # 2) Attempt search endpoint
+        # --- Step A: Attempt the /search endpoint first ---
         search_url = f"https://imdb.iamidiotareyoutoo.com/search?q={title}"
         search_data = await fetch_json(session, search_url)
 
-        if search_data.get("ok") and isinstance(search_data.get("description"), list):
+        # Check that "description" is a non-empty list
+        if (
+            isinstance(search_data, dict) 
+            and search_data.get("ok") 
+            and isinstance(search_data.get("description"), list)
+            and len(search_data["description"]) > 0
+        ):
             first = search_data["description"][0]
-            result["title"] = first.get("#TITLE", result["title"])
-            result["year"] = first.get("#YEAR", result["year"])
+
+            # Extract fields safely, defaulting to "N/A"
+            result["title"] = first.get("#TITLE", "N/A")
+            result["year"] = first.get("#YEAR", "N/A")
             result["url"] = first.get("#IMDB_URL") or (
                 f"https://www.imdb.com/title/{first.get('#IMDB_ID')}"
-                if first.get("#IMDB_ID") else result["url"]
+                if first.get("#IMDB_ID")
+                else "N/A"
             )
-            result["poster"] = first.get("#IMG_POSTER", result["poster"])
+            result["poster"] = first.get("#IMG_POSTER", "N/A")
             actors = first.get("#ACTORS")
             if actors:
-                # Keep as a comma-separated string
                 result["cast"] = actors
-        # 3) If poster or cast is missing, try fallback JustWatch endpoint
+        # If "description" was missing or empty, we'll fall back below
+
+        # --- Step B: Fallback to /justwatch endpoint only if needed ---
+        # (We only need this if poster or cast is still "N/A")
         if result["poster"] == "N/A" or result["cast"] == "N/A":
             jw_url = f"https://imdb.iamidiotareyoutoo.com/justwatch?q={title}"
             jw_data = await fetch_json(session, jw_url)
 
-            if jw_data.get("ok") and isinstance(jw_data.get("description"), list):
+            if (
+                isinstance(jw_data, dict) 
+                and jw_data.get("ok") 
+                and isinstance(jw_data.get("description"), list)
+                and len(jw_data["description"]) > 0
+            ):
                 jw_first = jw_data["description"][0]
-                # Only override missing values
+
+                # Override only missing values
                 if result["title"] == "N/A":
-                    result["title"] = jw_first.get("title", result["title"])
+                    result["title"] = jw_first.get("title", "N/A")
                 if result["year"] == "N/A":
-                    result["year"] = jw_first.get("year", result["year"])
+                    result["year"] = jw_first.get("year", "N/A")
                 if result["url"] == "N/A" and jw_first.get("imdbId"):
                     result["url"] = f"https://www.imdb.com/title/{jw_first['imdbId']}"
                 if result["poster"] == "N/A":
                     backdrops = jw_first.get("backdrops", [])
                     result["poster"] = backdrops[0] if backdrops else (
-                        jw_first.get("photo_url", [None])[0] or "N/A"
+                        (jw_first.get("photo_url") or [None])[0] or "N/A"
                     )
-                # JustWatch response typically doesn’t include cast, so leave as "N/A"
+                # Note: JustWatch JSON generally doesn't include cast, so we leave cast = "N/A" if it was missing
 
     return result
 
