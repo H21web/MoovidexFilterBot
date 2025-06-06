@@ -1,56 +1,105 @@
+# file: upcoming.py
+
 import requests
+from datetime import datetime
+from pymongo import MongoClient
 from pyrogram import Client, filters
+from info import O_DB_URI
 from pyrogram.enums import ParseMode
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+# MongoDB setup
+client_mongo = O_DB_URI
+db = client_mongo["vjcollection"]
+reminders_col = db["reminders"]
 
 # Function to fetch upcoming movies
 def fetch_upcoming_movies():
     url = "https://www.binged.com/wp-json/binged-api/v1/movies?mode=streaming-soon"
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0',
         'Referer': 'https://www.binged.com/'
     }
-    
     response = requests.get(url, headers=headers)
-    
     if response.status_code == 200:
         try:
             data = response.json()
-            return data.get('data', [])  # Extract the 'data' array
+            return data.get('data', [])
         except ValueError:
-            return None
-    return None
+            return []
+    return []
 
-# Command handler for /upcoming
-@Client.on_message(filters.command("upcoming"))
-async def send_upcoming_movies(client, message):
-    movies_data = fetch_upcoming_movies()
-    
-    if movies_data and isinstance(movies_data, list):
+# Command: /upcoming
+def add_handlers(app):
+    @Client.on_message(filters.command("upcoming"))
+    async def send_upcoming_movies(client, message):
+        movies_data = fetch_upcoming_movies()
+
         if not movies_data:
             await message.reply_text("🚫 No upcoming movies found.")
             return
 
-        # Build a single message with all movie details
-        all_movies_details = "🎬 <b>Upcoming Movies</b>:\n\n"
-        
+        all_movies_details = "\U0001F4FA <b>Upcoming Movies</b>:\n\n"
         for movie in movies_data:
-            title = movie.get('title', 'No title available')
-            streaming_date = movie.get('streaming-date', 'No streaming date available')
-            language = ', '.join(movie.get('languages', ['No language specified']))
-            platform = ', '.join(
-                platform.get('name', 'No platform specified') for platform in movie.get('platforms', [])
+            movie_id = str(movie.get('id'))
+            title = movie.get('title', 'No title')
+            streaming_date = movie.get('streaming-date', 'Unknown')
+            language = ', '.join(movie.get('languages', ['Unknown']))
+            platform = ', '.join(p.get('name', 'Unknown') for p in movie.get('platforms', []))
+            movie_type = movie.get('type', 'Unknown')
+
+            movie_block = (
+                f"<b>{title}</b> ({language})\n"
+                f"\U0001F3AC Type: <i>{movie_type}</i>\n"
+                f"\U0001F4C5 Release: <u>{streaming_date}</u>\n"
+                f"\U0001F4FA Platform: {platform}\n"
+                f"<a href=\"https://t.me/{{client.me.username}}?start=remind_{movie_id}\">\U0001F514 Remind Me</a>\n\n"
             )
-            movie_type = movie.get('type', 'No type specified')
+            all_movies_details += movie_block
 
-            # Format each movie's block
-            movie_details = (
-                f"◉ <u>{streaming_date}</u>\n"
-                f"<b>{title}</b>  ·  <i>{movie_type}</i>\n"
-                f"{platform}  ·  {language}\n\n"
+        await message.reply_text(all_movies_details, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+    @Client.on_message(filters.regex(r"^/start remind_(\d+)$"))
+    async def remind_command(client, message):
+        movie_id = message.matches[0].group(1)
+        user_id = message.from_user.id
+
+        movie = next((m for m in fetch_upcoming_movies() if str(m.get('id')) == movie_id), None)
+        if not movie:
+            await message.reply_text("⚠️ Movie not found or already released.")
+            return
+
+        existing = reminders_col.find_one({"user_id": user_id, "movie_id": movie_id})
+        if existing:
+            await message.reply_text("✅ You're already set to be reminded.")
+            return
+
+        reminders_col.insert_one({
+            "user_id": user_id,
+            "movie_id": movie_id,
+            "title": movie.get("title"),
+            "remind_date": movie.get("streaming-date"),
+            "platform": ', '.join(p.get('name') for p in movie.get('platforms', [])),
+            "notified": False
+        })
+        await message.reply_text("🔔 Reminder set! You'll be alerted on release day.")
+
+# Daily checker job
+def check_and_notify(app):
+    today = datetime.today().strftime('%Y-%m-%d')
+    for reminder in reminders_col.find({"remind_date": today, "notified": False}):
+        try:
+            app.send_message(
+                reminder["user_id"],
+                f"🎬 <b>{reminder['title']}</b> is out today on <b>{reminder['platform']}</b>!",
+                parse_mode=ParseMode.HTML
             )
-            all_movies_details += movie_details
+            reminders_col.delete_one({"_id": reminder["_id"]})
+        except Exception:
+            continue
 
-        await message.reply_text(all_movies_details, parse_mode=ParseMode.HTML)
-
-    else:
-        await message.reply_text("⚠️ Failed to fetch upcoming movies or no movies found. Please try again later.")
+# Scheduler setup
+def setup_scheduler(app):
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(lambda: check_and_notify(app), 'interval', hours=24)
+    scheduler.start()
