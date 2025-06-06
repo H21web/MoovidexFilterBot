@@ -4,13 +4,13 @@ import requests
 from datetime import datetime
 from pymongo import MongoClient
 from pyrogram import Client, filters
-from info import O_DB_URI
 from pyrogram.enums import ParseMode
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from info import O_DB_URI
 
 # MongoDB setup
-client_mongo = O_DB_URI
-db = client_mongo["vjcollection"]
+client_mongo = MongoClient(O_DB_URI)
+db = client_mongo["telegram_bot"]
 reminders_col = db["reminders"]
 
 # Function to fetch upcoming movies
