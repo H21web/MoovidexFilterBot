@@ -25,11 +25,19 @@ def fetch_upcoming_movies():
     if response.status_code == 200:
         try:
             data = response.json()
-            return data.get('data', [])
+            # Try multiple keys
+            for key in ['data', 'movies', 'results']:
+                if key in data:
+                    return data[key]
+            # fallback: if data itself is list
+            if isinstance(data, list):
+                return data
+            return []
         except ValueError:
             return []
     return []
 
+    
 @Client.on_message(filters.command("upcoming"))
 async def send_upcoming_movies(client, message):
     movies_data = fetch_upcoming_movies()
