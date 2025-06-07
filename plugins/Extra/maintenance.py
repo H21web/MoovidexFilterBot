@@ -54,3 +54,5 @@ async def handle_reason(client, message: Message):
         MAINTENANCE_MODE["reason"] = message.text
         AWAITING_REASON.pop(user_id, None)
         await message.reply("✅ Reason updated. You can now enable Maintenance Mode.")
+        return  # Stop further processing
+
