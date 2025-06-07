@@ -48,7 +48,10 @@ async def send_movie_buttons(client, message):
             callback_data = f"movie_detail_{title}"
             buttons.append([InlineKeyboardButton(title, callback_data=callback_data)])
 
+        # Add close button at the end
+        buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
         reply_markup = InlineKeyboardMarkup(buttons)
+
         await message.reply_text("🎬 **Today's Streaming Movies:**", reply_markup=reply_markup)
     else:
         await message.reply_text("⚠️ Failed to fetch today's movies or no movies found. Please try again later.")
@@ -84,7 +87,9 @@ async def show_movie_detail(client, callback_query):
                 if callback_query.from_user.id in ADMIN_IDS:
                     buttons.append([InlineKeyboardButton("📣 Post to Channel", callback_data=f"post_movie_{title}")])
 
+                buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
                 reply_markup = InlineKeyboardMarkup(buttons)
+
                 await callback_query.message.reply_text(movie_details, reply_markup=reply_markup)
                 await callback_query.answer()
                 break
@@ -129,3 +134,11 @@ async def post_movie_to_channel(client, callback_query):
                 break
     else:
         await callback_query.answer("⚠️ Failed to fetch movie details. Please try again later.")
+
+# Close button handler
+@Client.on_callback_query(filters.regex(r"close_message"))
+async def close_message_callback(client, callback_query):
+    try:
+        await callback_query.message.delete()
+    except Exception:
+        await callback_query.answer("⚠️ Unable to delete the message.")
