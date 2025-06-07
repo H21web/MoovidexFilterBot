@@ -109,25 +109,36 @@ async def pm_text(bot, message):
 
     if PM_SEARCH:
         ai_search = True
-        reply_msg = await bot.send_message(user_id, f"<b><i>Searching For {content} 🔍</i></b>", reply_to_message_id=message.id)
+        reply_msg = await bot.send_message(
+            user_id,
+            f"<b><i>Searching For {content} 🔍</i></b>",
+            reply_to_message_id=message.id
+        )
         await auto_filter(bot, content, message, reply_msg, ai_search)
 
+
 async def doo(bot, data, message):
-    user = message.from_user.first_name
-    user_id = message.from_user.id
+    # 🚧 Check Maintenance Mode
+    if MAINTENANCE_MODE["is_on"]:
+        return await message.reply_text(
+            f"🚧 <b>Bot Under Maintenance</b>\n\nReason: {MAINTENANCE_MODE['reason']}\n\nPlease try again later.",
+            quote=True
+        )
+
     ai_search = True
 
-    # Replace underscores with spaces
-    data = data.replace('_', ' ')
+    # Replace underscores with spaces (to normalize search query)
+    query = data.replace('_', ' ')
 
     # Send the initial search message
     reply_msg = await bot.send_message(
-        message.from_user.id, 
-        f"<b><i>🔍 sᴇᴀʀᴄʜɪɴɢ ғᴏʀ {data} </i></b>", 
+        message.from_user.id,
+        f"<b><i>🔍 Searching For {query}</i></b>",
         reply_to_message_id=message.id
     )
-    
-    await auto_filter(bot, data, message, reply_msg, ai_search)
+
+    await auto_filter(bot, query, message, reply_msg, ai_search)
+
     
     
 @Client.on_callback_query(filters.regex(r"^next"))
