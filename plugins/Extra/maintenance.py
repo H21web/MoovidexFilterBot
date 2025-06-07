@@ -7,6 +7,8 @@ MAINTENANCE_MODE = {
     "reason": "No reason provided."
 }
 ADMIN_USERS = [1011394081, 7191327005]
+AWAITING_REASON = {}  # Dict to track which admin is setting reason
+
 # /maintenance command (admin only)
 @Client.on_message(filters.command("maintenance") & filters.user(ADMIN_USERS))
 async def maintenance_cmd(client, message: Message):
@@ -36,18 +38,19 @@ async def maintenance_callback(client, query: CallbackQuery):
 
     elif data == "maint_off":
         MAINTENANCE_MODE["is_on"] = False
-        MAINTENANCE_MODE["reason"] = ""
+        MAINTENANCE_MODE["reason"] = "No reason provided."
         await query.edit_message_text("❎ Maintenance mode is now <b>OFF</b>")
 
     elif data == "maint_reason":
-        await query.message.reply("📝 Send me the maintenance reason (in one message).")
-        return
+        AWAITING_REASON[user_id] = True
+        await query.message.reply("📝 Send me the maintenance reason (just type it in your next message).")
+        await query.answer()
 
 # Catch the reason message
 @Client.on_message(filters.user(ADMIN_USERS) & filters.text & filters.private)
 async def handle_reason(client, message: Message):
-    if MAINTENANCE_MODE["is_on"]:
-        return  # Do not accept during active maintenance
-    if message.reply_to_message and "Send me the maintenance reason" in message.reply_to_message.text:
+    user_id = message.from_user.id
+    if AWAITING_REASON.get(user_id):
         MAINTENANCE_MODE["reason"] = message.text
+        AWAITING_REASON.pop(user_id, None)
         await message.reply("✅ Reason updated. You can now enable Maintenance Mode.")
