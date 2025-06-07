@@ -43,16 +43,17 @@ async def maintenance_callback(client, query: CallbackQuery):
 
     elif data == "maint_reason":
         AWAITING_REASON[user_id] = True
-        await query.message.reply("📝 Send me the maintenance reason (just type it in your next message).")
-        await query.answer()
+        await query.message.reply("📝 Send me the maintenance reason (in one message).")
 
-# Catch the reason message
+
 @Client.on_message(filters.user(ADMIN_USERS) & filters.text & filters.private)
 async def handle_reason(client, message: Message):
     user_id = message.from_user.id
+
+    # Only act if this admin is supposed to send a reason
     if AWAITING_REASON.get(user_id):
         MAINTENANCE_MODE["reason"] = message.text
         AWAITING_REASON.pop(user_id, None)
         await message.reply("✅ Reason updated. You can now enable Maintenance Mode.")
-        return  # Stop further processing
+        return  # Stop here so pm_text is not blocked
 
