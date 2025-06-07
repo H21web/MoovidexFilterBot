@@ -6,7 +6,7 @@ MAINTENANCE_MODE = {
     "is_on": False,
     "reason": "No reason provided."
 }
-
+ADMIN_USERS = [1011394081, 7191327005]
 # /maintenance command (admin only)
 @Client.on_message(filters.command("maintenance") & filters.user(ADMIN_USERS))
 async def maintenance_cmd(client, message: Message):
