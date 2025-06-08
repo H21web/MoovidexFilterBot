@@ -1,7 +1,6 @@
 import os
 import traceback
 import requests
-import json
 from pydub import AudioSegment
 from pyrogram import Client, filters
 from pyrogram.types import Message
@@ -12,6 +11,7 @@ from datetime import datetime
 from collections import defaultdict
 from info import ADMINS  
 from plugins.pm_filter import boovo
+
 # IMDbPY client
 ia = Cinemagoer()
 DEEPGRAM_API_KEY = "d745106d263708f978a6428537300505be9589bb"
@@ -72,7 +72,6 @@ def extract_title_from_url(url: str) -> str:
     return "Unknown movie"
 
 
-
 @Client.on_message(filters.voice)
 async def handle_voice(bot: Client, message: Message):
     status = None
@@ -89,7 +88,7 @@ async def handle_voice(bot: Client, message: Message):
                 return
             daily_usage[user_id][today_str] += 1
 
-        status = await message.reply_text("🎙 Transcribing your voice...")
+        status = await message.reply_text("🎙 loading...")
 
         voice_file = await bot.download_media(message.voice)
         if not voice_file.endswith(".ogg"):
@@ -105,20 +104,21 @@ async def handle_voice(bot: Client, message: Message):
             await status.edit_text("🤖 Could not recognize any speech.")
             return
 
+        # Delete the "Transcribing..." message after transcription
+        if status:
+            await status.delete()
+
         # Detect movie
         title = find_movie_with_imdb(text)
         if not title:
             title = find_movie_with_google(text)
 
         if title.lower().strip() == "unknown movie":
-            await status.edit_text("❌ Movie not found.")
+            await message.reply_text("❌ Movie not found.")
             return
 
-        # Call doo with the title
+        # Call boovo with the title
         await boovo(bot, title, message)
-
-        if status:
-            await status.delete()
 
     except Exception as e:
         err_msg = f"❌ Error:\n{str(e)}"
