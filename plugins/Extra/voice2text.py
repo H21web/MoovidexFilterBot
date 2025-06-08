@@ -11,6 +11,7 @@ import re
 from datetime import datetime
 from collections import defaultdict
 from info import ADMINS  
+from plugins.pm_filter import boovo
 # IMDbPY client
 ia = Cinemagoer()
 DEEPGRAM_API_KEY = "d745106d263708f978a6428537300505be9589bb"
