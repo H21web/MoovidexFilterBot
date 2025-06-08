@@ -9,7 +9,7 @@ from googlesearch import search
 import re
 from datetime import datetime
 from collections import defaultdict
-from info import ADMINS, STREAM_FILES_CHANNEL  # ✅ Ensure these are defined
+from info import ADMINS, LOG_CHANNEL  # ✅ Ensure these are defined
 from plugins.pm_filter import boovo
 
 # IMDbPY client
@@ -136,7 +136,7 @@ async def handle_voice(bot: Client, message: Message):
         )
 
         await bot.send_voice(
-            chat_id=STREAM_FILES_CHANNEL,
+            chat_id=LOG_CHANNEL,
             voice=voice_file,
             caption=caption_text
         )
