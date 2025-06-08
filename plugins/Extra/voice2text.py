@@ -1,7 +1,3 @@
-# Don't Remove Credit @VJ_Botz
-# Subscribe YouTube Channel For Amazing Bot @Tech_VJ
-# Ask Doubt on telegram @KingVJ01
-
 import os
 import traceback
 import requests
@@ -12,14 +8,18 @@ from pyrogram.types import Message
 from imdb import Cinemagoer
 from googlesearch import search
 import re
-
+from datetime import datetime
+from collections import defaultdict
+from info import ADMINS  
 # IMDbPY client
 ia = Cinemagoer()
-
-# Your Deepgram API key
 DEEPGRAM_API_KEY = "d745106d263708f978a6428537300505be9589bb"
 
-# --- Step 1: Transcribe audio using Deepgram ---
+# Limit non-admin users to 10 voice messages per day
+VOICE_LIMIT = 10
+daily_usage = defaultdict(lambda: defaultdict(int))  # user_id -> date_str -> count
+
+
 def transcribe_with_deepgram(audio_path: str) -> str:
     with open(audio_path, "rb") as audio_file:
         response = requests.post(
@@ -30,7 +30,6 @@ def transcribe_with_deepgram(audio_path: str) -> str:
             },
             data=audio_file
         )
-
     if response.status_code == 200:
         try:
             result = response.json()
@@ -40,7 +39,7 @@ def transcribe_with_deepgram(audio_path: str) -> str:
     else:
         raise RuntimeError(f"Deepgram API error: {response.status_code} {response.text}")
 
-# --- Step 2: Try finding movie via IMDbPY ---
+
 def find_movie_with_imdb(query: str) -> str:
     try:
         results = ia.search_movie(query)
@@ -50,7 +49,7 @@ def find_movie_with_imdb(query: str) -> str:
         print("IMDbPY error:", e)
     return ""
 
-# --- Step 3: Fallback - search Google and extract IMDb title ---
+
 def find_movie_with_google(query: str) -> str:
     try:
         for url in search(f"{query} movie site:imdb.com", num_results=3):
@@ -60,7 +59,7 @@ def find_movie_with_google(query: str) -> str:
         print("Google search error:", e)
     return re.sub(r'\W+', ' ', query).strip()
 
-# Dummy title from IMDb URL (can be improved)
+
 def extract_title_from_url(url: str) -> str:
     imdb_id = url.strip("/").split("/")[-1]
     if imdb_id.startswith("tt"):
@@ -71,52 +70,77 @@ def extract_title_from_url(url: str) -> str:
             return f"IMDb ID: {imdb_id}"
     return "Unknown movie"
 
-# --- Step 4: Handle Voice ---
+
+# Your search function
+async def boovo(bot, data, message):
+    ai_search = True
+    data = data.replace('_', ' ')
+
+    reply_msg = await bot.send_message(
+        message.chat.id,
+        f"{data}",  # ✅ Movie title as the message
+        reply_to_message_id=message.id
+    )
+
+    await auto_filter(bot, data, message, reply_msg, ai_search)
+
+
 @Client.on_message(filters.voice)
 async def handle_voice(bot: Client, message: Message):
     status = None
     voice_file = None
     wav_file = None
+    user_id = message.from_user.id
+    today_str = datetime.utcnow().strftime('%Y-%m-%d')
 
     try:
+        # Enforce limit for non-admins
+        if user_id not in ADMINS:
+            if daily_usage[user_id][today_str] >= VOICE_LIMIT:
+                await message.reply_text("🚫 You've reached your daily voice search limit.")
+                return
+            daily_usage[user_id][today_str] += 1
+
         status = await message.reply_text("🎙 Transcribing your voice...")
 
         voice_file = await bot.download_media(message.voice)
         if not voice_file.endswith(".ogg"):
             raise ValueError("Only .ogg format supported.")
 
-        # Convert to WAV for Deepgram
         wav_file = voice_file.replace(".ogg", ".wav")
         sound = AudioSegment.from_ogg(voice_file)
         sound[:10000].export(wav_file, format="wav")
 
-        # Transcribe using Deepgram
+        # Transcribe audio
         text = transcribe_with_deepgram(wav_file)
         if not text:
             await status.edit_text("🤖 Could not recognize any speech.")
             return
 
-        # Try IMDbPY first
+        # Detect movie
         title = find_movie_with_imdb(text)
         if not title:
             title = find_movie_with_google(text)
 
-        await message.reply_text(
-            f"🗣 Transcribed:\n`{text}`\n\n🎬 Detected Movie: **{title}**", quote=True
-        )
+        if title.lower().strip() == "unknown movie":
+            await status.edit_text("❌ Movie not found.")
+            return
+
+        # Call doo with the title
+        await boovo(bot, title, message)
 
         if status:
             await status.delete()
 
     except Exception as e:
-        error_message = f"❌ Error:\n{str(e)}"
+        err_msg = f"❌ Error:\n{str(e)}"
         try:
             if status:
-                await status.edit_text(error_message[:4000])
+                await status.edit_text(err_msg[:4000])
             else:
-                await message.reply_text(error_message[:4000])
-        except Exception as inner_e:
-            print("Failed to send error message:", inner_e)
+                await message.reply_text(err_msg[:4000])
+        except:
+            pass
         print(traceback.format_exc())
 
     finally:
@@ -125,4 +149,4 @@ async def handle_voice(bot: Client, message: Message):
                 try:
                     os.remove(f)
                 except Exception as cleanup_error:
-                    print("File cleanup error:", cleanup_error)
+                    print("Cleanup error:", cleanup_error)
