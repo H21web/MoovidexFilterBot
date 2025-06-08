@@ -74,13 +74,18 @@ def extract_title_from_url(url: str) -> str:
 # --- Step 4: Handle Voice ---
 @Client.on_message(filters.voice)
 async def handle_voice(bot: Client, message: Message):
-    status = await message.reply_text("🎙 Transcribing your voice...")
+    status = None
+    voice_file = None
+    wav_file = None
 
     try:
+        status = await message.reply_text("🎙 Transcribing your voice...")
+
         voice_file = await bot.download_media(message.voice)
         if not voice_file.endswith(".ogg"):
             raise ValueError("Only .ogg format supported.")
 
+        # Convert to WAV for Deepgram
         wav_file = voice_file.replace(".ogg", ".wav")
         sound = AudioSegment.from_ogg(voice_file)
         sound[:10000].export(wav_file, format="wav")
@@ -99,13 +104,25 @@ async def handle_voice(bot: Client, message: Message):
         await message.reply_text(
             f"🗣 Transcribed:\n`{text}`\n\n🎬 Detected Movie: **{title}**", quote=True
         )
-        await status.delete()
+
+        if status:
+            await status.delete()
 
     except Exception as e:
-        await status.edit_text("❌ Error:\n" + str(e))
+        error_message = f"❌ Error:\n{str(e)}"
+        try:
+            if status:
+                await status.edit_text(error_message[:4000])
+            else:
+                await message.reply_text(error_message[:4000])
+        except Exception as inner_e:
+            print("Failed to send error message:", inner_e)
         print(traceback.format_exc())
 
     finally:
-        for f in [locals().get('voice_file'), locals().get('wav_file')]:
+        for f in [voice_file, wav_file]:
             if f and os.path.exists(f):
-                os.remove(f)
+                try:
+                    os.remove(f)
+                except Exception as cleanup_error:
+                    print("File cleanup error:", cleanup_error)
