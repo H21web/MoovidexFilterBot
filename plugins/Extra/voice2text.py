@@ -1,41 +1,32 @@
-# Don't Remove Credit @VJ_Botz
-# Subscribe YouTube Channel For Amazing Bot @Tech_VJ
-# Ask Doubt on telegram @KingVJ01
+# plugins/Extra/voice2text.py
 
 import os
-import io
 import traceback
+import whisper
+from pydub import AudioSegment
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from pydub import AudioSegment
-from google.cloud import speech
 
-# Set this in your environment or directly in code (not secure for public)
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "plugins/Extra/glowing-arcadia-355406-4a2ab23f2d4a.json"
+# Load the lightest Whisper model ("tiny")
+whisper_model = whisper.load_model("tiny")
 
-def transcribe_with_google(wav_path: str, language_code="hi-IN") -> str:
-    client = speech.SpeechClient()
+def transcribe_with_whisper(audio_path: str) -> str:
+    try:
+        # Convert to 16kHz mono WAV (required by Whisper)
+        audio = AudioSegment.from_file(audio_path)
+        wav_path = audio_path.replace(".ogg", "_whisper.wav")
+        audio.set_frame_rate(16000).set_channels(1).export(wav_path, format="wav")
 
-    with io.open(wav_path, "rb") as audio_file:
-        content = audio_file.read()
+        # Transcribe with Whisper
+        result = whisper_model.transcribe(wav_path)
 
-    audio = speech.RecognitionAudio(content=content)
-    config = speech.RecognitionConfig(
-        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-        sample_rate_hertz=16000,
-        language_code=language_code,
-        enable_automatic_punctuation=True,
-        model="latest_long"
-    )
+        # Clean up temp file
+        os.remove(wav_path)
 
-    response = client.recognize(config=config, audio=audio)
+        return f"🌐 Detected Language: `{result['language']}`\n\n📝 Transcription:\n{result['text']}"
 
-    result_text = ""
-    for result in response.results:
-        result_text += result.alternatives[0].transcript + " "
-
-    return result_text.strip() or "🤖 Sorry, I couldn't understand your voice."
-
+    except Exception as e:
+        return f"❌ Whisper error:\n{str(e)}"
 
 @Client.on_message(filters.voice)
 async def voice_to_text_handler(bot: Client, message: Message):
@@ -43,23 +34,16 @@ async def voice_to_text_handler(bot: Client, message: Message):
 
     try:
         ogg_path = await bot.download_media(message.voice)
-        wav_path = ogg_path.replace(".ogg", ".wav")
+        result = transcribe_with_whisper(ogg_path)
 
-        # Convert .ogg to .wav
-        sound = AudioSegment.from_ogg(ogg_path).set_channels(1).set_frame_rate(16000)
-        sound.export(wav_path, format="wav")
-
-        # Set language here (you can make it dynamic)
-        result = transcribe_with_google(wav_path, language_code="hi-IN")
-
-        await message.reply_text(f"🗣 Recognized Text:\n\n`{result}`", quote=True)
+        await message.reply_text(result, quote=True)
         await status.delete()
 
     except Exception as e:
-        traceback.print_exc()
-        await status.edit_text(f"❌ Error occurred:\n{e}")
+        tb = traceback.format_exc()
+        print(tb)
+        await status.edit_text("❌ An error occurred:\n" + str(e))
 
     finally:
-        for path in [locals().get("ogg_path"), locals().get("wav_path")]:
-            if path and os.path.exists(path):
-                os.remove(path)
+        if ogg_path and os.path.exists(ogg_path):
+            os.remove(ogg_path)
