@@ -4,7 +4,8 @@
 
 import os
 import traceback
-import speech_recognition as sr
+import requests
+import json
 from pydub import AudioSegment
 from pyrogram import Client, filters
 from pyrogram.types import Message
@@ -15,17 +16,29 @@ import re
 # IMDbPY client
 ia = Cinemagoer()
 
-# --- Step 1: Transcribe 10s audio ---
-def transcribe_audio(audio_path: str) -> str:
-    r = sr.Recognizer()
-    with sr.AudioFile(audio_path) as source:
+# Your Deepgram API key
+DEEPGRAM_API_KEY = "d745106d263708f978a6428537300505be9589bb"
+
+# --- Step 1: Transcribe audio using Deepgram ---
+def transcribe_with_deepgram(audio_path: str) -> str:
+    with open(audio_path, "rb") as audio_file:
+        response = requests.post(
+            "https://api.deepgram.com/v1/listen?smart_format=true&language=en&model=whisper",
+            headers={
+                "Authorization": f"Token {DEEPGRAM_API_KEY}",
+                "Content-Type": "audio/wav"
+            },
+            data=audio_file
+        )
+
+    if response.status_code == 200:
         try:
-            audio = r.record(source, duration=10)  # limit to 10s
-            return r.recognize_google(audio)
-        except sr.UnknownValueError:
+            result = response.json()
+            return result.get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
+        except Exception:
             return ""
-        except sr.RequestError as e:
-            raise RuntimeError(f"Google API error: {e}")
+    else:
+        raise RuntimeError(f"Deepgram API error: {response.status_code} {response.text}")
 
 # --- Step 2: Try finding movie via IMDbPY ---
 def find_movie_with_imdb(query: str) -> str:
@@ -72,8 +85,8 @@ async def handle_voice(bot: Client, message: Message):
         sound = AudioSegment.from_ogg(voice_file)
         sound[:10000].export(wav_file, format="wav")
 
-        # Transcribe
-        text = transcribe_audio(wav_file)
+        # Transcribe using Deepgram
+        text = transcribe_with_deepgram(wav_file)
         if not text:
             await status.edit_text("🤖 Could not recognize any speech.")
             return
