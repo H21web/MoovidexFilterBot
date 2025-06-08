@@ -75,14 +75,14 @@ async def give_filter(client, message):
 
 async def boovo(bot, title, message):
     ai_search = True
-
+    data = title
     reply_msg = await bot.send_message(
         message.chat.id,
-        f"Searching {title}",  # ✅ Movie title as the message
+        f"Searching {data}",  # ✅ Movie title as the message
         reply_to_message_id=message.id
     )
 
-    await auto_filter(bot, title, message, reply_msg, ai_search)
+    await auto_filter(bot, data, message, reply_msg, ai_search)
     
 @Client.on_message(filters.private & filters.text & filters.incoming)
 async def pm_text(bot, message):
