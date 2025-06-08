@@ -18,6 +18,7 @@ DEEPGRAM_API_KEY = "d745106d263708f978a6428537300505be9589bb"
 
 # Limit non-admin users to 10 voice messages per day
 VOICE_LIMIT = 10
+VOICE_DURATION_LIMIT = 10  # in seconds
 daily_usage = defaultdict(lambda: defaultdict(int))  # user_id -> date_str -> count
 
 
@@ -81,7 +82,12 @@ async def handle_voice(bot: Client, message: Message):
     today_str = datetime.utcnow().strftime('%Y-%m-%d')
 
     try:
-        # Enforce limit for non-admins
+        # Check duration limit
+        if message.voice.duration > VOICE_DURATION_LIMIT:
+            await message.reply_text(f"⚠️ Please send a voice message shorter than {VOICE_DURATION_LIMIT} seconds.")
+            return
+
+        # Enforce daily limit for non-admins
         if user_id not in ADMINS:
             if daily_usage[user_id][today_str] >= VOICE_LIMIT:
                 await message.reply_text("🚫 You've reached your daily voice search limit.")
@@ -104,7 +110,7 @@ async def handle_voice(bot: Client, message: Message):
             await status.edit_text("🤖 Could not recognize any speech.")
             return
 
-        # Delete the "Transcribing..." message after transcription
+        # Delete the "Please wait..." message after transcription
         if status:
             await status.delete()
 
