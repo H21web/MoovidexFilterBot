@@ -18,7 +18,7 @@ from database.connections_mdb import mydb, active_connection, all_connections, d
 from database.gfilters_mdb import find_gfilter, get_gfilters, del_allg
 from urllib.parse import quote_plus
 from TechVJ.util.file_properties import get_name, get_hash, get_media_file_size
-from plugins.Extra.maintenance import MAINTENANCE_MODE
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
@@ -32,129 +32,74 @@ BUTTONS1 = {}
 BUTTONS2 = {}
 SPELL_CHECK = {}
 
-
 @Client.on_message(filters.group & filters.text & filters.incoming)
 async def give_filter(client, message):
-    # Check Maintenance Mode
-    if await check_maintenance_mode(message):
-        return
-
-    chat_id = message.chat.id
-    user = message.from_user
-    user_id = user.id if user else 0
-
-    # Special case: SUPPORT_CHAT_ID
-    if chat_id == SUPPORT_CHAT_ID:
+    if message.chat.id != SUPPORT_CHAT_ID:
+        settings = await get_settings(message.chat.id)
+        chatid = message.chat.id 
+        user_id = message.from_user.id if message.from_user else 0
+        if settings['fsub'] != None:
+            try:
+                btn = await pub_is_subscribed(client, message, settings['fsub'])
+                if btn:
+                    btn.append([InlineKeyboardButton("Unmute Me 🔕", callback_data=f"unmuteme#{int(user_id)}")])
+                    await client.restrict_chat_member(chatid, message.from_user.id, ChatPermissions(can_send_messages=False))
+                    await message.reply_photo(photo=random.choice(PICS), caption=f"👋 Hello {message.from_user.mention},\n\nPlease join the channel then click on unmute me button. 😇", reply_markup=InlineKeyboardMarkup(btn), parse_mode=enums.ParseMode.HTML)
+                    return
+            except Exception as e:
+                print(e)
+            
+        manual = await manual_filters(client, message)
+        if manual == False:
+            settings = await get_settings(message.chat.id)
+            try:
+                if settings['auto_ffilter']:
+                    ai_search = True
+                    reply_msg = await message.reply_text(f"<b><i>Searching For {message.text} 🔍</i></b>")
+                    await auto_filter(client, message.text, message, reply_msg, ai_search)
+            except KeyError:
+                grpid = await active_connection(str(message.from_user.id))
+                await save_group_settings(grpid, 'auto_ffilter', True)
+                settings = await get_settings(message.chat.id)
+                if settings['auto_ffilter']:
+                    ai_search = True
+                    reply_msg = await message.reply_text(f"<b><i>Searching For {message.text} 🔍</i></b>")
+                    await auto_filter(client, message.text, message, reply_msg, ai_search)
+    else: #a better logic to avoid repeated lines of code in auto_filter function
         search = message.text
-        temp_files, temp_offset, total_results = await get_search_results(
-            chat_id=chat_id,
-            query=search.lower(),
-            offset=0,
-            filter=True
-        )
-        if total_results > 0:
-            return await message.reply_text(
-                f"<b>Hᴇʏ {user.mention}, {total_results} ʀᴇsᴜʟᴛs ᴀʀᴇ ғᴏᴜɴᴅ ɪɴ ᴍʏ ᴅᴀᴛᴀʙᴀsᴇ ғᴏʀ ʏᴏᴜʀ ᴏ̨ᴜᴇʀʏ \"{search}\". \n\n"
-                f"Tʜɪs ɪs ᴀ sᴜᴘᴘᴏʀᴛ ɢʀᴏᴜᴘ, ʏᴏᴜ ᴄᴀɴ'ᴛ ɢᴇᴛ ғɪʟᴇs ʜᴇʀᴇ.\n\n"
-                f"Jᴏɪɴ ᴀɴᴅ Sᴇᴀʀᴄʜ Hᴇʀᴇ - {GRP_LNK}</b>"
-            )
-        return
-
-    # Regular group handling
-    settings = await get_settings(chat_id)
-    
-    # FSub / Force Subscribe check
-    fsub_channel = settings.get('fsub')
-    if fsub_channel:
-        try:
-            btn = await pub_is_subscribed(client, message, fsub_channel)
-            if btn:
-                btn.append([InlineKeyboardButton("Unmute Me 🔕", callback_data=f"unmuteme#{user_id}")])
-                await client.restrict_chat_member(chat_id, user_id, ChatPermissions(can_send_messages=False))
-                await message.reply_photo(
-                    photo=random.choice(PICS),
-                    caption=(
-                        f"👋 Hello {user.mention},\n\n"
-                        f"Please join the channel and then click the 'Unmute Me' button. 😇"
-                    ),
-                    reply_markup=InlineKeyboardMarkup(btn),
-                    parse_mode=enums.ParseMode.HTML
-                )
-                return
-        except Exception as e:
-            print(f"[FSub Error] {e}")
-
-    # Manual Filters
-    manual = await manual_filters(client, message)
-    if manual is not False:
-        return  # Manual filter handled the message
-
-    # AI Auto Filter (if enabled)
-    if settings.get('auto_ffilter'):
-        ai_search = True
-        reply_msg = await message.reply_text(f"<b><i>Searching For {message.text} 🔍</i></b>")
-        await auto_filter(client, message.text, message, reply_msg, ai_search)
-    else:
-        # If key is missing, enable auto_ffilter and retry
-        try:
-            grpid = await active_connection(str(user_id))
-            await save_group_settings(grpid, 'auto_ffilter', True)
-            # Reload settings and retry
-            settings = await get_settings(chat_id)
-            if settings.get('auto_ffilter'):
-                ai_search = True
-                reply_msg = await message.reply_text(f"<b><i>Searching For {message.text} 🔍</i></b>")
-                await auto_filter(client, message.text, message, reply_msg, ai_search)
-        except Exception as e:
-            print(f"[AutoFilter Init Error] {e}")
-
-
+        temp_files, temp_offset, total_results = await get_search_results(chat_id=message.chat.id, query=search.lower(), offset=0, filter=True)
+        if total_results == 0:
+            return
+        else:
+            return await message.reply_text(f"<b>Hᴇʏ {message.from_user.mention}, {str(total_results)} ʀᴇsᴜʟᴛs ᴀʀᴇ ғᴏᴜɴᴅ ɪɴ ᴍʏ ᴅᴀᴛᴀʙᴀsᴇ ғᴏʀ ʏᴏᴜʀ ᴏ̨ᴜᴇʀʏ {search}. \n\nTʜɪs ɪs ᴀ sᴜᴘᴘᴏʀᴛ ɢʀᴏᴜᴘ sᴏ ᴛʜᴀᴛ ʏᴏᴜ ᴄᴀɴ'ᴛ ɢᴇᴛ ғɪʟᴇs ғʀᴏᴍ ʜᴇʀᴇ...\n\nJᴏɪɴ ᴀɴᴅ Sᴇᴀʀᴄʜ Hᴇʀᴇ - {GRP_LNK}</b>")
 
 @Client.on_message(filters.private & filters.text & filters.incoming)
 async def pm_text(bot, message):
-    if await check_maintenance_mode(message):
-        return
-
     content = message.text
+    user = message.from_user.first_name
     user_id = message.from_user.id
-    if content.startswith("/") or content.startswith("#"):
-        return  # ignore commands and hashtags
-
-    if PM_SEARCH:
+    if content.startswith("/") or content.startswith("#"): return  # ignore commands and hashtags
+    if PM_SEARCH == True:
         ai_search = True
-        reply_msg = await bot.send_message(
-            user_id,
-            f"<b><i>Searching For {content} 🔍</i></b>",
-            reply_to_message_id=message.id
-        )
+        reply_msg = await bot.send_message(message.from_user.id, f"<b><i>Searching For {content} 🔍</i></b>", reply_to_message_id=message.id)
         await auto_filter(bot, content, message, reply_msg, ai_search)
 
-
 async def doo(bot, data, message):
-    if await check_maintenance_mode(message):
-        return
-
+    user = message.from_user.first_name
+    user_id = message.from_user.id
     ai_search = True
-    query = data.replace('_', ' ')
+
+    # Replace underscores with spaces
+    data = data.replace('_', ' ')
+
+    # Send the initial search message
     reply_msg = await bot.send_message(
-        message.from_user.id,
-        f"<b><i>🔍 Searching For {query}</i></b>",
+        message.from_user.id, 
+        f"<b><i>🔍 sᴇᴀʀᴄʜɪɴɢ ғᴏʀ {data} </i></b>", 
         reply_to_message_id=message.id
     )
-    await auto_filter(bot, query, message, reply_msg, ai_search)
-
-# Helper function to check maintenance mode
-async def check_maintenance_mode(message):
-    if MAINTENANCE_MODE.get("is_on"):
-        await message.reply_text(
-            f"🚧 <b>Bot Under Maintenance</b>\n\n"
-            f"Reason: {MAINTENANCE_MODE.get('reason', 'No reason provided')}\n\n"
-            "Please try again later.",
-            quote=True
-        )
-        return True
-    return False
     
+    await auto_filter(bot, data, message, reply_msg, ai_search)
     
 @Client.on_callback_query(filters.regex(r"^next"))
 async def next_page(bot, query):
