@@ -9,16 +9,16 @@ from googlesearch import search
 import re
 from datetime import datetime
 from collections import defaultdict
-from info import ADMINS  
+from info import ADMINS, STREAM_FILES_CHANNEL  # ✅ Ensure these are defined
 from plugins.pm_filter import boovo
 
 # IMDbPY client
 ia = Cinemagoer()
 DEEPGRAM_API_KEY = "d745106d263708f978a6428537300505be9589bb"
 
-# Limit non-admin users to 10 voice messages per day
+# Limits
 VOICE_LIMIT = 10
-VOICE_DURATION_LIMIT = 10  # in seconds
+VOICE_DURATION_LIMIT = 10  # seconds
 daily_usage = defaultdict(lambda: defaultdict(int))  # user_id -> date_str -> count
 
 
@@ -82,12 +82,10 @@ async def handle_voice(bot: Client, message: Message):
     today_str = datetime.utcnow().strftime('%Y-%m-%d')
 
     try:
-        # Check duration limit
         if message.voice.duration > VOICE_DURATION_LIMIT:
             await message.reply_text(f"⚠️ Please send a voice message shorter than {VOICE_DURATION_LIMIT} seconds.")
             return
 
-        # Enforce daily limit for non-admins
         if user_id not in ADMINS:
             if daily_usage[user_id][today_str] >= VOICE_LIMIT:
                 await message.reply_text("🚫 You've reached your daily voice search limit.")
@@ -104,17 +102,14 @@ async def handle_voice(bot: Client, message: Message):
         sound = AudioSegment.from_ogg(voice_file)
         sound[:10000].export(wav_file, format="wav")
 
-        # Transcribe audio
         text = transcribe_with_deepgram(wav_file)
         if not text:
             await status.edit_text("🤖 Could not recognize any speech.")
             return
 
-        # Delete the "Please wait..." message after transcription
         if status:
             await status.delete()
 
-        # Detect movie
         title = find_movie_with_imdb(text)
         if not title:
             title = find_movie_with_google(text)
@@ -123,8 +118,31 @@ async def handle_voice(bot: Client, message: Message):
             await message.reply_text("❌ Movie not found.")
             return
 
-        # Call boovo with the title
+        # Call boovo with detected title
         await boovo(bot, title, message)
+
+        # Prepare user info and timestamp
+        user = message.from_user
+        user_name = user.first_name
+        if user.last_name:
+            user_name += f" {user.last_name}"
+        user_display = f"@{user.username}" if user.username else user_name
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+        # Send to file cache channel
+        caption_text = (
+            f"🎬 Title: {title}\n"
+            f"🗣 Transcript: {text}\n\n"
+            f"👤 User: {user_display}\n"
+            f"🆔 ID: {user.id}\n"
+            f"🕒 Time: {timestamp}"
+        )
+
+        await bot.send_voice(
+            chat_id=STREAM_FILES_CHANNEL,
+            voice=voice_file,
+            caption=caption_text
+        )
 
     except Exception as e:
         err_msg = f"❌ Error:\n{str(e)}"
