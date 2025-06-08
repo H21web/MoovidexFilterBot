@@ -78,7 +78,8 @@ async def boovo(bot, title, message):
     data = title
     reply_msg = await bot.send_message(
         message.chat.id,
-        f"Searching {data}"
+        f"<b><i>Searching For {data} 🔍</i></b>",
+        reply_to_message_id=message.id
     )
 
     await auto_filter(bot, data, message, reply_msg, ai_search)
