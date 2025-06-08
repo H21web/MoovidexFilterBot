@@ -1,79 +1,62 @@
 # plugins/Extra/voice2text.py
 
 import os
+import wave
+import json
 import traceback
-import requests
+from vosk import Model, KaldiRecognizer
 from pydub import AudioSegment
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-# ─── CONFIG ────────────────────────────────────────────────────────────────────
-DEEPGRAM_API_KEY = "6758ed3d0a4fbe81db0f3f58134cbe08d83cd985"  # ← replace with your key
-# Endpoint with auto language detection, punctuation, numerals
-DEEPGRAM_URL = (
-    "https://api.deepgram.com/v1/listen"
-    "?punctuate=true"
-    "&numerals=true"
-    "&model=general"
-    "&detect_language=true"
-)
-# ────────────────────────────────────────────────────────────────────────────────
+# Load English Vosk model
+model_path = "vosk-model-small-en-us-0.15"
+if not os.path.exists(model_path):
+    raise RuntimeError("❌ English model not found! Please unzip it to: vosk-model-small-en-us-0.15")
 
-def transcribe_with_deepgram(audio_path: str) -> str:
-    wav_path = None
-    try:
-        # 1) Convert OGG → WAV (16 kHz mono PCM)
-        audio = AudioSegment.from_file(audio_path)
-        wav_path = audio_path.replace(".ogg", "_dg.wav")
-        audio.set_frame_rate(16000).set_channels(1).export(wav_path, format="wav")
+model = Model(model_path)
 
-        # 2) Read bytes and send to Deepgram
-        with open(wav_path, "rb") as f:
-            audio_bytes = f.read()
+def transcribe_with_vosk(wav_path: str) -> str:
+    with wave.open(wav_path, "rb") as wf:
+        rec = KaldiRecognizer(model, wf.getframerate())
+        rec.SetWords(True)
+        results = []
 
-        headers = {
-            "Authorization": f"Token {DEEPGRAM_API_KEY}",
-            "Content-Type": "application/octet-stream"
-        }
-        resp = requests.post(DEEPGRAM_URL, headers=headers, data=audio_bytes)
-        if resp.status_code != 200:
-            return f"❌ Deepgram error {resp.status_code}:\n{resp.text}"
+        while True:
+            data = wf.readframes(4000)
+            if not data:
+                break
+            if rec.AcceptWaveform(data):
+                result = json.loads(rec.Result())
+                results.append(result.get("text", ""))
 
-        data = resp.json()
+        final_result = json.loads(rec.FinalResult())
+        results.append(final_result.get("text", ""))
 
-        # 3) Extract transcript & detected language
-        # Deepgram returns results.channels[0].alternatives[0]
-        ch = data.get("results", {}).get("channels", [{}])[0]
-        alt = ch.get("alternatives", [{}])[0]
-        transcript = alt.get("transcript", "").strip()
-        lang = data.get("metadata", {}).get("detected_language", "unknown")
-
-        if not transcript:
-            return "🤖 Sorry, I couldn't transcribe the audio."
-
-        return f"🌐 Detected Language: `{lang}`\n\n📝 Transcription:\n{transcript}"
-
-    except Exception as e:
-        return f"❌ Unexpected error:\n{e}"
-
-    finally:
-        if wav_path and os.path.exists(wav_path):
-            os.remove(wav_path)
+    return " ".join(results).strip() or "🤖 Sorry, I couldn't recognize any speech."
 
 @Client.on_message(filters.voice)
 async def voice_to_text_handler(bot: Client, message: Message):
-    status = await message.reply_text("🎙 Downloading and transcribing…")
-    ogg_path = None
+    status = await message.reply_text("🎙 Downloading and transcribing your voice...")
+
+    ogg_path = await bot.download_media(message.voice)
+    wav_path = ogg_path.replace(".ogg", ".wav")
 
     try:
-        ogg_path = await bot.download_media(message.voice)
-        result = transcribe_with_deepgram(ogg_path)
-        await message.reply_text(result, quote=True)
+        # Convert OGG to WAV (mono, 16kHz)
+        audio = AudioSegment.from_ogg(ogg_path)
+        audio.set_frame_rate(16000).set_channels(1).export(wav_path, format="wav")
+
+        # Transcribe using Vosk
+        transcript = transcribe_with_vosk(wav_path)
+
+        await message.reply_text(f"🗣 English Text:\n\n`{transcript}`", quote=True)
         await status.delete()
+
     except Exception as e:
-        tb = traceback.format_exc()
-        print(tb)
-        await status.edit_text("❌ Error:\n" + str(e))
+        traceback.print_exc()
+        await status.edit_text(f"❌ Error occurred:\n{str(e)}")
     finally:
-        if ogg_path and os.path.exists(ogg_path):
-            os.remove(ogg_path)
+        for path in (ogg_path, wav_path):
+            if path and os.path.exists(path):
+                os.remove(path)
