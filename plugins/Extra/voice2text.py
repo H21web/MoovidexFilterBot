@@ -71,19 +71,6 @@ def extract_title_from_url(url: str) -> str:
     return "Unknown movie"
 
 
-# Your search function
-async def boovo(bot, data, message):
-    ai_search = True
-    data = data.replace('_', ' ')
-
-    reply_msg = await bot.send_message(
-        message.chat.id,
-        f"{data}",  # ✅ Movie title as the message
-        reply_to_message_id=message.id
-    )
-
-    await auto_filter(bot, data, message, reply_msg, ai_search)
-
 
 @Client.on_message(filters.voice)
 async def handle_voice(bot: Client, message: Message):
