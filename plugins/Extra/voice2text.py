@@ -88,7 +88,7 @@ async def handle_voice(bot: Client, message: Message):
                 return
             daily_usage[user_id][today_str] += 1
 
-        status = await message.reply_text("🎙 loading...")
+        status = await message.reply_text("🎙 Please wait...")
 
         voice_file = await bot.download_media(message.voice)
         if not voice_file.endswith(".ogg"):
