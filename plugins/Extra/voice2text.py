@@ -11,9 +11,7 @@ from pydub import AudioSegment
 from google.cloud import speech
 
 # Set this in your environment or directly in code (not secure for public)
-#os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "glowing-arcadia-355406-4a2ab23f2d4a.json"
-json_path = pathlib.Path(__file__).parent / "glowing-arcadia-355406-4a2ab23f2d4a.json"
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(json_path)
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/glowing-arcadia-355406-4a2ab23f2d4a.json"
 
 def transcribe_with_google(wav_path: str, language_code="hi-IN") -> str:
     client = speech.SpeechClient()
