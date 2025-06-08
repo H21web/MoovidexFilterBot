@@ -118,9 +118,6 @@ async def handle_voice(bot: Client, message: Message):
             await message.reply_text("❌ Movie not found.")
             return
 
-        # Call boovo with detected title
-        await boovo(bot, title, message)
-
         # Prepare user info and timestamp
         user = message.from_user
         user_name = user.first_name
@@ -143,6 +140,10 @@ async def handle_voice(bot: Client, message: Message):
             voice=voice_file,
             caption=caption_text
         )
+        # Call boovo with detected title
+        await boovo(bot, title, message)
+
+
 
     except Exception as e:
         err_msg = f"❌ Error:\n{str(e)}"
