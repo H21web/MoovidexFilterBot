@@ -18,7 +18,7 @@ from database.connections_mdb import mydb, active_connection, all_connections, d
 from database.gfilters_mdb import find_gfilter, get_gfilters, del_allg
 from urllib.parse import quote_plus
 from TechVJ.util.file_properties import get_name, get_hash, get_media_file_size
-from plugins.extra.voice2text import boovo
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
