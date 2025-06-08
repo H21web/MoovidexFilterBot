@@ -13,39 +13,40 @@ ASSEMBLYAI_API_KEY = "e8540603a6294a14acadf2e6a4a16787"  # ← replace with your
 def transcribe_with_assemblyai(audio_path: str) -> str:
     wav_path = None
     try:
-        # 1) Convert OGG → WAV (16 kHz mono)
+        # 1) Convert OGG → WAV (16 kHz mono PCM)
         audio = AudioSegment.from_file(audio_path)
         wav_path = audio_path.replace(".ogg", "_converted.wav")
         audio.set_frame_rate(16000).set_channels(1).export(wav_path, format="wav")
 
-        # 2) Upload
+        # 2) Upload raw bytes
         with open(wav_path, "rb") as f:
-            upload_headers = {
-                "authorization": ASSEMBLYAI_API_KEY
-            }
-            upload_res = requests.post(
-                "https://api.assemblyai.com/v2/upload",
-                headers=upload_headers,
-                files={"file": f}
-            )
+            audio_bytes = f.read()
+        upload_headers = {
+            "authorization": ASSEMBLYAI_API_KEY,
+            "content-type": "application/octet-stream"
+        }
+        upload_res = requests.post(
+            "https://api.assemblyai.com/v2/upload",
+            headers=upload_headers,
+            data=audio_bytes
+        )
         if upload_res.status_code != 200:
             return f"❌ Upload failed:\n{upload_res.status_code} {upload_res.text}"
         audio_url = upload_res.json().get("upload_url")
         if not audio_url:
             return "❌ No upload URL returned."
 
-        # 3) Request transcription (with language_detection only)
-        transcript_payload = {
-            "audio_url": audio_url,
-            "language_detection": True
-        }
+        # 3) Request transcription (with language detection)
         transcript_headers = {
             "authorization": ASSEMBLYAI_API_KEY,
-            "Content-Type": "application/json"
+            "content-type": "application/json"
         }
         transcribe_res = requests.post(
             "https://api.assemblyai.com/v2/transcript",
-            json=transcript_payload,
+            json={
+                "audio_url": audio_url,
+                "language_detection": True
+            },
             headers=transcript_headers
         )
         if transcribe_res.status_code != 200:
@@ -66,7 +67,6 @@ def transcribe_with_assemblyai(audio_path: str) -> str:
                 return f"🌐 Detected Language: `{lang}`\n\n📝 Transcription:\n{text}"
             if status_json["status"] == "error":
                 return f"❌ Transcription error: {status_json.get('error', 'Unknown')}"
-
             time.sleep(2)
 
     except Exception as e:
