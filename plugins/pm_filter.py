@@ -2392,7 +2392,8 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         #if message.text.startswith("/"): return  # ignore commands
         #if re.findall("((^\/|^,|^!|^\.|^[\U0001F600-\U000E007F]).*)", message.text):
             #return
-        if len(message.text) < 100:
+        text = message.caption or message.text or ""
+        if len(text) < 100:
             search = name
             search = search.lower()
             find = search.split(" ")
