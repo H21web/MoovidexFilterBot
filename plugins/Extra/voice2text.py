@@ -1,62 +1,61 @@
-# plugins/Extra/voice2text.py
-
-import os
-import wave
-import json
-import traceback
-from vosk import Model, KaldiRecognizer
+import os, traceback
+import speech_recognition as sr
 from pydub import AudioSegment
 from pyrogram import Client, filters
 from pyrogram.types import Message
+from googlesearch import search
+import re
 
-# Load English Vosk model
-model_path = "vosk-model-small-en-us-0.15"
-if not os.path.exists(model_path):
-    raise RuntimeError("❌ English model not found! Please unzip it to: vosk-model-small-en-us-0.15")
+def transcribe_audio(audio_path: str) -> str:
+    r = sr.Recognizer()
+    with sr.AudioFile(audio_path) as src:
+        audio = r.record(src, duration=10)  # 10-second limit
+        try:
+            return r.recognize_google(audio)
+        except sr.UnknownValueError:
+            return ""
+        except sr.RequestError as e:
+            raise RuntimeError(f"Google API error: {e}")
 
-model = Model(model_path)
-
-def transcribe_with_vosk(wav_path: str) -> str:
-    with wave.open(wav_path, "rb") as wf:
-        rec = KaldiRecognizer(model, wf.getframerate())
-        rec.SetWords(True)
-        results = []
-
-        while True:
-            data = wf.readframes(4000)
-            if not data:
-                break
-            if rec.AcceptWaveform(data):
-                result = json.loads(rec.Result())
-                results.append(result.get("text", ""))
-
-        final_result = json.loads(rec.FinalResult())
-        results.append(final_result.get("text", ""))
-
-    return " ".join(results).strip() or "🤖 Sorry, I couldn't recognize any speech."
+def extract_movie_title(query: str) -> str:
+    # Search Google for "<query> movie"
+    for url in search(f"{query} movie", num_results=3, pause=2):
+        # Optionally filter to known movie sites
+        if "imdb.com/title" in url:
+            # Extract the IMDb movie title from URL
+            title = url.rstrip("/").split("/")[-1]  # e.g., tt0133093
+            # Fallback: use query itself
+            return re.sub(r'\W+', ' ', query).strip()
+    # If no IMDb link found, return cleaned query
+    return re.sub(r'\W+', ' ', query).strip()
 
 @Client.on_message(filters.voice)
-async def voice_to_text_handler(bot: Client, message: Message):
-    status = await message.reply_text("🎙 Downloading and transcribing your voice...")
-
-    ogg_path = await bot.download_media(message.voice)
-    wav_path = ogg_path.replace(".ogg", ".wav")
-
+async def on_voice(bot: Client, message: Message):
+    status = await message.reply_text("🎙️ Processing your voice message...")
     try:
-        # Convert OGG to WAV (mono, 16kHz)
-        audio = AudioSegment.from_ogg(ogg_path)
-        audio.set_frame_rate(16000).set_channels(1).export(wav_path, format="wav")
+        ogg = await bot.download_media(message.voice)
+        if not ogg.endswith(".ogg"):
+            raise ValueError("Only .ogg voice messages supported")
 
-        # Transcribe using Vosk
-        transcript = transcribe_with_vosk(wav_path)
+        wav = ogg.replace(".ogg", ".wav")
+        audio = AudioSegment.from_ogg(ogg)
+        audio[:10000].export(wav, format="wav")  # 10 sec
 
-        await message.reply_text(f"🗣 English Text:\n\n`{transcript}`", quote=True)
+        text = transcribe_audio(wav)
+        if not text:
+            reply = "🤖 Couldn't recognize speech."
+        else:
+            title = extract_movie_title(text)
+            reply = f"🎥 Detected movie: *{title}*"
+
+        await message.reply_text(reply, quote=True)
         await status.delete()
 
     except Exception as e:
-        traceback.print_exc()
-        await status.edit_text(f"❌ Error occurred:\n{str(e)}")
+        await status.edit_text("❌ Error:\n" + str(e))
+        print(traceback.format_exc())
+
     finally:
-        for path in (ogg_path, wav_path):
-            if path and os.path.exists(path):
-                os.remove(path)
+        for f in [locals().get('ogg'), locals().get('wav')]:
+            if f and os.path.exists(f):
+                os.remove(f)
