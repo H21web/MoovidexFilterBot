@@ -14,7 +14,7 @@ from plugins.pm_filter import boovo
 
 # IMDbPY client
 ia = Cinemagoer()
-DEEPGRAM_API_KEY = "d745106d263708f978a6428537300505be9589bb"
+DEEPGRAM_API_KEY = "1dfd7f7ca928a4534a3f7df070b3ce7c5bf0b1f6"
 
 # Limits
 VOICE_LIMIT = 10
