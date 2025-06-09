@@ -15,7 +15,10 @@ API_ID = int(environ.get('API_ID', ''))
 API_HASH = environ.get('API_HASH', '')
 BOT_TOKEN = environ.get('BOT_TOKEN', "")
 
-
+DEEPGRAM_API_KEYS = [
+    "1dfd7f7ca928a4534a3f7df070b3ce7c5bf0b1f6",
+    "175b011b58115ea354fe4d203a99a704b4d093d0"
+]
 # This Pictures Is For Start Message Picture, You Can Add Multiple By Giving One Space Between Each.
 PICS = (environ.get('PICS', 'https://graph.org/file/ce1723991756e48c35aa1.jpg')).split()
 
