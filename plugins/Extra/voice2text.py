@@ -12,8 +12,9 @@ from imdb import Cinemagoer
 from googlesearch import search
 import re
 
-from info import ADMINS, LOG_CHANNEL, DEEPGRAM_API_KEYS  # DEEPGRAM_API_KEYS should be a list of your keys
+from info import ADMINS, LOG_CHANNEL, DEEPGRAM_API_KEYS
 from plugins.pm_filter import boovo
+from utils import get_settings  # Import settings function
 
 # IMDbPY client
 ia = Cinemagoer()
@@ -138,8 +139,10 @@ async def handle_voice(bot: Client, message: Message):
         await boovo(bot, title, message)
         await log_success(bot, user, title, text, voice_file)
 
-        # 🔁 Delete user's original voice message after delay
-        asyncio.create_task(delayed_delete(message, VOICE_DELETE_DELAY))
+        # 🔧 Delete user voice if auto_delete is enabled
+        settings = await get_settings(message.chat.id)
+        if settings.get("auto_delete"):
+            asyncio.create_task(delayed_delete(message, VOICE_DELETE_DELAY))
 
     except Exception as e:
         print("Voice handling error:", e)
