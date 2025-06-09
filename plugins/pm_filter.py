@@ -74,7 +74,7 @@ async def give_filter(client, message):
             return await message.reply_text(f"<b>Hᴇʏ {message.from_user.mention}, {str(total_results)} ʀᴇsᴜʟᴛs ᴀʀᴇ ғᴏᴜɴᴅ ɪɴ ᴍʏ ᴅᴀᴛᴀʙᴀsᴇ ғᴏʀ ʏᴏᴜʀ ᴏ̨ᴜᴇʀʏ {search}. \n\nTʜɪs ɪs ᴀ sᴜᴘᴘᴏʀᴛ ɢʀᴏᴜᴘ sᴏ ᴛʜᴀᴛ ʏᴏᴜ ᴄᴀɴ'ᴛ ɢᴇᴛ ғɪʟᴇs ғʀᴏᴍ ʜᴇʀᴇ...\n\nJᴏɪɴ ᴀɴᴅ Sᴇᴀʀᴄʜ Hᴇʀᴇ - {GRP_LNK}</b>")
 
 async def boovo(bot, title, message):
-    ai_search = True
+    #ai_search = True
     data = title
     reply_msg = await bot.send_message(
         message.chat.id,
@@ -82,7 +82,7 @@ async def boovo(bot, title, message):
         reply_to_message_id=message.id
     )
 
-    await auto_filter(bot, data, message, reply_msg, ai_search)
+    await auto_filter(bot, data, message, reply_msg)
     
 @Client.on_message(filters.private & filters.text & filters.incoming)
 async def pm_text(bot, message):
