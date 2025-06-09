@@ -110,7 +110,7 @@ async def handle_voice(bot: Client, message: Message):
             return
         daily_usage[user_id][today_str] += 1
 
-    status = await message.reply_text("🎙 Processing your voice...")
+    status = await message.reply_text("🎙 Please wait...")
 
     try:
         voice_file = await bot.download_media(message.voice)
@@ -127,7 +127,7 @@ async def handle_voice(bot: Client, message: Message):
         text = await asyncio.to_thread(transcribe_with_deepgram, wav_file)
 
         if not text:
-            await status.edit_text("🤖 Could not recognize any speech or transcription timed out.")
+            await status.edit_text("🤖 Could not recognize any speech or transcription timed out. Try Again")
             await log_unrecognized(bot, user, voice_file)
             return
 
