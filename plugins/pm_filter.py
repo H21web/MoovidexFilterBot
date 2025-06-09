@@ -96,7 +96,8 @@ async def pm_text(bot, message):
 
     kd = await global_filters(bot, message)
     if kd is False:
-        if PM_SEARCH_ENABLED:
+        if PM_SEARCH == True:
+            ai_search = True
             reply_msg = await bot.send_message(
                 chat_id=message.chat.id,
                 text=f"<b><i>Searching For {content} 🔍</i></b>",
