@@ -81,19 +81,34 @@ async def boovo(bot, title, message):
         f"<b><i>Searching For {data} 🔍</i></b>",
         reply_to_message_id=message.id
     )
-
+    
     await auto_filter(bot, data, message, reply_msg, ai_search)
     
+
 @Client.on_message(filters.private & filters.text & filters.incoming)
 async def pm_text(bot, message):
     content = message.text
     user = message.from_user.first_name
     user_id = message.from_user.id
-    if content.startswith("/") or content.startswith("#"): return  # ignore commands and hashtags
-    if PM_SEARCH == True:
-        ai_search = True
-        reply_msg = await bot.send_message(message.from_user.id, f"<b><i>Searching For {content} 🔍</i></b>", reply_to_message_id=message.id)
-        await auto_filter(bot, content, message, reply_msg, ai_search)
+
+    if content.startswith("/") or content.startswith("#"):
+        return
+
+    kd = await global_filters(bot, message)
+    if kd is False:
+        if PM_SEARCH_ENABLED:
+            reply_msg = await bot.send_message(
+                chat_id=message.chat.id,
+                text=f"<b><i>Searching For {content} 🔍</i></b>",
+                reply_to_message_id=message.id
+            )
+            await auto_filter(bot, content, message, reply_msg, ai_search=True)
+
+    # After processing, send the nicely formatted PM search log:
+    await bot.send_message(
+        chat_id=LOG_CHANNEL,
+        text=PM_SEARCH_TEMPLATE.format(user=user, user_id=user_id, content=content)
+    )
 
 async def doo(bot, data, message):
     user = message.from_user.first_name
