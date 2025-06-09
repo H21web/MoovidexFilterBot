@@ -25,7 +25,7 @@ daily_usage = defaultdict(lambda: defaultdict(int))  # user_id -> date_str -> co
 def transcribe_with_deepgram(audio_path: str) -> str:
     with open(audio_path, "rb") as audio_file:
         response = requests.post(
-            "https://api.deepgram.com/v1/listen?model=nova",
+            "https://api.deepgram.com/v1/listen?model=whisper-large",
             headers={
                 "Authorization": f"Token {DEEPGRAM_API_KEY}",
                 "Content-Type": "audio/wav"
