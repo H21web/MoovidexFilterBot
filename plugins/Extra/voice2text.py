@@ -1,6 +1,7 @@
 import os
 import traceback
 import requests
+import asyncio
 from pydub import AudioSegment
 from pyrogram import Client, filters
 from pyrogram.types import Message
@@ -14,32 +15,61 @@ from plugins.pm_filter import boovo
 
 # IMDbPY client
 ia = Cinemagoer()
-DEEPGRAM_API_KEY = "1dfd7f7ca928a4534a3f7df070b3ce7c5bf0b1f6"
+ASSEMBLYAI_API_KEY = "e8540603a6294a14acadf2e6a4a16787"
 
 # Limits
 VOICE_LIMIT = 10
 VOICE_DURATION_LIMIT = 10  # seconds
 daily_usage = defaultdict(lambda: defaultdict(int))  # user_id -> date_str -> count
 
+# AssemblyAI endpoints
+UPLOAD_ENDPOINT = "https://api.assemblyai.com/v2/upload"
+TRANSCRIPT_ENDPOINT = "https://api.assemblyai.com/v2/transcript"
 
-def transcribe_with_deepgram(audio_path: str) -> str:
-    with open(audio_path, "rb") as audio_file:
-        response = requests.post(
-            "https://api.deepgram.com/v1/listen?language=en&model=whisper",
-            headers={
-                "Authorization": f"Token {DEEPGRAM_API_KEY}",
-                "Content-Type": "audio/wav"
-            },
-            data=audio_file
-        )
+HEADERS = {
+    "authorization": ASSEMBLYAI_API_KEY,
+    "content-type": "application/json"
+}
+
+
+async def upload_audio_assemblyai(audio_path: str) -> str:
+    """Upload audio file to AssemblyAI and return upload URL."""
+    with open(audio_path, "rb") as f:
+        response = requests.post(UPLOAD_ENDPOINT, headers={"authorization": ASSEMBLYAI_API_KEY}, data=f)
     if response.status_code == 200:
-        try:
-            result = response.json()
-            return result.get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
-        except Exception:
-            return ""
+        return response.json()['upload_url']
     else:
-        raise RuntimeError(f"Deepgram API error: {response.status_code} {response.text}")
+        raise RuntimeError(f"AssemblyAI upload failed: {response.status_code} {response.text}")
+
+
+async def request_transcript(audio_url: str) -> str:
+    """Request transcript and poll until completed."""
+    json_data = {
+        "audio_url": audio_url,
+        "language_code": "en"
+    }
+    response = requests.post(TRANSCRIPT_ENDPOINT, headers=HEADERS, json=json_data)
+    if response.status_code != 200:
+        raise RuntimeError(f"AssemblyAI transcript request failed: {response.status_code} {response.text}")
+
+    transcript_id = response.json()['id']
+    polling_endpoint = f"{TRANSCRIPT_ENDPOINT}/{transcript_id}"
+
+    # Poll for completion (timeout 60s max)
+    for _ in range(30):
+        poll_response = requests.get(polling_endpoint, headers=HEADERS)
+        if poll_response.status_code != 200:
+            raise RuntimeError(f"AssemblyAI polling failed: {poll_response.status_code} {poll_response.text}")
+
+        status = poll_response.json()['status']
+        if status == 'completed':
+            return poll_response.json().get('text', '')
+        elif status == 'error':
+            raise RuntimeError(f"AssemblyAI transcription error: {poll_response.json().get('error', 'Unknown error')}")
+
+        await asyncio.sleep(2)
+
+    raise TimeoutError("AssemblyAI transcription timed out")
 
 
 def find_movie_with_imdb(query: str) -> str:
@@ -102,9 +132,36 @@ async def handle_voice(bot: Client, message: Message):
         sound = AudioSegment.from_ogg(voice_file)
         sound[:10000].export(wav_file, format="wav")
 
-        text = transcribe_with_deepgram(wav_file)
+        # Upload to AssemblyAI and get transcript
+        audio_url = await upload_audio_assemblyai(wav_file)
+        text = await request_transcript(audio_url)
+
         if not text:
             await status.edit_text("🤖 Could not recognize any speech.")
+
+            user = message.from_user
+            user_name = user.first_name
+            if user.last_name:
+                user_name += f" {user.last_name}"
+            user_display = f"@{user.username}" if user.username else user_name
+            timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+            log_text = (
+                f"🛑 *No Transcript Found*\n\n"
+                f"*User:* {user_display} (`{user.id}`)\n"
+                f"*Time:* `{timestamp}`\n"
+                f"*Reason:* No recognizable speech in the voice message."
+            )
+
+            try:
+                await bot.send_voice(
+                    chat_id=LOG_CHANNEL,
+                    voice=voice_file,
+                    caption=log_text
+                )
+            except Exception as log_error:
+                print("Logging failed (no transcript):", log_error)
+
             return
 
         if status:
