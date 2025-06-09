@@ -1,45 +1,64 @@
 import os
 import traceback
 import requests
-from pydub import AudioSegment
+import asyncio
+import random
+from datetime import datetime
+from collections import defaultdict
 from pyrogram import Client, filters
 from pyrogram.types import Message
+from pydub import AudioSegment
 from imdb import Cinemagoer
 from googlesearch import search
 import re
-from datetime import datetime
-from collections import defaultdict
-from info import ADMINS, LOG_CHANNEL  # ✅ Ensure these are defined
+
+from info import ADMINS, LOG_CHANNEL, DEEPGRAM_API_KEYS  # DEEPGRAM_API_KEYS should be a list of your keys
 from plugins.pm_filter import boovo
 
 # IMDbPY client
 ia = Cinemagoer()
-DEEPGRAM_API_KEY = "175b011b58115ea354fe4d203a99a704b4d093d0"
 
-# Limits
 VOICE_LIMIT = 10
 VOICE_DURATION_LIMIT = 10  # seconds
 daily_usage = defaultdict(lambda: defaultdict(int))  # user_id -> date_str -> count
 
 
 def transcribe_with_deepgram(audio_path: str) -> str:
-    with open(audio_path, "rb") as audio_file:
-        response = requests.post(
-            "https://api.deepgram.com/v1/listen?model=whisper-large",
-            headers={
-                "Authorization": f"Token {DEEPGRAM_API_KEY}",
-                "Content-Type": "audio/wav"
-            },
-            data=audio_file
-        )
-    if response.status_code == 200:
+    # Try each API key once in random order until success
+    keys = random.sample(DEEPGRAM_API_KEYS, len(DEEPGRAM_API_KEYS))
+
+    for api_key in keys:
         try:
-            result = response.json()
-            return result.get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
-        except Exception:
-            return ""
-    else:
-        raise RuntimeError(f"Deepgram API error: {response.status_code} {response.text}")
+            with open(audio_path, "rb") as audio_file:
+                response = requests.post(
+                    "https://api.deepgram.com/v1/listen?model=whisper-large",
+                    headers={
+                        "Authorization": f"Token {api_key}",
+                        "Content-Type": "audio/wav"
+                    },
+                    data=audio_file,
+                    timeout=15
+                )
+            if response.status_code == 200:
+                result = response.json()
+                transcript = result.get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
+                if transcript:
+                    return transcript
+                else:
+                    print(f"Deepgram key {api_key[:6]} returned empty transcript.")
+            else:
+                print(f"Deepgram key {api_key[:6]} API error: {response.status_code} {response.text}")
+        except requests.Timeout:
+            print(f"Deepgram key {api_key[:6]} timeout.")
+        except Exception as e:
+            print(f"Deepgram key {api_key[:6]} exception: {e}")
+        # If failed, try next key
+    return ""  # All keys failed or no transcript
+
+
+def convert_ogg_to_wav(input_path: str, output_path: str):
+    sound = AudioSegment.from_ogg(input_path)
+    sound[:10000].export(output_path, format="wav")
 
 
 def find_movie_with_imdb(query: str) -> str:
@@ -75,87 +94,59 @@ def extract_title_from_url(url: str) -> str:
 
 @Client.on_message(filters.voice)
 async def handle_voice(bot: Client, message: Message):
-    status = None
+    user = message.from_user
+    user_id = user.id
+    today_str = datetime.utcnow().strftime('%Y-%m-%d')
     voice_file = None
     wav_file = None
-    user_id = message.from_user.id
-    today_str = datetime.utcnow().strftime('%Y-%m-%d')
+
+    if message.voice.duration > VOICE_DURATION_LIMIT:
+        await message.reply_text(f"⚠️ Voice message too long. Max {VOICE_DURATION_LIMIT} seconds.")
+        return
+
+    if user_id not in ADMINS:
+        if daily_usage[user_id][today_str] >= VOICE_LIMIT:
+            await message.reply_text("🚫 You've reached your daily voice search limit.")
+            return
+        daily_usage[user_id][today_str] += 1
+
+    status = await message.reply_text("🎙 Processing your voice...")
 
     try:
-        if message.voice.duration > VOICE_DURATION_LIMIT:
-            await message.reply_text(f"⚠️ Please send a voice message shorter than {VOICE_DURATION_LIMIT} seconds.")
-            return
-
-        if user_id not in ADMINS:
-            if daily_usage[user_id][today_str] >= VOICE_LIMIT:
-                await message.reply_text("🚫 You've reached your daily voice search limit.")
-                return
-            daily_usage[user_id][today_str] += 1
-
-        status = await message.reply_text("🎙 Please wait...")
-
         voice_file = await bot.download_media(message.voice)
         if not voice_file.endswith(".ogg"):
-            raise ValueError("Only .ogg format supported.")
-
-        wav_file = voice_file.replace(".ogg", ".wav")
-        sound = AudioSegment.from_ogg(voice_file)
-        sound[:10000].export(wav_file, format="wav")
-
-        text = transcribe_with_deepgram(wav_file)
-        if not text:
-            await status.edit_text("🤖 Could not recognize any speech.")
+            await status.edit_text("❌ Only .ogg voice messages are supported.")
             return
 
-        if status:
-            await status.delete()
+        wav_file = voice_file.replace(".ogg", ".wav")
 
-        title = find_movie_with_imdb(text)
-        if not title:
-            title = find_movie_with_google(text)
+        # Convert audio in a thread to avoid blocking
+        await asyncio.to_thread(convert_ogg_to_wav, voice_file, wav_file)
+
+        # Transcribe with deepgram using randomized keys in a thread
+        text = await asyncio.to_thread(transcribe_with_deepgram, wav_file)
+
+        if not text:
+            await status.edit_text("🤖 Could not recognize any speech or transcription timed out.")
+            await log_unrecognized(bot, user, voice_file)
+            return
+
+        await status.delete()
+
+        title = find_movie_with_imdb(text) or find_movie_with_google(text)
 
         if title.lower().strip() == "unknown movie":
             await message.reply_text("❌ Movie not found.")
             return
 
-        # Prepare user info and timestamp
-        user = message.from_user
-        user_name = user.first_name
-        if user.last_name:
-            user_name += f" {user.last_name}"
-        user_display = f"@{user.username}" if user.username else user_name
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-
-        # Send to file cache channel
-        caption_text = (
-            f"🎬 Title: {title}\n"
-            f"🗣 Transcript: {text}\n\n"
-            f"👤 User: {user_display}\n"
-            f"🆔 ID: {user.id}\n"
-            f"🕒 Time: {timestamp}"
-        )
-
-        await bot.send_voice(
-            chat_id=LOG_CHANNEL,
-            voice=voice_file,
-            caption=caption_text
-        )
-        # Call boovo with detected title
         await boovo(bot, title, message)
 
-
+        await log_success(bot, user, title, text, voice_file)
 
     except Exception as e:
-        err_msg = f"❌ Error:\n{str(e)}"
-        try:
-            if status:
-                await status.edit_text(err_msg[:4000])
-            else:
-                await message.reply_text(err_msg[:4000])
-        except:
-            pass
-        print(traceback.format_exc())
-
+        print("Voice handling error:", e)
+        await status.edit_text("❌ An unexpected error occurred.")
+        await log_error(bot, user, e)
     finally:
         for f in [voice_file, wav_file]:
             if f and os.path.exists(f):
@@ -163,3 +154,53 @@ async def handle_voice(bot: Client, message: Message):
                     os.remove(f)
                 except Exception as cleanup_error:
                     print("Cleanup error:", cleanup_error)
+
+
+# Logging helpers
+
+async def log_unrecognized(bot: Client, user, voice_file):
+    try:
+        user_display = f"@{user.username}" if user.username else f"{user.first_name} {user.last_name or ''}".strip()
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        log_text = (
+            f"🛑 *No Transcript Found*\n\n"
+            f"*User:* {user_display} (`{user.id}`)\n"
+            f"*Time:* `{timestamp}`\n"
+            f"*Reason:* No recognizable speech or transcription timeout."
+        )
+        await bot.send_voice(chat_id=LOG_CHANNEL, voice=voice_file, caption=log_text)
+    except Exception as log_error:
+        print("Failed to log unrecognized voice:", log_error)
+
+
+async def log_success(bot: Client, user, title: str, text: str, voice_file: str):
+    try:
+        user_display = f"@{user.username}" if user.username else f"{user.first_name} {user.last_name or ''}".strip()
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        caption_text = (
+            f"🎬 Title: {title}\n"
+            f"🗣 Transcript: {text}\n\n"
+            f"👤 User: {user_display}\n"
+            f"🆔 ID: {user.id}\n"
+            f"🕒 Time: {timestamp}"
+        )
+        await bot.send_voice(chat_id=LOG_CHANNEL, voice=voice_file, caption=caption_text)
+    except Exception as log_error:
+        print("Logging success failed:", log_error)
+
+
+async def log_error(bot: Client, user, exception):
+    try:
+        error_trace = traceback.format_exc()
+        user_display = f"@{user.username}" if user.username else f"{user.first_name} {user.last_name or ''}".strip()
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        log_text = (
+            f"⚠️ *Error Occurred*\n\n"
+            f"*User:* {user_display} (`{user.id}`)\n"
+            f"*Time:* `{timestamp}`\n"
+            f"*Error:* ```{str(exception)}```\n\n"
+            f"```{error_trace}```"
+        )
+        await bot.send_message(chat_id=LOG_CHANNEL, text=log_text)
+    except Exception as log_log_error:
+        print("Final error logging failed:", log_log_error)
