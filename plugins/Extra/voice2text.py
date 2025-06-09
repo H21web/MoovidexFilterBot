@@ -20,11 +20,11 @@ ia = Cinemagoer()
 
 VOICE_LIMIT = 10
 VOICE_DURATION_LIMIT = 10  # seconds
+VOICE_DELETE_DELAY = 300  # seconds (5 minutes)
 daily_usage = defaultdict(lambda: defaultdict(int))  # user_id -> date_str -> count
 
 
 def transcribe_with_deepgram(audio_path: str) -> str:
-    # Try each API key once in random order until success
     keys = random.sample(DEEPGRAM_API_KEYS, len(DEEPGRAM_API_KEYS))
 
     for api_key in keys:
@@ -52,8 +52,7 @@ def transcribe_with_deepgram(audio_path: str) -> str:
             print(f"Deepgram key {api_key[:6]} timeout.")
         except Exception as e:
             print(f"Deepgram key {api_key[:6]} exception: {e}")
-        # If failed, try next key
-    return ""  # All keys failed or no transcript
+    return ""
 
 
 def convert_ogg_to_wav(input_path: str, output_path: str):
@@ -120,10 +119,7 @@ async def handle_voice(bot: Client, message: Message):
 
         wav_file = voice_file.replace(".ogg", ".wav")
 
-        # Convert audio in a thread to avoid blocking
         await asyncio.to_thread(convert_ogg_to_wav, voice_file, wav_file)
-
-        # Transcribe with deepgram using randomized keys in a thread
         text = await asyncio.to_thread(transcribe_with_deepgram, wav_file)
 
         if not text:
@@ -140,8 +136,10 @@ async def handle_voice(bot: Client, message: Message):
             return
 
         await boovo(bot, title, message)
-
         await log_success(bot, user, title, text, voice_file)
+
+        # 🔁 Delete user's original voice message after delay
+        asyncio.create_task(delayed_delete(message, VOICE_DELETE_DELAY))
 
     except Exception as e:
         print("Voice handling error:", e)
@@ -154,6 +152,14 @@ async def handle_voice(bot: Client, message: Message):
                     os.remove(f)
                 except Exception as cleanup_error:
                     print("Cleanup error:", cleanup_error)
+
+
+async def delayed_delete(msg: Message, delay: int):
+    await asyncio.sleep(delay)
+    try:
+        await msg.delete()
+    except Exception as delete_error:
+        print("Failed to delete user's voice message:", delete_error)
 
 
 # Logging helpers
