@@ -118,11 +118,8 @@ async def handle_voice(bot: Client, message: Message):
             await message.reply_text("❌ Movie not found.")
             return
 
-        # Call boovo with detected title
         await boovo(bot, title, message)
 
-
-        # Prepare user info and timestamp
         user = message.from_user
         user_name = user.first_name
         if user.last_name:
@@ -130,7 +127,6 @@ async def handle_voice(bot: Client, message: Message):
         user_display = f"@{user.username}" if user.username else user_name
         timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
-        # Send to file cache channel
         caption_text = (
             f"🎬 Title: {title}\n"
             f"🗣 Transcript: {text}\n\n"
@@ -146,15 +142,36 @@ async def handle_voice(bot: Client, message: Message):
         )
 
     except Exception as e:
-        err_msg = f"❌ Error:\n{str(e)}"
         try:
             if status:
-                await status.edit_text(err_msg[:4000])
+                await status.edit_text("❌ An unexpected error occurred while processing your request.")
             else:
-                await message.reply_text(err_msg[:4000])
+                await message.reply_text("❌ An unexpected error occurred while processing your request.")
         except:
             pass
-        print(traceback.format_exc())
+
+        # Prepare and send error log
+        error_trace = traceback.format_exc()
+        user = message.from_user
+        user_name = user.first_name
+        if user.last_name:
+            user_name += f" {user.last_name}"
+        user_display = f"@{user.username}" if user.username else user_name
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+        log_text = (
+            f"⚠️ *Error Occurred*\n\n"
+            f"*User:* {user_display} (`{user.id}`)\n"
+            f"*Time:* `{timestamp}`\n"
+            f"*Error:* ```{str(e)}```\n\n"
+            f"```{error_trace}```"
+        )
+
+        try:
+            await bot.send_message(chat_id=LOG_CHANNEL, text=log_text)
+        except Exception as log_error:
+            print("Logging failed:", log_error)
+            print(error_trace)
 
     finally:
         for f in [voice_file, wav_file]:
