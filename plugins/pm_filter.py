@@ -74,7 +74,7 @@ async def give_filter(client, message):
             return await message.reply_text(f"<b>Hᴇʏ {message.from_user.mention}, {str(total_results)} ʀᴇsᴜʟᴛs ᴀʀᴇ ғᴏᴜɴᴅ ɪɴ ᴍʏ ᴅᴀᴛᴀʙᴀsᴇ ғᴏʀ ʏᴏᴜʀ ᴏ̨ᴜᴇʀʏ {search}. \n\nTʜɪs ɪs ᴀ sᴜᴘᴘᴏʀᴛ ɢʀᴏᴜᴘ sᴏ ᴛʜᴀᴛ ʏᴏᴜ ᴄᴀɴ'ᴛ ɢᴇᴛ ғɪʟᴇs ғʀᴏᴍ ʜᴇʀᴇ...\n\nJᴏɪɴ ᴀɴᴅ Sᴇᴀʀᴄʜ Hᴇʀᴇ - {GRP_LNK}</b>")
 
 async def boovo(bot, title, message):
-    #ai_search = True
+    ai_search = True
     data = title
     reply_msg = await bot.send_message(
         message.chat.id,
@@ -82,7 +82,7 @@ async def boovo(bot, title, message):
         reply_to_message_id=message.id
     )
 
-    await auto_filter(bot, data, message, reply_msg)
+    await auto_filter(bot, data, message, reply_msg, ai_search)
     
 @Client.on_message(filters.private & filters.text & filters.incoming)
 async def pm_text(bot, message):
@@ -2601,12 +2601,14 @@ async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
     reqstr1 = msg.from_user.id if msg.from_user else 0
     reqstr = await client.get_users(reqstr1)
     settings = await get_settings(msg.chat.id)
+
+    msg_text = msg.text if isinstance(msg.text, str) else ""  # ✅ Prevent TypeError here
     query = re.sub(
-    r"\b(pl(i|e)*?(s|z+|ease|se|ese|(e+)s(e)?)|((send|snd|giv(e)?|gib)(\sme)?)|movie(s)?|new|latest|br((o|u)h?)*|^h(e|a)?(l)*(o)*|mal(ayalam)?|t(h)?amil|file|that|find|und(o)*|kit(t(i|y)?)?o(w)?|thar(u)?(o)*w?|kittum(o)*|aya(k)*(um(o)*)?|full\smovie|any(one)|with\ssubtitle(s)?)",
-    "", msg.text,
-    flags=re.IGNORECASE)
-    # plis contribute some common words
+        r"\b(pl(i|e)*?(s|z+|ease|se|ese|(e+)s(e)?)|((send|snd|giv(e)?|gib)(\sme)?)|movie(s)?|new|latest|br((o|u)h?)*|^h(e|a)?(l)*(o)*|mal(ayalam)?|t(h)?amil|file|that|find|und(o)*|kit(t(i|y)?)?o(w)?|thar(u)?(o)*w?|kittum(o)*|aya(k)*(um(o)*)?|full\smovie|any(one)|with\ssubtitle(s)?)",
+        "", msg_text,
+        flags=re.IGNORECASE)
     query = query.strip() + " movie"
+
     try:
         movies = await get_poster(mv_rqst, bulk=True)
     except Exception as e:
