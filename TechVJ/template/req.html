@@ -11,7 +11,7 @@
     <meta property="og:image" content="https://h21web.github.io/host/assets/images/folder.png">
     <meta property="og:description" content="Free High Quality Series And Movies Download 🍿.MooviDex Group Provide All Language,Genre Movie For Free. No Ads Join Fast...">
     <meta name="description" content="Free High Quality Series And Movies Download 🍿.MooviDex Group Provide All Language,Genre Movie For Free. No Ads Join Fast...">
-    <title><!-- Filename --></title>
+    <title>{{file_name}}</title>
   <link rel="icon" href="https://kuttudb.github.io/hostingly21/img/favicon-96x96.png" type="image/x-icon" />
   <link rel="apple-touch-icon" href="https://kuttudb.github.io/hostingly21/img/favicon-96x96.png" />
   <meta name="theme-color" content="#205dee" />
@@ -260,42 +260,43 @@
     function initializePlayer(posterUrl) {
         OPlayer.make('#oplayer', {
             source: {
-                src: downloadlink,
-                poster: posterUrl
+                
+                src: downloadlink,  // Dynamic download link
+                poster: posterUrl   // Dynamic poster URL
             }
         })
         .use([
             OUI({
                 fullscreen: true,
-                coverButton: true,
-                miniProgressBar: true,
-                autoFocus: true,
-                forceLandscapeOnFullscreen: true,
-                screenshot: false,
-                pictureInPicture: true,
-                showControls: 'always',
-                keyboard: { focused: true, global: false },
-                settings: ['loop'],
-                theme: {
-                    primaryColor: 'red',
-                    watermark: {
-                        src: 'https://h21web.github.io/cdn/assets/moovidex-logo.png',
-                        style: {
-                            position: 'absolute',
-                            top: '0px',
-                            right: '8px',
-                            width: '40px',
-                            height: 'auto'
-                        },
-                        attrs: {
-                            class: 'watermark'
-                        }
+            coverButton: true,
+            miniProgressBar: true,
+            autoFocus: true,
+            forceLandscapeOnFullscreen: true,
+            screenshot: false,
+            pictureInPicture: true,
+            showControls: 'always',
+            keyboard: { focused: true, global: false },
+            settings: ['loop'],
+            theme: {
+                primaryColor: 'red',
+                watermark: {
+                    src: 'https://h21web.github.io/cdn/assets/moovidex-logo.png',
+                    style: {
+                        position: 'absolute',
+                        top: '0px',
+                        right: '8px',
+                        width: '40px',
+                        height: 'auto'
+                    },
+                    attrs: {
+                        class: 'watermark'
                     }
-                },
-                speeds: ['2.0', '1.75', '1.25', '1.0', '0.75', '0.5'],
-                slideToSeek: 'long-touch',
-                controlBar: false,
-                topSetting: false,
+                }
+            },
+            speeds: ['2.0', '1.75', '1.25', '1.0', '0.75', '0.5'],
+            slideToSeek: 'long-touch',
+            controlBar: false,
+            topSetting: false,
             }),
             OHls({
                 forceHLS: true,
@@ -305,48 +306,76 @@
         .create();
     }
 
-    // Call fetch and initialize
-    fetchPoster(FileName, function(posterUrl) {
+    // Fetch the poster and initialize the player
+    fetchPoster(`${FileName}`, function(posterUrl) {
         initializePlayer(posterUrl);
     });
 
-    // External Player Handlers
-    function openIntent(uri, pkg) {
-        const intent = `intent:${uri}#Intent;package=${pkg};end`;
-        window.open(intent, '_blank');
-        Telegram.WebApp.HapticFeedback.notificationOccurred('light');
+    // Step 4: Define functions for external players
+    function mx_player() {
+        const openMx = `intent:${downloadlink}#Intent;package=com.mxtech.videoplayer.ad;end`;
+        window.open(openMx, '_blank');
+          Telegram.WebApp.HapticFeedback.notificationOccurred('light');
     }
 
-    function mx_player()      { openIntent(downloadlink, 'com.mxtech.videoplayer.ad'); }
-    function vlc_player()     { window.open(`vlc://${downloadlink}`, '_blank'); Telegram.WebApp.HapticFeedback.notificationOccurred('light'); }
-    function km_player()      { openIntent(downloadlink, 'com.kmplayer'); }
-    function playit_player()  { openIntent(downloadlink, 'uplayer.video.player'); }
-    function s_player()       { openIntent(downloadlink + '#Intent;action=com.young.simple.player.playback_online', 'com.young.simple.player'); }
-    function u_player()       { openIntent(downloadlink, 'uplayer.video.player'); }
+    function vlc_player() {
+        const openVlc = `vlc://${downloadlink}`;
+        window.open(openVlc, '_blank');
+          Telegram.WebApp.HapticFeedback.notificationOccurred('light');
+    }
 
+    function km_player() {
+        const openKmplayer = `intent:${downloadlink}#Intent;package=com.kmplayer;end`;
+        window.open(openKmplayer, '_blank');
+          Telegram.WebApp.HapticFeedback.notificationOccurred('light');
+    }
+
+    function playit_player() {
+        const openPlayit = `intent:${downloadlink}#Intent;package=uplayer.video.player;end`;
+        window.open(openPlayit, '_blank');
+          Telegram.WebApp.HapticFeedback.notificationOccurred('light');
+    }
+
+    function s_player() {
+        const openS = `intent:${downloadlink}#Intent;action=com.young.simple.player.playback_online;package=com.young.simple.player;end`;
+        window.open(openS, '_blank');
+          Telegram.WebApp.HapticFeedback.notificationOccurred('light');
+    }
+
+    function u_player() {
+        const openU = `intent:${downloadlink}#Intent;package=uplayer.video.player;end`;
+        window.open(openU, '_blank');
+          Telegram.WebApp.HapticFeedback.notificationOccurred('light');
+    }
+
+    // Step 5: Other helper functions
     function download() {
         window.open(downloadlink, '_blank');
         Telegram.WebApp.HapticFeedback.notificationOccurred('success');
     }
-
-    function copyUrl() {
-        navigator.clipboard.writeText(downloadlink)
-            .then(() => alert('URL copied to clipboard!'))
-            .catch((err) => console.error('Failed to copy: ', err));
-        Telegram.WebApp.HapticFeedback.notificationOccurred('light');
-    }
-
+      
     function get_file() {
-        const regex = /\/watch\/(\d+)\/.*\?hash=([A-Za-z0-9_-]+)/;
+        const regex = /(\d+)\?id=(\d+)&/;
         const match = videoLink.match(regex);
         if (match) {
             const chatId = "-100" + match[1];
             const messageId = match[2];
-            const openTG = `https://t.me/YOUR_BOT_USERNAME?start=file_${messageId}${chatId}`;
-            Telegram.WebApp.openTelegramLink(openTG, '_blank');
-            Telegram.WebApp.close();
-            Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+            const openTG = `https://t.me/<!-- Username -->?start=file_${messageId}${chatId}`;  // Removed HTML comment for Username
+          Telegram.WebApp.openTelegramLink(openTG, '_blank');
+          Telegram.WebApp.close();
+          Telegram.WebApp.HapticFeedback.notificationOccurred('success');
         }
+    }
+      
+    function copyUrl() {
+        navigator.clipboard.writeText(downloadlink)
+            .then(() => {
+                alert('URL copied to clipboard!');
+            })
+            .catch((error) => {
+                console.error('Failed to copy URL: ', error);
+            });
+          Telegram.WebApp.HapticFeedback.notificationOccurred('light');
     }
 </script>
 
