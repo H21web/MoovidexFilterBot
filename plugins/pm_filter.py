@@ -342,7 +342,7 @@ async def advantage_spoll_choker(bot, query):
 
                 final_text = script.MVE_NT_FND
                 if api_answer:
-                    final_text += f"\n\n<blockquote><b>{api_answer}</b></blockquote"
+                    final_text += f"\n\n<blockquote><b>{api_answer}</b></blockquote>"
 
                 msg = await query.message.edit(final_text, reply_markup=InlineKeyboardMarkup(request_btn))
                 await asyncio.sleep(120)
