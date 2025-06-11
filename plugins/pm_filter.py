@@ -2672,67 +2672,24 @@ async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
         await handle_no_results(client, reply_msg, mv_rqst, reqstr)
         return
 
+    # Store spell-check options (still optional for debug/logging)
     movielist = []
     movielist += [movie.get('title') for movie in movies]
     movielist += [f"{movie.get('title')} {movie.get('year')}" for movie in movies]
     SPELL_CHECK[mv_id] = movielist
 
-    if AI_SPELL_CHECK and vj_search:
-        vj_search_new = False
+    # Directly use the first movie title
+    first_movie_title = movies[0].get('title')
+    if first_movie_title:
         try:
-            if reply_msg and hasattr(reply_msg, 'edit_text'):
-                await reply_msg.edit_text("<b><i>I Am Trying To Find Your Movie With Your Wrong Spelling.</i></b>")
+            await auto_filter(client, first_movie_title, msg, reply_msg, vj_search)
+            return
         except Exception as e:
-            logger.exception("Failed to edit spell-check message: %s", e)
+            logger.exception("Failed to apply auto_filter on first movie: %s", e)
 
-        movienamelist = [movie.get('title') for movie in movies]
-        for techvj in movienamelist:
-            try:
-                mv_rqst = mv_rqst.capitalize()
-            except Exception:
-                pass
-            if mv_rqst.startswith(techvj[0]):
-                await auto_filter(client, techvj, msg, reply_msg, vj_search_new)
-                return
+    # Fallback if auto_filter fails
+    await handle_no_results(client, reply_msg, mv_rqst, reqstr)
 
-        await handle_no_results(client, reply_msg, mv_rqst, reqstr)
-        return
-
-    # else: prepare suggestion buttons
-    btn = [
-        [
-            InlineKeyboardButton(
-                text=movie_name.strip(),
-                callback_data=f"spol#{reqstr1}#{k}",
-            )
-        ]
-        for k, movie_name in enumerate(movielist)
-    ]
-    btn.append([InlineKeyboardButton(text="Close", callback_data=f'spol#{reqstr1}#close_spellcheck')])
-
-    try:
-        if reply_msg and hasattr(reply_msg, 'edit_text'):
-            spell_check_del = await reply_msg.edit_text(
-                text=script.CUDNT_FND.format(mv_rqst),
-                reply_markup=InlineKeyboardMarkup(btn)
-            )
-
-            if settings.get('auto_delete'):
-                await asyncio.sleep(600)
-                await spell_check_del.delete()
-        else:
-            logger.warning("reply_msg is invalid or None.")
-    except KeyError:
-        grpid = await active_connection(str(msg.from_user.id))
-        await save_group_settings(grpid, 'auto_delete', True)
-        settings = await get_settings(msg.chat.id)
-        if settings.get('auto_delete'):
-            await asyncio.sleep(600)
-            try:
-                if spell_check_del:
-                    await spell_check_del.delete()
-            except Exception as e:
-                logger.exception("Failed to delete spell check message: %s", e)
 
 
 async def manual_filters(client, message, text=False):
