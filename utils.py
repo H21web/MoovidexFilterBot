@@ -97,6 +97,11 @@ async def is_subscribed(bot, query):
 
 
 
+import re
+import logging
+import aiohttp
+from googlesearch import search
+
 logger = logging.getLogger(__name__)
 IMDB_CACHE = {}
 
@@ -109,16 +114,32 @@ def list_to_str(items):
         return ", ".join(str(i) for i in items if i)
     return str(items)
 
+def format_runtime(runtime_str=None, seconds=None):
+    if runtime_str and isinstance(runtime_str, str):
+        m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?", runtime_str)
+        if m:
+            h = int(m.group(1)) if m.group(1) else 0
+            m_ = int(m.group(2)) if m.group(2) else 0
+            return f"{h}hr {m_}min" if h or m_ else None
+    if seconds:
+        h, m_ = divmod(int(seconds), 3600)
+        m_ = m_ // 60
+        return f"{h}hr {m_}min" if h or m_ else None
+    return None
+
 async def lookup_imdb_id(title):
     title = title.lower().strip()
     if title in IMDB_CACHE:
         return IMDB_CACHE[title]
-    for url in search(f"{title} site:imdb.com/title", num_results=3):
-        m = re.search(r"/title/(tt\d+)", url)
-        if m:
-            imdb_id = m.group(1)
-            IMDB_CACHE[title] = imdb_id
-            return imdb_id
+    try:
+        for url in search(f"{title} site:imdb.com/title", num_results=3):
+            m = re.search(r"/title/(tt\d+)", url)
+            if m:
+                imdb_id = m.group(1)
+                IMDB_CACHE[title] = imdb_id
+                return imdb_id
+    except Exception:
+        logger.exception("IMDb ID lookup failed for: %s", title)
     return None
 
 async def fetch_json(imdb_id):
@@ -144,56 +165,56 @@ async def get_poster(query, bulk=False, id=False, file=None):
     short = data.get("short", {}) or {}
     main  = data.get("main", {}) or {}
 
-    # Extract values and normalize to match your original return format
-    title       = short.get("name")
-    votes       = short.get("aggregateRating", {}).get("ratingCount")
-    akas        = [a.get("text") or a.get("title") for a in main.get("akas", {}).get("edges", [])]
-    seasons     = (main.get("series") or {}).get("numberOfSeasons")
-    box_office  = main.get("lifetimeGross")
-    localized   = short.get("alternateNames", [None])[0]
-    kind        = short.get("@type", "").lower()
-    imdb_id_raw = imdb_id.replace("tt", "")
-    cast        = [a.get("name") for a in short.get("actor", [])]
-    runtimes    = main.get("runtime", {}).get("displayableProperty", {}).get("value", {}).get("plainText")
-    countries   = [c.get("text") for c in main.get("countriesDetails", {}).get("countries", [])]
-    certificates= [main.get("certificate")]
-    languages   = [l.get("text") for l in main.get("spokenLanguages", {}).get("spokenLanguages", [])]
-    director    = [d.get("name") for d in short.get("director", [])]
-    writer      = [w.get("name") for w in main.get("writer", [])]
-    producer    = [p.get("name") for p in main.get("producer", [])]
-    composer    = [c.get("name") for c in main.get("composer", [])]
-    cinematographer = [c.get("name") for c in main.get("cinematographer", [])]
-    music_team  = [m.get("name") for m in main.get("musicDepartment", [])]
-    distributors= [d.get("name") for d in main.get("distributors", [])]
-    genres      = short.get("genre")
-    poster      = short.get("image")
-    plot        = short.get("description")
-    rating      = short.get("aggregateRating", {}).get("ratingValue")
-    url         = short.get("url") or f"https://www.imdb.com/title/{imdb_id}"
-    year        = main.get("releaseYear", {}).get("year")
-    release     = main.get("releaseDate", {})
-    if release:
-        y, m, d = release.get("year"), release.get("month"), release.get("day")
-        country = release.get("country", {}).get("text")
-        date = f"{y}-{m:02}-{d:02}" + (f" ({country})" if country else "") if y and m and d else None
+    # -- Metadata --
+    title        = short.get("name")
+    votes        = short.get("aggregateRating", {}).get("ratingCount")
+    rating_val   = short.get("aggregateRating", {}).get("ratingValue")
+    rating       = f"{rating_val}/10" if rating_val is not None else None
+    kind         = short.get("@type", "").capitalize()
+
+    # Release date
+    release = main.get("releaseDate", {})
+    if all(release.get(k) for k in ("year", "month", "day")):
+        date = f"{release['day']:02d}-{release['month']:02d}-{release['year']}"
     else:
         date = None
+
+    year = main.get("releaseYear", {}).get("year") or (release.get("year") if release else None)
+
+    # Runtime
+    duration_iso = short.get("duration")
+    runtime_sec = main.get("runtime", {}).get("seconds")
+    runtime = format_runtime(duration_iso, runtime_sec)
+
+    # Gather lists
+    akas         = [a.get("text") or a.get("title") for a in main.get("akas", {}).get("edges", [])]
+    cast         = [a.get("name") for a in short.get("actor", [])]
+    countries    = [c.get("text") for c in main.get("countriesDetails", {}).get("countries", [])]
+    certificates = [main.get("certificate")] if main.get("certificate") else []
+    languages    = [l.get("text") for l in main.get("spokenLanguages", {}).get("spokenLanguages", [])]
+    directors    = [d.get("name") for d in short.get("director", [])]
+    writer       = [w.get("name") for w in main.get("writer", [])]
+    producer     = [p.get("name") for p in main.get("producer", [])]
+    composer     = [c.get("name") for c in main.get("composer", [])]
+    cinematographer = [c.get("name") for c in main.get("cinematographer", [])]
+    music_team   = [m.get("name") for m in main.get("musicDepartment", [])]
+    distributors = [d.get("name") for d in main.get("distributors", [])]
 
     movie = {
         'title': title,
         'votes': votes,
         "aka": list_to_str(akas),
-        "seasons": seasons,
-        "box_office": box_office,
-        'localized_title': localized,
+        "seasons": (main.get("series") or {}).get("numberOfSeasons"),
+        "box_office": main.get("lifetimeGross"),
+        'localized_title': short.get("alternateNames", [None])[0],
         'kind': kind,
-        "imdb_id": f"tt{imdb_id_raw}",
+        "imdb_id": imdb_id,
         "cast": list_to_str(cast),
-        "runtime": list_to_str(runtimes),
+        "runtime": runtime,
         "countries": list_to_str(countries),
         "certificates": list_to_str(certificates),
         "languages": list_to_str(languages),
-        "director": list_to_str(director),
+        "director": list_to_str(directors),
         "writer": list_to_str(writer),
         "producer": list_to_str(producer),
         "composer": list_to_str(composer),
@@ -202,14 +223,15 @@ async def get_poster(query, bulk=False, id=False, file=None):
         "distributors": list_to_str(distributors),
         'release_date': date,
         'year': year,
-        'genres': list_to_str(genres),
-        'poster': poster,
-        'plot': plot,
-        'rating': str(rating) if rating is not None else None,
-        'url': url
+        'genres': list_to_str(short.get("genre")),
+        'poster': short.get("image"),
+        'plot': short.get("description"),
+        'rating': rating,
+        'url': short.get("url") or f'https://www.imdb.com/title/{imdb_id}'
     }
 
     return movie
+
 
 
 
