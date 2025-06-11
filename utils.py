@@ -97,12 +97,6 @@ async def is_subscribed(bot, query):
         return False
 
 
-
-
-
-
-
-
 def list_to_str(items):
     if not items:
         return None
@@ -113,6 +107,7 @@ def list_to_str(items):
     return str(items)
 
 def format_runtime(runtime_str=None, seconds=None):
+    """Convert ISO 8601 (PT2H3M) or seconds into '2hr 3min' format."""
     if runtime_str and isinstance(runtime_str, str):
         m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?", runtime_str)
         if m:
@@ -126,6 +121,7 @@ def format_runtime(runtime_str=None, seconds=None):
     return None
 
 async def lookup_imdb_id(title):
+    """Use Google search to find the IMDb ID for a given title."""
     title = title.lower().strip()
     if title in IMDB_CACHE:
         return IMDB_CACHE[title]
@@ -163,7 +159,7 @@ async def get_poster(query, bulk=False, id=False, file=None):
     short = data.get("short", {}) or {}
     main  = data.get("main", {}) or {}
 
-    # -- Metadata --
+    # Basic fields
     title        = short.get("name")
     votes        = short.get("aggregateRating", {}).get("ratingCount")
     rating_val   = short.get("aggregateRating", {}).get("ratingValue")
@@ -172,31 +168,33 @@ async def get_poster(query, bulk=False, id=False, file=None):
 
     # Release date
     release = main.get("releaseDate", {})
-    if all(release.get(k) for k in ("year", "month", "day")):
-        date = f"{release['day']:02d}-{release['month']:02d}-{release['year']}"
-    else:
-        date = None
-
-    year = main.get("releaseYear", {}).get("year") or (release.get("year") if release else None)
+    release_year = main.get("releaseYear", {}).get("year") or release.get("year")
+    release_date = None
+    try:
+        y, m, d = release.get("year"), release.get("month"), release.get("day")
+        if y and m and d:
+            release_date = f"{d:02d}-{m:02d}-{y}"
+    except Exception:
+        release_date = None
 
     # Runtime
     duration_iso = short.get("duration")
     runtime_sec = main.get("runtime", {}).get("seconds")
     runtime = format_runtime(duration_iso, runtime_sec)
 
-    # Gather lists
-    akas         = [a.get("text") or a.get("title") for a in main.get("akas", {}).get("edges", [])]
-    cast         = [a.get("name") for a in short.get("actor", [])]
-    countries    = [c.get("text") for c in main.get("countriesDetails", {}).get("countries", [])]
-    certificates = [main.get("certificate")] if main.get("certificate") else []
-    languages    = [l.get("text") for l in main.get("spokenLanguages", {}).get("spokenLanguages", [])]
-    directors    = [d.get("name") for d in short.get("director", [])]
-    writer       = [w.get("name") for w in main.get("writer", [])]
-    producer     = [p.get("name") for p in main.get("producer", [])]
-    composer     = [c.get("name") for c in main.get("composer", [])]
-    cinematographer = [c.get("name") for c in main.get("cinematographer", [])]
-    music_team   = [m.get("name") for m in main.get("musicDepartment", [])]
-    distributors = [d.get("name") for d in main.get("distributors", [])]
+    # Lists
+    akas        = [a.get("text") or a.get("title") for a in main.get("akas", {}).get("edges", [])]
+    cast        = [a.get("name") for a in short.get("actor", [])]
+    countries   = [c.get("text") for c in main.get("countriesDetails", {}).get("countries", [])]
+    certificates= [main.get("certificate")] if main.get("certificate") else []
+    languages   = [l.get("text") for l in main.get("spokenLanguages", {}).get("spokenLanguages", [])]
+    directors   = [d.get("name") for d in short.get("director", [])]
+    writers     = [w.get("name") for w in main.get("writer", [])]
+    producers   = [p.get("name") for p in main.get("producer", [])]
+    composers   = [c.get("name") for c in main.get("composer", [])]
+    cinematogs  = [c.get("name") for c in main.get("cinematographer", [])]
+    music_team  = [m.get("name") for m in main.get("musicDepartment", [])]
+    distributors= [d.get("name") for d in main.get("distributors", [])]
 
     movie = {
         'title': title,
@@ -213,14 +211,14 @@ async def get_poster(query, bulk=False, id=False, file=None):
         "certificates": list_to_str(certificates),
         "languages": list_to_str(languages),
         "director": list_to_str(directors),
-        "writer": list_to_str(writer),
-        "producer": list_to_str(producer),
-        "composer": list_to_str(composer),
-        "cinematographer": list_to_str(cinematographer),
+        "writer": list_to_str(writers),
+        "producer": list_to_str(producers),
+        "composer": list_to_str(composers),
+        "cinematographer": list_to_str(cinematogs),
         "music_team": list_to_str(music_team),
         "distributors": list_to_str(distributors),
-        'release_date': date,
-        'year': year,
+        'release_date': release_date,
+        'year': release_year,
         'genres': list_to_str(short.get("genre")),
         'poster': short.get("image"),
         'plot': short.get("description"),
