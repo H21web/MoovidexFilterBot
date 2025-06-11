@@ -312,20 +312,21 @@ async def advantage_spoll_choker(bot, query):
     if movie_index == "close_spellcheck":
         return await query.message.delete()
     
-    # Clean up the movie title
+    # Clean and format movie name
     movie = movies[int(movie_index)]
     movie = re.sub(r"[:\-]", " ", movie)
     movie = re.sub(r"\s+", " ", movie).strip()
+    logging.info(f"Searching for movie: {movie}")
+
     await query.answer(script.TOP_ALRT_MSG)
-    
-    # First try your built-in filters/search
+
+    # Try internal filters
     if not await global_filters(bot, query.message, text=movie):
         if not await manual_filters(bot, query.message, text=movie):
             files, offset, total_results = await get_search_results(
                 query.message.chat.id, movie, offset=0, filter=True
             )
             if files:
-                # Found via your search
                 ai_search = True
                 k = (movie, files, offset, total_results)
                 reply_msg = await query.message.edit_text(
@@ -333,21 +334,27 @@ async def advantage_spoll_choker(bot, query):
                 )
                 return await auto_filter(bot, movie, query, reply_msg, ai_search, k)
             
-            # No built-in results: fall back to external API
+            # No results found internally, fallback to external API
             api_answer = ""
             query_param = re.sub(r"\s+", "%20", movie)
+            url = f"https://api.safone.co/asq?query={query_param}"
+            logging.info(f"Calling external API: {url}")
             try:
                 async with aiohttp.ClientSession() as session:
-                    url = f"https://api.safone.co/asq?query={query_param}"
                     async with session.get(url) as resp:
+                        logging.info(f"API response status: {resp.status}")
                         if resp.status == 200:
                             data = await resp.json()
+                            logging.info(f"API response data: {data}")
                             api_answer = data.get("answer", "").strip()
-            except Exception:
-                # Fail silently on any error
-                api_answer = ""
-            
-            # Build request button
+                            if not api_answer:
+                                logging.info("No 'answer' in API response.")
+                        else:
+                            logging.warning(f"API error: {resp.status}")
+            except Exception as e:
+                logging.error(f"API call failed: {e}")
+
+            # Request button
             encoded_movie = re.sub(r'\W+', '_', movie)
             request_btn = [
                 [
@@ -357,23 +364,21 @@ async def advantage_spoll_choker(bot, query):
                     )
                 ]
             ]
-            
-            # Compose final message
+
             final_text = script.MVE_NT_FND
             if api_answer:
                 final_text += (
-                    f"\n\n<blockquote><b>{api_answer}</b></blockquote>"
+                    f"\n\n<blockquote><b>📌 Related Info:</b>\n"
+                    f"{api_answer}</blockquote>"
                 )
-            
-            msg = await query.message.edit(
+
+            msg = await query.message.edit_text(
                 final_text,
                 reply_markup=InlineKeyboardMarkup(request_btn)
             )
-            # Auto-delete after 2 minutes
+
             await asyncio.sleep(120)
             await msg.delete()
-
-
 
 #languages
 
