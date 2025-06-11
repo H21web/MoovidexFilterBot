@@ -2647,6 +2647,7 @@ async def handle_no_results(client, reply_msg, mv_rqst, reqstr):
     except Exception as e:
         logger.exception("Error in handle_no_results: %s", e)
 
+
 async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
     mv_id = msg.id
     mv_rqst = name
@@ -2672,23 +2673,38 @@ async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
         await handle_no_results(client, reply_msg, mv_rqst, reqstr)
         return
 
-    # Store spell-check options (still optional for debug/logging)
     movielist = []
     movielist += [movie.get('title') for movie in movies]
     movielist += [f"{movie.get('title')} {movie.get('year')}" for movie in movies]
     SPELL_CHECK[mv_id] = movielist
 
-    # Directly use the first movie title
-    first_movie_title = movies[0].get('title')
-    if first_movie_title:
+    if AI_SPELL_CHECK and vj_search:
+        vj_search_new = False
         try:
-            await auto_filter(client, first_movie_title, msg, reply_msg, vj_search)
-            return
+            if reply_msg and hasattr(reply_msg, 'edit_text'):
+                await reply_msg.edit_text("<b><i>I Am Trying To Find Your Movie With Your Wrong Spelling.</i></b>")
         except Exception as e:
-            logger.exception("Failed to apply auto_filter on first movie: %s", e)
+            logger.exception("Failed to edit spell-check message: %s", e)
 
-    # Fallback if auto_filter fails
-    await handle_no_results(client, reply_msg, mv_rqst, reqstr)
+        movienamelist = [movie.get('title') for movie in movies]
+        for techvj in movienamelist:
+            try:
+                mv_rqst = mv_rqst.capitalize()
+            except Exception:
+                pass
+            if mv_rqst.startswith(techvj[0]):
+                await auto_filter(client, techvj, msg, reply_msg, vj_search_new)
+                return
+
+        await handle_no_results(client, reply_msg, mv_rqst, reqstr)
+        return
+
+    # ✅ Automatically select and use the first movie from the list
+    if movielist:
+        first_movie_name = movielist[0]
+        vj_search_new = False  # Modify if needed
+        await auto_filter(client, first_movie_name, msg, reply_msg, vj_search_new)
+        return
 
 
 
