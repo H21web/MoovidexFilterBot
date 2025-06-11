@@ -288,6 +288,8 @@ async def next_page(bot, query):
             pass
     await query.answer()
 
+
+
 @Client.on_callback_query(filters.regex(r"^spol"))
 async def advantage_spoll_choker(bot, query):
     _, user_id, movie_index = query.data.split('#')
@@ -317,13 +319,32 @@ async def advantage_spoll_choker(bot, query):
                 await auto_filter(bot, movie, query, reply_msg, ai_search, k)
             else:
                 reqstr = await bot.get_users(query.from_user.id if query.from_user else 0)
-                if NO_RESULTS_MSG:
-                    await bot.send_message(chat_id=LOG_CHANNEL, text=script.NORSLTS.format(reqstr.id, reqstr.mention, movie))
-                
-            
-                encoded_movie = re.sub(r'\W+', '_', movie)  # Replace non-alphanumeric characters with underscores
-                request_btn = [[InlineKeyboardButton(f'💬 sᴇɴᴅ ʀᴇǫᴜᴇsᴛ', url=f"https://t.me/{temp.U_NAME}?start=Request_{encoded_movie}")]]
-                msg = await query.message.edit(script.MVE_NT_FND, reply_markup=InlineKeyboardMarkup(request_btn))
+
+                # API fallback info
+                api_answer = ""
+                query_param = movie.replace(" ", "%20")
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(f"https://api.safone.co/asq?query={query_param}") as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                api_answer = data.get("answer", "")
+                except Exception:
+                    api_answer = ""  # Fail silently
+
+                encoded_movie = re.sub(r'\W+', '_', movie)
+                request_btn = [[
+                    InlineKeyboardButton(
+                        '💬 sᴇɴᴅ ʀᴇǫᴜᴇsᴛ',
+                        url=f"https://t.me/{temp.U_NAME}?start=Request_{encoded_movie}"
+                    )
+                ]]
+
+                final_text = script.MVE_NT_FND
+                if api_answer:
+                    final_text += f"\n\n<blockquote><b>{api_answer}</b></blockquote"
+
+                msg = await query.message.edit(final_text, reply_markup=InlineKeyboardMarkup(request_btn))
                 await asyncio.sleep(120)
                 await msg.delete()
 
