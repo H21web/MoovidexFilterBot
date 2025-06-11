@@ -17,7 +17,7 @@ from database.users_chats_db import db
 from database.join_reqs import JoinReqs
 from bs4 import BeautifulSoup
 from shortzy import Shortzy
-
+from googlesearch import search      
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -96,84 +96,141 @@ async def is_subscribed(bot, query):
         return False
 
 
-async def get_poster(query, bulk=False, id=False, file=None):
-    if not id:
-        query = (query.strip()).lower()
-        title = query
-        year = re.findall(r'[1-2]\d{3}$', query, re.IGNORECASE)
-        if year:
-            year = list_to_str(year[:1])
-            title = (query.replace(year, "")).strip()
-        elif file is not None:
-            year = re.findall(r'[1-2]\d{3}', file, re.IGNORECASE)
-            if year:
-                year = list_to_str(year[:1]) 
-        else:
-            year = None
-        movieid = imdb.search_movie(title.lower(), results=10)
-        if not movieid:
-            return None
-        if year:
-            filtered=list(filter(lambda k: str(k.get('year')) == str(year), movieid))
-            if not filtered:
-                filtered = movieid
-        else:
-            filtered = movieid
-        movieid=list(filter(lambda k: k.get('kind') in ['movie', 'tv series'], filtered))
-        if not movieid:
-            movieid = filtered
-        if bulk:
-            return movieid
-        movieid = movieid[0].movieID
-    else:
-        movieid = query
-    movie = imdb.get_movie(movieid)
-    if not movie:
-        return None
-    if movie.get("original air date"):
-        date = movie["original air date"]
-    elif movie.get("year"):
-        date = movie.get("year")
-    else:
-        date = "N/A"
-    plot = ""
-    if not LONG_IMDB_DESCRIPTION:
-        plot = movie.get('plot')
-        if plot and len(plot) > 0:
-            plot = plot[0]
-    else:
-        plot = movie.get('plot outline')
-    if plot and len(plot) > 800:
-        plot = plot[0:800] + "..."
 
+        # pip install googlesearch-python
+
+
+logger = logging.getLogger(__name__)
+IMDB_ID_CACHE = {}
+
+def list_to_str(x):
+    if not x:
+        return None
+    if isinstance(x, (list, tuple)):
+        return ", ".join(str(i) for i in x)
+    return str(x)
+
+async def lookup_imdb_id(title: str, max_results: int = 3) -> str | None:
+    """Google site:imdb.com/title → extract first tt####### ID; cached."""
+    key = title.lower().strip()
+    if key in IMDB_ID_CACHE:
+        return IMDB_ID_CACHE[key]
+
+    query = f'{key} site:imdb.com/title'
+    try:
+        for url in search(query, num_results=max_results):
+            m = re.search(r"/title/(tt\d{7,8})", url)
+            if m:
+                IMDB_ID_CACHE[key] = m.group(1)
+                return m.group(1)
+    except Exception:
+        logger.exception("Google search failed for %s", key)
+    return None
+
+API_SEARCH_URL = "https://imdb.iamidiotareyoutoo.com/search?tt={id}"
+
+async def get_poster(query, bulk=False, id=False, file=None):
+    """
+    Fetch movie data via fast JSON API, parsing both 'short' and 'main' blocks.
+    Returns the same dict shape as your original version.
+    """
+    # ── 1) Resolve an IMDb ID if needed
+    if not id:
+        imdb_id = await lookup_imdb_id(query)
+        if not imdb_id:
+            return None
+    else:
+        imdb_id = query if query.startswith("tt") else f"tt{query}"
+
+    # ── 2) Fetch the JSON
+    url = API_SEARCH_URL.format(id=imdb_id)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                data = await resp.json()
+    except Exception:
+        logger.exception("Failed fetching IMDb JSON for %s", imdb_id)
+        return None
+
+    if not data.get("ok") or "short" not in data or "main" not in data:
+        return None
+
+    short = data["short"]
+    main  = data["main"]
+    agg   = short.get("aggregateRating", {})
+
+    # ── 3) Parse spokenLanguages
+    langs = None
+    spk = main.get("spokenLanguages", {}).get("spokenLanguages")
+    if isinstance(spk, list):
+        texts = [lang.get("text") for lang in spk if lang.get("text")]
+        if texts:
+            langs = ", ".join(texts)
+
+    # ── 4) Parse certificate
+    certificate = main.get("certificate") or None
+
+    # ── 5) Parse releaseYear
+    release_year = None
+    ry = main.get("releaseYear", {})
+    if isinstance(ry, dict):
+        release_year = ry.get("year")
+
+    # ── 6) Parse releaseDate
+    release_date = None
+    rd = main.get("releaseDate", {})
+    if isinstance(rd, dict):
+        day   = rd.get("day")
+        month = rd.get("month")
+        year  = rd.get("year")
+        country = rd.get("country", {}).get("text")
+        # Format: "YYYY-MM-DD (Country)"
+        if year and month and day:
+            release_date = f"{year:04d}-{month:02d}-{day:02d}"
+            if country:
+                release_date += f" ({country})"
+
+    # ── 7) Parse runtime
+    runtime_seconds = None
+    runtime_text    = None
+    rt = main.get("runtime", {})
+    if isinstance(rt, dict):
+        runtime_seconds = rt.get("seconds")
+        disp = rt.get("displayableProperty", {}) \
+                 .get("value", {}) \
+                 .get("plainText")
+        runtime_text = disp or None
+
+    # ── 8) Build and return the final dict
     return {
-        'title': movie.get('title'),
-        'votes': movie.get('votes'),
-        "aka": list_to_str(movie.get("akas")),
-        "seasons": movie.get("number of seasons"),
-        "box_office": movie.get('box office'),
-        'localized_title': movie.get('localized title'),
-        'kind': movie.get("kind"),
-        "imdb_id": f"tt{movie.get('imdbID')}",
-        "cast": list_to_str(movie.get("cast")),
-        "runtime": list_to_str(movie.get("runtimes")),
-        "countries": list_to_str(movie.get("countries")),
-        "certificates": list_to_str(movie.get("certificates")),
-        "languages": list_to_str(movie.get("languages")),
-        "director": list_to_str(movie.get("director")),
-        "writer":list_to_str(movie.get("writer")),
-        "producer":list_to_str(movie.get("producer")),
-        "composer":list_to_str(movie.get("composer")) ,
-        "cinematographer":list_to_str(movie.get("cinematographer")),
-        "music_team": list_to_str(movie.get("music department")),
-        "distributors": list_to_str(movie.get("distributors")),
-        'release_date': date,
-        'year': movie.get('year'),
-        'genres': list_to_str(movie.get("genres")),
-        'poster': movie.get('full-size cover url'),
-        'plot': plot,
-        'rating': str(movie.get("rating")),
-        'url':f'https://www.imdb.com/title/tt{movieid}'
+        "title":            short.get("name"),
+        "votes":            agg.get("ratingCount"),
+        "aka":              list_to_str(main.get("akas")),
+        "seasons":          main.get("series", {}).get("numberOfSeasons"),
+        "box_office":       main.get("lifetimeGross"),
+        "localized_title":  None,
+        "kind":             short.get("@type", "").lower(),
+        "imdb_id":          imdb_id,
+        "cast":             list_to_str([c.get("name") for c in short.get("actor", [])]),
+        "runtime":          runtime_text or short.get("duration"),
+        "runtime_seconds":  runtime_seconds,
+        "countries":        list_to_str([c.get("text") for c in main.get("countriesDetails", [])]),
+        "certificates":     certificate,
+        "languages":        langs,
+        "director":         list_to_str([d.get("name") for d in short.get("director", [])]),
+        "writer":           list_to_str(main.get("writer", [])),
+        "producer":         list_to_str(main.get("producer", [])),
+        "composer":         list_to_str(main.get("composer", [])),
+        "cinematographer":  list_to_str(main.get("cinematographer", [])),
+        "music_team":       list_to_str(main.get("musicDepartment", [])),
+        "distributors":     list_to_str(main.get("distributors", [])),
+        "release_date":     release_date,
+        "year":             release_year,
+        "genres":           list_to_str(short.get("genre")),
+        "poster":           short.get("image"),
+        "plot":             short.get("description"),
+        "rating":           agg.get("ratingValue"),
+        "url":              short.get("url") or f"https://www.imdb.com/title/{imdb_id}",
     }
 
 
