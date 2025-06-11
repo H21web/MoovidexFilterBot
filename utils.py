@@ -121,28 +121,27 @@ def format_runtime(runtime_str=None, seconds=None):
     return None
 
 async def lookup_imdb_id(title):
-    """Use Bing search to find IMDb ID."""
+    """Use new IMDb API to find IMDb ID."""
     title = title.lower().strip()
     if title in IMDB_CACHE:
         return IMDB_CACHE[title]
 
-    query = f"{title} site:imdb.com/title"
-    bing_url = f"https://www.bing.com/search?q={query.replace(' ', '+')}"
-
+    api_url = f"https://imdblinkz.s1mallufiles.workers.dev/?q={title.replace(' ', '%20')}"
+    
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(bing_url) as response:
-                html = await response.text()
-                soup = BeautifulSoup(html, "html.parser")
-                for link in soup.find_all("a", href=True):
-                    match = re.search(r"/title/(tt\d{7,8})", link["href"])
-                    if match:
-                        imdb_id = match.group(1)
+            async with session.get(api_url) as response:
+                data = await response.json()
+                for result in data.get("results", []):
+                    if result.get("type") == "title":
+                        imdb_id = result["id"]
                         IMDB_CACHE[title] = imdb_id
                         return imdb_id
     except Exception:
-        logger.exception("Bing search failed for %s", title)
+        logger.exception("IMDb link API failed for %s", title)
+    
     return None
+
 
 async def fetch_json(imdb_id):
     url = f"https://imdb.iamidiotareyoutoo.com/search?tt={imdb_id}"
