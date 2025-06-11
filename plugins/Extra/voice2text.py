@@ -139,18 +139,16 @@ async def handle_voice(bot: Client, message: Message):
         await boovo(bot, title, message)
         await log_success(bot, user, title, text, voice_file)
 
-        # Auto-delete after delay
+        # 🔧 Delete user voice if auto_delete is enabled
         settings = await get_settings(message.chat.id)
         if settings.get("auto_delete"):
-            loop = asyncio.get_running_loop()
-            loop.create_task(delayed_delete(bot, message.chat.id, message.message_id, VOICE_DELETE_DELAY))
+            asyncio.create_task(delayed_delete(message, VOICE_DELETE_DELAY))
 
     except Exception as e:
         print("Voice handling error:", e)
         await status.edit_text("❌ An unexpected error occurred.")
         await log_error(bot, user, e)
     finally:
-        await asyncio.sleep(VOICE_DELETE_DELAY + 10)  # Ensure all background tasks using the files are done
         for f in [voice_file, wav_file]:
             if f and os.path.exists(f):
                 try:
@@ -159,10 +157,10 @@ async def handle_voice(bot: Client, message: Message):
                     print("Cleanup error:", cleanup_error)
 
 
-async def delayed_delete(bot: Client, chat_id: int, message_id: int, delay: int):
+async def delayed_delete(msg: Message, delay: int):
     await asyncio.sleep(delay)
     try:
-        await bot.delete_messages(chat_id, message_id)
+        await msg.delete()
     except Exception as delete_error:
         print("Failed to delete user's voice message:", delete_error)
 
