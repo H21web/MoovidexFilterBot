@@ -97,141 +97,119 @@ async def is_subscribed(bot, query):
 
 
 
-        # pip install googlesearch-python
-
-
 logger = logging.getLogger(__name__)
-IMDB_ID_CACHE = {}
+IMDB_CACHE = {}
 
-def list_to_str(x):
-    if not x:
+def list_to_str(items):
+    if not items:
         return None
-    if isinstance(x, (list, tuple)):
-        return ", ".join(str(i) for i in x)
-    return str(x)
+    if isinstance(items, str):
+        return items
+    if isinstance(items, list):
+        return ", ".join(str(i) for i in items if i)
+    return str(items)
 
-async def lookup_imdb_id(title: str, max_results: int = 3) -> str | None:
-    """Google site:imdb.com/title → extract first tt####### ID; cached."""
-    key = title.lower().strip()
-    if key in IMDB_ID_CACHE:
-        return IMDB_ID_CACHE[key]
-
-    query = f'{key} site:imdb.com/title'
-    try:
-        for url in search(query, num_results=max_results):
-            m = re.search(r"/title/(tt\d{7,8})", url)
-            if m:
-                IMDB_ID_CACHE[key] = m.group(1)
-                return m.group(1)
-    except Exception:
-        logger.exception("Google search failed for %s", key)
+async def lookup_imdb_id(title):
+    title = title.lower().strip()
+    if title in IMDB_CACHE:
+        return IMDB_CACHE[title]
+    for url in search(f"{title} site:imdb.com/title", num_results=3):
+        m = re.search(r"/title/(tt\d+)", url)
+        if m:
+            imdb_id = m.group(1)
+            IMDB_CACHE[title] = imdb_id
+            return imdb_id
     return None
 
-API_SEARCH_URL = "https://imdb.iamidiotareyoutoo.com/search?tt={id}"
+async def fetch_json(imdb_id):
+    url = f"https://imdb.iamidiotareyoutoo.com/search?tt={imdb_id}"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            return await response.json()
 
 async def get_poster(query, bulk=False, id=False, file=None):
-    """
-    Fetch movie data via fast JSON API, parsing both 'short' and 'main' blocks.
-    Returns the same dict shape as your original version.
-    """
-    # ── 1) Resolve an IMDb ID if needed
-    if not id:
-        imdb_id = await lookup_imdb_id(query)
-        if not imdb_id:
-            return None
-    else:
-        imdb_id = query if query.startswith("tt") else f"tt{query}"
+    imdb_id = query if id else await lookup_imdb_id(query)
+    if not imdb_id:
+        return None
 
-    # ── 2) Fetch the JSON
-    url = API_SEARCH_URL.format(id=imdb_id)
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                data = await resp.json()
+        data = await fetch_json(imdb_id)
     except Exception:
-        logger.exception("Failed fetching IMDb JSON for %s", imdb_id)
+        logger.exception("Fetch failed for %s", imdb_id)
         return None
 
-    if not data.get("ok") or "short" not in data or "main" not in data:
+    if not data.get("ok"):
         return None
 
-    short = data["short"]
-    main  = data["main"]
-    agg   = short.get("aggregateRating", {})
+    short = data.get("short", {}) or {}
+    main  = data.get("main", {}) or {}
 
-    # ── 3) Parse spokenLanguages
-    langs = None
-    spk = main.get("spokenLanguages", {}).get("spokenLanguages")
-    if isinstance(spk, list):
-        texts = [lang.get("text") for lang in spk if lang.get("text")]
-        if texts:
-            langs = ", ".join(texts)
+    # Extract values and normalize to match your original return format
+    title       = short.get("name")
+    votes       = short.get("aggregateRating", {}).get("ratingCount")
+    akas        = [a.get("text") or a.get("title") for a in main.get("akas", {}).get("edges", [])]
+    seasons     = (main.get("series") or {}).get("numberOfSeasons")
+    box_office  = main.get("lifetimeGross")
+    localized   = short.get("alternateNames", [None])[0]
+    kind        = short.get("@type", "").lower()
+    imdb_id_raw = imdb_id.replace("tt", "")
+    cast        = [a.get("name") for a in short.get("actor", [])]
+    runtimes    = main.get("runtime", {}).get("displayableProperty", {}).get("value", {}).get("plainText")
+    countries   = [c.get("text") for c in main.get("countriesDetails", {}).get("countries", [])]
+    certificates= [main.get("certificate")]
+    languages   = [l.get("text") for l in main.get("spokenLanguages", {}).get("spokenLanguages", [])]
+    director    = [d.get("name") for d in short.get("director", [])]
+    writer      = [w.get("name") for w in main.get("writer", [])]
+    producer    = [p.get("name") for p in main.get("producer", [])]
+    composer    = [c.get("name") for c in main.get("composer", [])]
+    cinematographer = [c.get("name") for c in main.get("cinematographer", [])]
+    music_team  = [m.get("name") for m in main.get("musicDepartment", [])]
+    distributors= [d.get("name") for d in main.get("distributors", [])]
+    genres      = short.get("genre")
+    poster      = short.get("image")
+    plot        = short.get("description")
+    rating      = short.get("aggregateRating", {}).get("ratingValue")
+    url         = short.get("url") or f"https://www.imdb.com/title/{imdb_id}"
+    year        = main.get("releaseYear", {}).get("year")
+    release     = main.get("releaseDate", {})
+    if release:
+        y, m, d = release.get("year"), release.get("month"), release.get("day")
+        country = release.get("country", {}).get("text")
+        date = f"{y}-{m:02}-{d:02}" + (f" ({country})" if country else "") if y and m and d else None
+    else:
+        date = None
 
-    # ── 4) Parse certificate
-    certificate = main.get("certificate") or None
-
-    # ── 5) Parse releaseYear
-    release_year = None
-    ry = main.get("releaseYear", {})
-    if isinstance(ry, dict):
-        release_year = ry.get("year")
-
-    # ── 6) Parse releaseDate
-    release_date = None
-    rd = main.get("releaseDate", {})
-    if isinstance(rd, dict):
-        day   = rd.get("day")
-        month = rd.get("month")
-        year  = rd.get("year")
-        country = rd.get("country", {}).get("text")
-        # Format: "YYYY-MM-DD (Country)"
-        if year and month and day:
-            release_date = f"{year:04d}-{month:02d}-{day:02d}"
-            if country:
-                release_date += f" ({country})"
-
-    # ── 7) Parse runtime
-    runtime_seconds = None
-    runtime_text    = None
-    rt = main.get("runtime", {})
-    if isinstance(rt, dict):
-        runtime_seconds = rt.get("seconds")
-        disp = rt.get("displayableProperty", {}) \
-                 .get("value", {}) \
-                 .get("plainText")
-        runtime_text = disp or None
-
-    # ── 8) Build and return the final dict
-    return {
-        "title":            short.get("name"),
-        "votes":            agg.get("ratingCount"),
-        "aka":              list_to_str(main.get("akas")),
-        "seasons":          main.get("series", {}).get("numberOfSeasons"),
-        "box_office":       main.get("lifetimeGross"),
-        "localized_title":  None,
-        "kind":             short.get("@type", "").lower(),
-        "imdb_id":          imdb_id,
-        "cast":             list_to_str([c.get("name") for c in short.get("actor", [])]),
-        "runtime":          runtime_text or short.get("duration"),
-        "runtime_seconds":  runtime_seconds,
-        "countries":        list_to_str([c.get("text") for c in main.get("countriesDetails", [])]),
-        "certificates":     certificate,
-        "languages":        langs,
-        "director":         list_to_str([d.get("name") for d in short.get("director", [])]),
-        "writer":           list_to_str(main.get("writer", [])),
-        "producer":         list_to_str(main.get("producer", [])),
-        "composer":         list_to_str(main.get("composer", [])),
-        "cinematographer":  list_to_str(main.get("cinematographer", [])),
-        "music_team":       list_to_str(main.get("musicDepartment", [])),
-        "distributors":     list_to_str(main.get("distributors", [])),
-        "release_date":     release_date,
-        "year":             release_year,
-        "genres":           list_to_str(short.get("genre")),
-        "poster":           short.get("image"),
-        "plot":             short.get("description"),
-        "rating":           agg.get("ratingValue"),
-        "url":              short.get("url") or f"https://www.imdb.com/title/{imdb_id}",
+    movie = {
+        'title': title,
+        'votes': votes,
+        "aka": list_to_str(akas),
+        "seasons": seasons,
+        "box_office": box_office,
+        'localized_title': localized,
+        'kind': kind,
+        "imdb_id": f"tt{imdb_id_raw}",
+        "cast": list_to_str(cast),
+        "runtime": list_to_str(runtimes),
+        "countries": list_to_str(countries),
+        "certificates": list_to_str(certificates),
+        "languages": list_to_str(languages),
+        "director": list_to_str(director),
+        "writer": list_to_str(writer),
+        "producer": list_to_str(producer),
+        "composer": list_to_str(composer),
+        "cinematographer": list_to_str(cinematographer),
+        "music_team": list_to_str(music_team),
+        "distributors": list_to_str(distributors),
+        'release_date': date,
+        'year': year,
+        'genres': list_to_str(genres),
+        'poster': poster,
+        'plot': plot,
+        'rating': str(rating) if rating is not None else None,
+        'url': url
     }
+
+    return movie
 
 
 
