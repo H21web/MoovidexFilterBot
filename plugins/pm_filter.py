@@ -325,7 +325,7 @@ async def advantage_spoll_choker(bot, query):
                 query_param = movie.replace(" ", "%20")
                 try:
                     async with aiohttp.ClientSession() as session:
-                        async with session.get(f"https://api.safone.co/asq?query={query_param}") as resp:
+                        async with session.get(f"https://api.safone.co/asq?query={query_param}%20ott%20released") as resp:
                             if resp.status == 200:
                                 data = await resp.json()
                                 api_answer = data.get("answer", "")
@@ -342,7 +342,7 @@ async def advantage_spoll_choker(bot, query):
 
                 final_text = script.MVE_NT_FND
                 if api_answer:
-                    final_text += f"\n\n<b>📌 Related Info:</b>\n{api_answer}"
+                    final_text += f"\n\n<blockquote><b>{api_answer}</b><blockquote>\n"
 
                 msg = await query.message.edit(final_text, reply_markup=InlineKeyboardMarkup(request_btn))
                 await asyncio.sleep(120)
