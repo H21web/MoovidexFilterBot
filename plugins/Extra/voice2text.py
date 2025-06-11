@@ -20,7 +20,7 @@ from utils import get_settings  # Import settings function
 ia = Cinemagoer()
 
 VOICE_LIMIT = 10
-VOICE_DURATION_LIMIT = 10  # seconds
+VOICE_DURATION_LIMIT = 5  # seconds
 VOICE_DELETE_DELAY = 300  # seconds (5 minutes)
 daily_usage = defaultdict(lambda: defaultdict(int))  # user_id -> date_str -> count
 
