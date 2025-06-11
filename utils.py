@@ -32,6 +32,7 @@ SECOND_SHORTENER = {}
 SMART_OPEN = '“'
 SMART_CLOSE = '”'
 START_CHAR = ('\'', '"', SMART_OPEN)
+IMDB_CACHE = {}
 
 # temp db for banned 
 class temp(object):
@@ -97,13 +98,10 @@ async def is_subscribed(bot, query):
 
 
 
-import re
-import logging
-import aiohttp
-from googlesearch import search
 
-logger = logging.getLogger(__name__)
-IMDB_CACHE = {}
+
+
+
 
 def list_to_str(items):
     if not items:
