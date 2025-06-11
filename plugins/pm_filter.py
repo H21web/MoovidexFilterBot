@@ -1563,7 +1563,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
         try:
             log_msg = await client.send_cached_media(chat_id=STREAM_FILES_CHANNEL, file_id=file_id)
             fileName = {quote_plus(get_name(log_msg))}
-            stream = f"{URL}{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
+            stream = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
             download = f"{URL}{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
             button = [[
                 InlineKeyboardButton("🚀 ғᴀsᴛ ᴅᴏᴡɴʟᴏᴀᴅ ", url=download),
@@ -2658,19 +2658,19 @@ async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
     query = query.strip() + " movie"
 
     try:
-        movies = await get_poster(mv_rqst, bulk=True)
+        movie = await get_poster(mv_rqst)  # Removed bulk=True
     except Exception as e:
         logger.exception(e)
         await handle_no_results(client, reply_msg, mv_rqst, reqstr)
         return
 
-    if not movies:
+    if not movie:
         await handle_no_results(client, reply_msg, mv_rqst, reqstr)
         return
 
     movielist = []
-    movielist += [movie.get('title') for movie in movies]
-    movielist += [f"{movie.get('title')} {movie.get('year')}" for movie in movies]
+    movielist.append(movie.get('title'))
+    movielist.append(f"{movie.get('title')} {movie.get('year')}")
     SPELL_CHECK[mv_id] = movielist
 
     if AI_SPELL_CHECK and vj_search:
@@ -2681,20 +2681,19 @@ async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
         except Exception as e:
             logger.exception("Failed to edit spell-check message: %s", e)
 
-        movienamelist = [movie.get('title') for movie in movies]
-        for techvj in movienamelist:
-            try:
-                mv_rqst = mv_rqst.capitalize()
-            except Exception:
-                pass
-            if mv_rqst.startswith(techvj[0]):
-                await auto_filter(client, techvj, msg, reply_msg, vj_search_new)
-                return
+        techvj = movie.get('title', '')
+        try:
+            mv_rqst = mv_rqst.capitalize()
+        except Exception:
+            pass
+        if mv_rqst and techvj and mv_rqst.startswith(techvj[0]):
+            await auto_filter(client, techvj, msg, reply_msg, vj_search_new)
+            return
 
         await handle_no_results(client, reply_msg, mv_rqst, reqstr)
         return
 
-    # else: prepare suggestion buttons
+    # Prepare suggestion buttons
     btn = [
         [
             InlineKeyboardButton(
@@ -2729,8 +2728,6 @@ async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
                     await spell_check_del.delete()
             except Exception as e:
                 logger.exception("Failed to delete spell check message: %s", e)
-
-
 
 async def manual_filters(client, message, text=False):
     settings = await get_settings(message.chat.id)
