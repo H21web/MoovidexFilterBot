@@ -2648,6 +2648,8 @@ async def handle_no_results(client, reply_msg, mv_rqst, reqstr):
         logger.exception("Error in handle_no_results: %s", e)
 
 
+
+
 async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
     mv_id = msg.id
     mv_rqst = name
@@ -2699,13 +2701,47 @@ async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
         await handle_no_results(client, reply_msg, mv_rqst, reqstr)
         return
 
-    # ✅ Automatically select and use the first movie from the list
-    if movielist:
-        first_movie_name = movielist[0]
-        vj_search_new = False  # Modify if needed
-        await auto_filter(client, first_movie_name, msg, reply_msg, vj_search_new)
+    # Automatically select the first suggestion and call auto_filter
+    first_suggestion = movielist[0] if movielist else None
+    if first_suggestion:
+        await auto_filter(client, first_suggestion, msg, reply_msg, False)
         return
 
+    # Fallback: show suggestion buttons if auto-filter fails or no match
+    btn = [
+        [
+            InlineKeyboardButton(
+                text=movie_name.strip(),
+                callback_data=f"spol#{reqstr1}#{k}",
+            )
+        ]
+        for k, movie_name in enumerate(movielist)
+    ]
+    btn.append([InlineKeyboardButton(text="Close", callback_data=f'spol#{reqstr1}#close_spellcheck')])
+
+    try:
+        if reply_msg and hasattr(reply_msg, 'edit_text'):
+            spell_check_del = await reply_msg.edit_text(
+                text=script.CUDNT_FND.format(mv_rqst),
+                reply_markup=InlineKeyboardMarkup(btn)
+            )
+
+            if settings.get('auto_delete'):
+                await asyncio.sleep(600)
+                await spell_check_del.delete()
+        else:
+            logger.warning("reply_msg is invalid or None.")
+    except KeyError:
+        grpid = await active_connection(str(msg.from_user.id))
+        await save_group_settings(grpid, 'auto_delete', True)
+        settings = await get_settings(msg.chat.id)
+        if settings.get('auto_delete'):
+            await asyncio.sleep(600)
+            try:
+                if spell_check_del:
+                    await spell_check_del.delete()
+            except Exception as e:
+                logger.exception("Failed to delete spell check message: %s", e)
 
 
 async def manual_filters(client, message, text=False):
