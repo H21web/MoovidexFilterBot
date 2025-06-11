@@ -290,95 +290,63 @@ async def next_page(bot, query):
 
 
 
-
-
 @Client.on_callback_query(filters.regex(r"^spol"))
 async def advantage_spoll_choker(bot, query):
     _, user_id, movie_index = query.data.split('#')
     movies = SPELL_CHECK.get(query.message.reply_to_message.id)
 
     if not movies:
-        return await query.answer(
-            script.OLD_ALRT_TXT.format(query.from_user.first_name),
-            show_alert=True
-        )
+        return await query.answer(script.OLD_ALRT_TXT.format(query.from_user.first_name), show_alert=True)
     
     if int(user_id) != 0 and query.from_user.id != int(user_id):
-        return await query.answer(
-            script.ALRT_TXT.format(query.from_user.first_name),
-            show_alert=True
-        )
+        return await query.answer(script.ALRT_TXT.format(query.from_user.first_name), show_alert=True)
     
     if movie_index == "close_spellcheck":
         return await query.message.delete()
     
-    # Clean and format movie name
     movie = movies[int(movie_index)]
     movie = re.sub(r"[:\-]", " ", movie)
     movie = re.sub(r"\s+", " ", movie).strip()
-    logging.info(f"Searching for movie: {movie}")
-
     await query.answer(script.TOP_ALRT_MSG)
-
-    # Try internal filters
+    
     if not await global_filters(bot, query.message, text=movie):
         if not await manual_filters(bot, query.message, text=movie):
-            files, offset, total_results = await get_search_results(
-                query.message.chat.id, movie, offset=0, filter=True
-            )
+            files, offset, total_results = await get_search_results(query.message.chat.id, movie, offset=0, filter=True)
             if files:
                 ai_search = True
                 k = (movie, files, offset, total_results)
-                reply_msg = await query.message.edit_text(
-                    f"<b><i>🔍 Searching for {movie} 🔍</i></b>"
-                )
-                return await auto_filter(bot, movie, query, reply_msg, ai_search, k)
-            
-            # No results found internally, fallback to external API
-            api_answer = ""
-            query_param = re.sub(r"\s+", "%20", movie)
-            url = f"https://api.safone.co/asq?query={query_param}"
-            logging.info(f"Calling external API: {url}")
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(url) as resp:
-                        logging.info(f"API response status: {resp.status}")
-                        if resp.status == 200:
-                            data = await resp.json()
-                            logging.info(f"API response data: {data}")
-                            api_answer = data.get("answer", "").strip()
-                            if not api_answer:
-                                logging.info("No 'answer' in API response.")
-                        else:
-                            logging.warning(f"API error: {resp.status}")
-            except Exception as e:
-                logging.error(f"API call failed: {e}")
+                reply_msg = await query.message.edit_text(f"<b><i>🔍 Searching for {movie} 🔍</i></b>")
+                await auto_filter(bot, movie, query, reply_msg, ai_search, k)
+            else:
+                reqstr = await bot.get_users(query.from_user.id if query.from_user else 0)
 
-            # Request button
-            encoded_movie = re.sub(r'\W+', '_', movie)
-            request_btn = [
-                [
+                # API fallback info
+                api_answer = ""
+                query_param = movie.replace(" ", "%20")
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(f"https://api.safone.co/asq?query={query_param}") as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                api_answer = data.get("answer", "")
+                except Exception:
+                    api_answer = ""  # Fail silently
+
+                encoded_movie = re.sub(r'\W+', '_', movie)
+                request_btn = [[
                     InlineKeyboardButton(
                         '💬 sᴇɴᴅ ʀᴇǫᴜᴇsᴛ',
                         url=f"https://t.me/{temp.U_NAME}?start=Request_{encoded_movie}"
                     )
-                ]
-            ]
+                ]]
 
-            final_text = script.MVE_NT_FND
-            if api_answer:
-                final_text += (
-                    f"\n\n<blockquote><b>📌 Related Info:</b>\n"
-                    f"{api_answer}</blockquote>"
-                )
+                final_text = script.MVE_NT_FND
+                if api_answer:
+                    final_text += f"\n\n<b>📌 Related Info:</b>\n{api_answer}"
 
-            msg = await query.message.edit_text(
-                final_text,
-                reply_markup=InlineKeyboardMarkup(request_btn)
-            )
-
-            await asyncio.sleep(120)
-            await msg.delete()
+                msg = await query.message.edit(final_text, reply_markup=InlineKeyboardMarkup(request_btn))
+                await asyncio.sleep(120)
+                await msg.delete()
 
 #languages
 
