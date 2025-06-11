@@ -290,66 +290,88 @@ async def next_page(bot, query):
 
 
 
+
+
 @Client.on_callback_query(filters.regex(r"^spol"))
 async def advantage_spoll_choker(bot, query):
     _, user_id, movie_index = query.data.split('#')
     movies = SPELL_CHECK.get(query.message.reply_to_message.id)
 
     if not movies:
-        return await query.answer(script.OLD_ALRT_TXT.format(query.from_user.first_name), show_alert=True)
+        return await query.answer(
+            script.OLD_ALRT_TXT.format(query.from_user.first_name),
+            show_alert=True
+        )
     
     if int(user_id) != 0 and query.from_user.id != int(user_id):
-        return await query.answer(script.ALRT_TXT.format(query.from_user.first_name), show_alert=True)
+        return await query.answer(
+            script.ALRT_TXT.format(query.from_user.first_name),
+            show_alert=True
+        )
     
     if movie_index == "close_spellcheck":
         return await query.message.delete()
     
+    # Clean up the movie title
     movie = movies[int(movie_index)]
     movie = re.sub(r"[:\-]", " ", movie)
     movie = re.sub(r"\s+", " ", movie).strip()
     await query.answer(script.TOP_ALRT_MSG)
     
+    # First try your built-in filters/search
     if not await global_filters(bot, query.message, text=movie):
         if not await manual_filters(bot, query.message, text=movie):
-            files, offset, total_results = await get_search_results(query.message.chat.id, movie, offset=0, filter=True)
+            files, offset, total_results = await get_search_results(
+                query.message.chat.id, movie, offset=0, filter=True
+            )
             if files:
+                # Found via your search
                 ai_search = True
                 k = (movie, files, offset, total_results)
-                reply_msg = await query.message.edit_text(f"<b><i>🔍 Searching for {movie} 🔍</i></b>")
-                await auto_filter(bot, movie, query, reply_msg, ai_search, k)
-            else:
-                reqstr = await bot.get_users(query.from_user.id if query.from_user else 0)
-
-                # API fallback info
+                reply_msg = await query.message.edit_text(
+                    f"<b><i>🔍 Searching for {movie} 🔍</i></b>"
+                )
+                return await auto_filter(bot, movie, query, reply_msg, ai_search, k)
+            
+            # No built-in results: fall back to external API
+            api_answer = ""
+            query_param = re.sub(r"\s+", "%20", movie)
+            try:
+                async with aiohttp.ClientSession() as session:
+                    url = f"https://api.safone.co/asq?query={query_param}"
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            api_answer = data.get("answer", "").strip()
+            except Exception:
+                # Fail silently on any error
                 api_answer = ""
-                query_param = movie.replace(" ", "%20")
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(f"https://api.safone.co/asq?query={query_param}") as resp:
-                            if resp.status == 200:
-                                data = await resp.json()
-                                api_answer = data.get("answer", "")
-                except Exception:
-                    api_answer = ""  # Fail silently
-
-                encoded_movie = re.sub(r'\W+', '_', movie)
-                request_btn = [[
+            
+            # Build request button
+            encoded_movie = re.sub(r'\W+', '_', movie)
+            request_btn = [
+                [
                     InlineKeyboardButton(
                         '💬 sᴇɴᴅ ʀᴇǫᴜᴇsᴛ',
                         url=f"https://t.me/{temp.U_NAME}?start=Request_{encoded_movie}"
                     )
-                ]]
-
-                final_text = script.MVE_NT_FND
-                if api_answer:
-                    final_text += f"\n\n<blockquote><b>{api_answer}</b></blockquote>"
-
-                msg = await query.message.edit(final_text, reply_markup=InlineKeyboardMarkup(request_btn))
-                await asyncio.sleep(120)
-                await msg.delete()
-
-
-
+                ]
+            ]
+            
+            # Compose final message
+            final_text = script.MVE_NT_FND
+            if api_answer:
+                final_text += (
+                    f"\n\n<blockquote><b>{api_answer}</b></blockquote>"
+                )
+            
+            msg = await query.message.edit(
+                final_text,
+                reply_markup=InlineKeyboardMarkup(request_btn)
+            )
+            # Auto-delete after 2 minutes
+            await asyncio.sleep(120)
+            await msg.delete()
 
 
 
