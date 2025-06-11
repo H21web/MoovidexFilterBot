@@ -97,6 +97,7 @@ async def is_subscribed(bot, query):
         return False
 
 
+
 def list_to_str(items):
     if not items:
         return None
@@ -107,7 +108,6 @@ def list_to_str(items):
     return str(items)
 
 def format_runtime(runtime_str=None, seconds=None):
-    """Convert ISO 8601 (PT2H3M) or seconds into '2hr 3min' format."""
     if runtime_str and isinstance(runtime_str, str):
         m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?", runtime_str)
         if m:
@@ -121,19 +121,27 @@ def format_runtime(runtime_str=None, seconds=None):
     return None
 
 async def lookup_imdb_id(title):
-    """Use Google search to find the IMDb ID for a given title."""
+    """Use Bing search to find IMDb ID."""
     title = title.lower().strip()
     if title in IMDB_CACHE:
         return IMDB_CACHE[title]
+
+    query = f"{title} site:imdb.com/title"
+    bing_url = f"https://www.bing.com/search?q={query.replace(' ', '+')}"
+
     try:
-        for url in search(f"{title} site:imdb.com/title", num_results=3):
-            m = re.search(r"/title/(tt\d+)", url)
-            if m:
-                imdb_id = m.group(1)
-                IMDB_CACHE[title] = imdb_id
-                return imdb_id
+        async with aiohttp.ClientSession() as session:
+            async with session.get(bing_url) as response:
+                html = await response.text()
+                soup = BeautifulSoup(html, "html.parser")
+                for link in soup.find_all("a", href=True):
+                    match = re.search(r"/title/(tt\d{7,8})", link["href"])
+                    if match:
+                        imdb_id = match.group(1)
+                        IMDB_CACHE[title] = imdb_id
+                        return imdb_id
     except Exception:
-        logger.exception("IMDb ID lookup failed for: %s", title)
+        logger.exception("Bing search failed for %s", title)
     return None
 
 async def fetch_json(imdb_id):
@@ -159,14 +167,12 @@ async def get_poster(query, bulk=False, id=False, file=None):
     short = data.get("short", {}) or {}
     main  = data.get("main", {}) or {}
 
-    # Basic fields
     title        = short.get("name")
     votes        = short.get("aggregateRating", {}).get("ratingCount")
     rating_val   = short.get("aggregateRating", {}).get("ratingValue")
     rating       = f"{rating_val}/10" if rating_val is not None else None
     kind         = short.get("@type", "").capitalize()
 
-    # Release date
     release = main.get("releaseDate", {})
     release_year = main.get("releaseYear", {}).get("year") or release.get("year")
     release_date = None
@@ -177,12 +183,10 @@ async def get_poster(query, bulk=False, id=False, file=None):
     except Exception:
         release_date = None
 
-    # Runtime
     duration_iso = short.get("duration")
     runtime_sec = main.get("runtime", {}).get("seconds")
     runtime = format_runtime(duration_iso, runtime_sec)
 
-    # Lists
     akas        = [a.get("text") or a.get("title") for a in main.get("akas", {}).get("edges", [])]
     cast        = [a.get("name") for a in short.get("actor", [])]
     countries   = [c.get("text") for c in main.get("countriesDetails", {}).get("countries", [])]
@@ -227,7 +231,6 @@ async def get_poster(query, bulk=False, id=False, file=None):
     }
 
     return movie
-
 
 
 
