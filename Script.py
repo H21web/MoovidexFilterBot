@@ -288,9 +288,6 @@ Series Format:
 🎧 <b>Lᴀɴɢᴜᴀɢᴇ: </b><code>{languages}</code>
 🎭 <b>Gᴇɴʀᴇs: </b><code>{genres}</code>
 
-<blockquote>🎞️ You may also like
-{related_link}
-</blockquote>
 <blockquote>⏱️ Rᴇsᴜʟᴛ sʜᴏᴡɴ ɪɴ: {remaining_seconds} <i>seconds</i> 
 🐱 Rᴇǫᴜᴇsᴛᴇᴅ ʙʏ : {message.from_user.mention}</b></blockquote>
 
