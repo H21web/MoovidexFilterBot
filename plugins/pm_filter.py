@@ -18,7 +18,6 @@ from database.connections_mdb import mydb, active_connection, all_connections, d
 from database.gfilters_mdb import find_gfilter, get_gfilters, del_allg
 from urllib.parse import quote_plus
 from TechVJ.util.file_properties import get_name, get_hash, get_media_file_size
-from telegram import InputMediaPhoto
 
 
 logger = logging.getLogger(__name__)
@@ -2422,22 +2421,20 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
 async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     curr_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
-
     if not spoll:
         message = msg
         text = message.caption or message.text or ""
         if len(text) < 100:
             search = name.lower()
-            find = search.split(" ")
             removes = ["in","upload", "series", "full", "horror", "thriller", "mystery", "print", "file"]
-            search = " ".join(x for x in find if x not in removes)
-            search = re.sub(r"\b(pl(i|e)*?(s|z+|ease|se|ese|(e+)s(e)?)|((send|snd|giv(e)?|gib)(\sme)?)|movie(s)?|new|latest|bro|bruh|broh|helo|that|find|dubbed|link|venum|iruka|pannunga|pannungga|anuppunga|anupunga|anuppungga|anupungga|film|undo|kitti|kitty|tharu|kittumo|kittum|movie|any(one)?|with\ssubtitle(s)?)", "", search, flags=re.IGNORECASE)
-            search = re.sub(r"\s+", " ", search).strip().replace("-", " ").replace(":", "").replace(".", "")
-
-            files, offset, total_results = await get_search_results(message.chat.id, search, offset=0, filter=True)
+            search = " ".join(x for x in search.split(" ") if x not in removes)
+            search = re.sub(r"\b(pl(i|e)*?(s|z+|ease|se|ese|(e+)s(e)?)|((send|snd|giv(e)?|gib)(\sme)?)|movie(s)?|new|latest|bro|bruh|broh|helo|that|find|dubbed|link|venum|iruka|pannunga|pannungga|anuppunga|anupunga|anuppungga|anupungga|film|undo|kitti|kitty|tharu|kittumo|kittum|movie|any(one)|with\ssubtitle(s)?)", "", search, flags=re.IGNORECASE)
+            search = re.sub(r"\s+", " ", search).strip()
+            search = search.replace("-", " ").replace(":", "").replace(".", "")
+            files, offset, total_results = await get_search_results(message.chat.id ,search, offset=0, filter=True)
             settings = await get_settings(message.chat.id)
             if not files:
-                if settings.get("spell_check"):
+                if settings["spell_check"]:
                     return await advantage_spell_chok(client, name, msg, reply_msg, ai_search)
                 else:
                     return await reply_msg.edit_text(f"**⚠️ No File Found For Your Query - {name}**\n**Make Sure Spelling Is Correct.**")
@@ -2449,77 +2446,66 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         settings = await get_settings(message.chat.id)
         await msg.message.delete()
 
-    pre = 'filep' if settings.get('file_secure') else 'file'
     key = f"{message.chat.id}-{message.id}"
     req = message.from_user.id if message.from_user else 0
+    pre = 'filep' if settings['file_secure'] else 'file'
+    total_results_str = str(total_results)
 
     FRESH[key] = search
     temp.GETALL[key] = files
-    temp.SHORT[req] = message.chat.id
-    total_results_str = str(total_results)
+    temp.SHORT[message.from_user.id] = message.chat.id
 
+    # Prepare buttons
     btn = [
-        [InlineKeyboardButton(f"🗂 ꜰɪʟᴇꜱ: {total_results_str}", callback_data='total'),
-         InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}")],
-        [InlineKeyboardButton(f'🎚️ ǫᴜᴀʟɪᴛʏ', callback_data=f"qualities#{key}"),
-         InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
-         InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")]
+        [
+            InlineKeyboardButton(f"🗂 ꜰɪʟᴇꜱ: {total_results_str}", 'total'),
+            InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}")
+        ],
+        [
+            InlineKeyboardButton('🎚️ ǫᴜᴀʟɪᴛʏ', callback_data=f"qualities#{key}"),
+            InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
+            InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs", callback_data=f"seasons#{key}")
+        ]
     ]
-    btn.extend([
-        [InlineKeyboardButton(
-            text=f"📁[{get_size(file['file_size'])}] ⊳ {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}",
-            callback_data=f'{pre}#{file["file_id"]}'
-        )] for file in files
-    ])
-
-    if offset != "":
-        total_pages = math.ceil(int(total_results) / int(MAX_B_TN if settings.get("max_btn") else 10))
-        btn.append([
-            InlineKeyboardButton("📑 𝖯𝖠𝖦𝖤", callback_data="pages"),
-            InlineKeyboardButton(text=f"1/{total_pages}", callback_data="pages"),
-            InlineKeyboardButton("𝖭𝖤𝖷𝖳 ⌦", callback_data=f"next_{req}_{key}_{offset}")
-        ])
+    if offset:
+        try:
+            max_btn = settings.get('max_btn', True)
+            total_pages = math.ceil(int(total_results) / (10 if max_btn else int(MAX_B_TN)))
+            btn.append([
+                InlineKeyboardButton("📑 𝖯𝖠𝖦𝖤", callback_data="pages"),
+                InlineKeyboardButton(text=f"1/{total_pages}", callback_data="pages"),
+                InlineKeyboardButton(text="𝖭𝖤𝖷𝖳 ⌦", callback_data=f"next_{req}_{key}_{offset}")
+            ])
+        except KeyError:
+            await save_group_settings(message.chat.id, 'max_btn', True)
     else:
-        btn.append([
-            InlineKeyboardButton("⛔ ɴᴏ ᴍᴏʀᴇ ᴘᴀɢᴇs ᴀᴠᴀɪʟᴀʙʟᴇ ⛔", callback_data="pages")
-        ])
+        btn.append([InlineKeyboardButton(text="⛔ ɴᴏ ᴍᴏʀᴇ ᴘᴀɢᴇs ᴀᴠᴀɪʟᴀʙʟᴇ ⛔ ", callback_data="pages")])
 
+    # Fast caption
     cur_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
-    time_diff = timedelta(hours=cur_time.hour, minutes=cur_time.minute, seconds=cur_time.second) - timedelta(hours=curr_time.hour, minutes=curr_time.minute, seconds=curr_time.second)
-    remaining_seconds = "{:.2f}".format(time_diff.total_seconds())
-
-    initial_caption = (
-        f"<b>🗂 Results for: {search}\n"
-        f"🧑‍💻 Requested by: {message.from_user.mention}\n"
-        f"⏱️ Showing in: {remaining_seconds} seconds</b>\n\n"
-        f"<i>⏳ Loading IMDb info...</i>"
+    time_difference = timedelta(hours=cur_time.hour, minutes=cur_time.minute, seconds=cur_time.second + (cur_time.microsecond / 1e6)) - timedelta(hours=curr_time.hour, minutes=curr_time.minute, seconds=curr_time.second + (curr_time.microsecond / 1e6))
+    remaining_seconds = "{:.2f}".format(time_difference.total_seconds())
+    
+    cap = (
+        f"<b>𝖱𝖾𝗌𝗎𝗅𝗍 𝖥𝗈𝗎𝗇𝖽 𝖥𝗈𝗋 {search}\n\n"
+        f"🧑‍💻 𝖱𝖾𝗊𝗎𝖾𝗌𝗍𝖾𝖽 𝖡𝗒  : {message.from_user.mention}\n"
+        f"⏰ 𝖱𝖾𝗌𝗎𝗅𝗍 𝖲𝗁𝗈𝗐𝗇 𝗂𝗇 : {remaining_seconds} 𝗌𝖾𝖼𝗈𝗇𝖽𝗌\n\n"
+        f"<blockquote>⚠️ ᴀꜰᴛᴇʀ 5 ᴍɪɴᴜᴛᴇꜱ ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴅᴇʟᴇᴛᴇᴅ 🗑️</blockquote></b>"
     )
 
-    # Send initial response fast
-    sent_msg = await message.reply_text(
-        text=initial_caption,
-        reply_markup=InlineKeyboardMarkup(btn),
-        disable_web_page_preview=True
-    )
+    for file in files:
+        cap += f"<b>📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}'>[{get_size(file['file_size'])}] {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}\n</a></b>"
 
-    await reply_msg.delete()
+    sent = await reply_msg.edit_text(cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
 
-    # Lazy load IMDb info
-    asyncio.create_task(
-        fetch_and_update_imdb(client, sent_msg, search, req, files[0]["file_name"], btn, settings, message)
-    )
-
-    # Optional: auto-delete setup
-    if settings.get("auto_delete"):
-        await asyncio.sleep(300)
-        await sent_msg.delete()
-        await message.delete()
+    # Lazy load IMDb
+    if settings["imdb"]:
+        asyncio.create_task(lazy_imdb_update(client, message, search, files, btn, settings, sent))
 
 
-# 👇 IMDb Fetch and Update Handler
-async def fetch_and_update_imdb(client, message, search, user_id, file_name, btn, settings, ref_msg):
+async def lazy_imdb_update(client, message, search, files, btn, settings, sent_msg):
     try:
-        imdb = await get_poster(search, file=file_name)
+        imdb = await get_poster(search, file=(files[0])['file_name'])
         if not imdb:
             return
 
@@ -2556,29 +2542,17 @@ async def fetch_and_update_imdb(client, message, search, user_id, file_name, btn
             related_link=imdb['related_links'],
             **locals()
         )
-        temp.IMDB_CAP[user_id] = cap
 
         if imdb.get('poster'):
             try:
-                await client.edit_message_media(
-                    chat_id=message.chat.id,
-                    message_id=message.message_id,
-                    media=InputMediaPhoto(media=imdb['poster'], caption=cap),
-                    reply_markup=InlineKeyboardMarkup(btn)
-                )
-            except Exception:
-                await message.edit_caption(
-                    caption=cap,
-                    reply_markup=InlineKeyboardMarkup(btn)
-                )
+                await message.reply_photo(photo=imdb['poster'], caption=cap, reply_markup=InlineKeyboardMarkup(btn))
+            except (MediaEmpty, PhotoInvalidDimensions, WebpageMediaEmpty):
+                fallback = imdb['poster'].replace('.jpg', "._V1_UX360.jpg")
+                await message.reply_photo(photo=fallback, caption=cap, reply_markup=InlineKeyboardMarkup(btn))
         else:
-            await message.edit_caption(
-                caption=cap,
-                reply_markup=InlineKeyboardMarkup(btn)
-            )
-
+            await sent_msg.edit_text(cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
     except Exception as e:
-        logger.exception(f"Lazy IMDb update failed: {e}")
+        logger.exception("Error in lazy IMDb update: %s", e)
 
 
 
