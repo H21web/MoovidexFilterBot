@@ -5,9 +5,6 @@ bs4
 shortzy 
 pytz 
 aiohttp
-yt-dlp
-youtube-dl
-ytthumb
 jinja2
 apscheduler
 pyshorteners
@@ -20,13 +17,11 @@ aiofiles
 hachoir
 python-decouple 
 ffmpeg
-youtube_search
 pymongo[srv]==3.12.3 
 motor==2.5.1 
 marshmallow==3.14.1 
 umongo==3.0.1 
 PyLeaves==1.0.2
-youtube-search-python==1.4.6
 opencv-python-headless==4.7.0.68 
 googletrans==4.0.0rc1
 pydub==0.25.1
