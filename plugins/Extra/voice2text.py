@@ -8,16 +8,13 @@ from collections import defaultdict
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pydub import AudioSegment
-from imdb import Cinemagoer
-from googlesearch import search
+
 import re
 
 from info import ADMINS, LOG_CHANNEL, DEEPGRAM_API_KEYS
 from plugins.pm_filter import boovo
 from utils import get_settings  # Import settings function
 
-# IMDbPY client
-ia = Cinemagoer()
 
 VOICE_LIMIT = 10
 VOICE_DURATION_LIMIT = 5  # seconds
@@ -61,35 +58,23 @@ def convert_ogg_to_wav(input_path: str, output_path: str):
     sound[:10000].export(output_path, format="wav")
 
 
-def find_movie_with_imdb(query: str) -> str:
-    try:
-        results = ia.search_movie(query)
-        if results:
-            return results[0]['title']
-    except Exception as e:
-        print("IMDbPY error:", e)
-    return ""
-
 
 def find_movie_with_google(query: str) -> str:
     try:
-        for url in search(f"{query} movie site:imdb.com", num_results=3):
-            if "imdb.com/title" in url:
-                return extract_title_from_url(url)
+        response = requests.get(f"https://imdblinkz.s1mallufiles.workers.dev/?q={query}", timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            results = data.get("results", [])
+            if results:
+                imdb_id = results[0].get("id")
+                if imdb_id and imdb_id.startswith("tt"):
+                    movie = ia.get_movie(imdb_id[2:])
+                    return movie.get('title', f"IMDb ID: {imdb_id}")
+        else:
+            print(f"IMDb link API error: {response.status_code} {response.text}")
     except Exception as e:
-        print("Google search error:", e)
+        print("IMDb link API exception:", e)
     return re.sub(r'\W+', ' ', query).strip()
-
-
-def extract_title_from_url(url: str) -> str:
-    imdb_id = url.strip("/").split("/")[-1]
-    if imdb_id.startswith("tt"):
-        try:
-            movie = ia.get_movie(imdb_id[2:])
-            return movie.get('title', f"IMDb ID: {imdb_id}")
-        except:
-            return f"IMDb ID: {imdb_id}"
-    return "Unknown movie"
 
 
 @Client.on_message(filters.voice)
