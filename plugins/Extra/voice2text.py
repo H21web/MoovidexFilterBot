@@ -8,7 +8,7 @@ from collections import defaultdict
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pydub import AudioSegment
-
+from utils import get_poster
 import re
 
 from info import ADMINS, LOG_CHANNEL, DEEPGRAM_API_KEYS
@@ -59,23 +59,31 @@ def convert_ogg_to_wav(input_path: str, output_path: str):
 
 
 
-def find_movie_with_google(query: str) -> str:
+async def find_movie_with_api(query: str) -> str:
+    api_url = f"https://imdblinkz.s1mallufiles.workers.dev/?q={query}"
+    
     try:
-        response = requests.get(f"https://imdblinkz.s1mallufiles.workers.dev/?q={query}", timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            results = data.get("results", [])
-            if results:
-                imdb_id = results[0].get("id")
-                if imdb_id and imdb_id.startswith("tt"):
-                    movie = ia.get_movie(imdb_id[2:])
-                    return movie.get('title', f"IMDb ID: {imdb_id}")
-        else:
-            print(f"IMDb link API error: {response.status_code} {response.text}")
-    except Exception as e:
-        print("IMDb link API exception:", e)
-    return re.sub(r'\W+', ' ', query).strip()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_url, timeout=10) as response:
+                if response.status != 200:
+                    print("API Error:", response.status)
+                    return "unknown movie"
 
+                data = await response.json()
+                results = data.get("results", [])
+                if not results:
+                    return "unknown movie"
+
+                imdb_id = results[0].get("id")
+                if not imdb_id:
+                    return "unknown movie"
+
+                movie_data = await get_poster(imdb_id, id=True)
+                return movie_data.get("title", "unknown movie") if movie_data else "unknown movie"
+
+    except Exception as e:
+        print("Error using external API:", e)
+        return "unknown movie"
 
 @Client.on_message(filters.voice)
 async def handle_voice(bot: Client, message: Message):
@@ -115,7 +123,7 @@ async def handle_voice(bot: Client, message: Message):
 
         await status.delete()
 
-        title = find_movie_with_imdb(text) or find_movie_with_google(text)
+        title = await find_movie_with_api(text)
 
         if title.lower().strip() == "unknown movie":
             await message.reply_text("❌ Movie not found.")
