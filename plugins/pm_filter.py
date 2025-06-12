@@ -108,7 +108,7 @@ async def pm_text(bot, message):
     # After processing, send the nicely formatted PM search log:
     await bot.send_message(
         chat_id=LOG_CHANNEL,
-        text=PM_SEARCH.format(user=user, user_id=user_id, content=content)
+        text=PM_SEARCH_TEMPLATE.format(user=user, user_id=user_id, content=content)
     )
 
 async def doo(bot, data, message):
