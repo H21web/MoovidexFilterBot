@@ -183,7 +183,7 @@ async def get_poster(query, bulk=False, id=False, file=None):
         release_date = None
 
     duration_iso = short.get("duration")
-    runtime_sec = main.get("runtime", {}).get("seconds")
+    runtime_sec = (main.get("runtime") or {}).get("seconds")
     runtime = format_runtime(duration_iso, runtime_sec)
 
     akas        = [a.get("text") or a.get("title") for a in main.get("akas", {}).get("edges", [])]
