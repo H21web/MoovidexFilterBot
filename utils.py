@@ -7,7 +7,7 @@ from info import *
 
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram import enums
-from urllib.parse import quote
+from urllib.parse import quote_plus
 #from imdb import Cinemagoer 
 from pyrogram.errors import *
 from typing import Union
@@ -99,7 +99,6 @@ async def is_subscribed(bot, query):
 
 
 
-
 def list_to_str(items):
     if not items:
         return None
@@ -144,36 +143,12 @@ async def lookup_imdb_id(title):
     
     return None
 
+
 async def fetch_json(imdb_id):
     url = f"https://imdb.iamidiotareyoutoo.com/search?tt={imdb_id}"
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             return await response.json()
-
-async def get_related_movies(query):
-    """Fetch related movies from external API and format them with Telegram links."""
-    search_query = query.lower().replace("kgf", "").strip()
-    api_url = f"https://api.safone.co/asq?query=suggest%20movie%20like%20{search_query}%20%28only%204%20movie%20names%29"
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(api_url) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    answer = data.get("answer", "")
-                    if not answer:
-                        return None
-                    
-                    movie_lines = [line.strip("🎬 ").strip() for line in answer.split("\n") if line.startswith("🎬")]
-                    formatted = "\n".join(
-                        f"🎬 [{title}](https://t.me/moovidexrobot?start=Search_{title.replace(' ', '%20')})"
-                        for title in movie_lines
-                    )
-                    return formatted
-    except Exception:
-        logger.exception("Failed to fetch related movies.")
-    
-    return None
 
 async def get_poster(query, bulk=False, id=False, file=None):
     imdb_id = query if id else await lookup_imdb_id(query)
@@ -225,9 +200,6 @@ async def get_poster(query, bulk=False, id=False, file=None):
     music_team  = [m.get("name") for m in main.get("musicDepartment", [])]
     distributors= [d.get("name") for d in main.get("distributors", [])]
 
-    # Fetch related movies
-    related = await get_related_movies(query)
-
     movie = {
         'title': title,
         'votes': votes,
@@ -255,11 +227,11 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'poster': short.get("image"),
         'plot': short.get("description"),
         'rating': rating,
-        'url': short.get("url") or f'https://www.imdb.com/title/{imdb_id}',
-        'related_links': related  # ✅ Add related movie links here
+        'url': short.get("url") or f'https://www.imdb.com/title/{imdb_id}'
     }
 
     return movie
+
 
 async def broadcast_messages(user_id, message):
     try:
