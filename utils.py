@@ -7,6 +7,7 @@ from info import *
 
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram import enums
+from urllib.parse import quote_plus
 #from imdb import Cinemagoer 
 from pyrogram.errors import *
 from typing import Union
@@ -171,11 +172,6 @@ async def get_related_movies_links(query):
                 ]
 
                 return "\n".join(links)
-
-    except Exception:
-        logger.exception("Related movies fetch failed for query: %s", query)
-        return "🎬 No related movies found."
-
 
 # 🎥 MAIN FUNCTION
 async def get_poster(query, bulk=False, id=False, file=None):
