@@ -164,6 +164,12 @@ async def get_related_movies_links(query):
                 # Remove lines with numbered movie names
                 text_without_movies = re.sub(r"\n\d+\.\s+\*\*.*?\*\*", "", full_text).strip()
 
+                if not movie_names:
+                    return {
+                        "text": "No related movies found.",
+                        "links": []
+                    }
+
                 # Build Telegram Markdown links with 🎬
                 links = [
                     f"🎬 [{name}](https://t.me/moovidexrobot?start=Search_{name.replace(' ', '%20')})"
@@ -171,15 +177,17 @@ async def get_related_movies_links(query):
                 ]
 
                 return {
-                    "text": text_without_movies,
+                    "text": text_without_movies or "No related movies found.",
                     "links": links
                 }
+
     except Exception:
         logger.exception("Related movies fetch failed for query: %s", query)
         return {
-            "text": "",
+            "text": "❌ No related movies found.",
             "links": []
         }
+
 
 # 🎥 MAIN FUNCTION
 async def get_poster(query, bulk=False, id=False, file=None):
