@@ -121,7 +121,6 @@ def format_runtime(runtime_str=None, seconds=None):
     return None
 
 async def lookup_imdb_id(title):
-    """Use new IMDb API to find IMDb ID."""
     title = title.lower().strip()
     if title in IMDB_CACHE:
         return IMDB_CACHE[title]
@@ -142,13 +141,47 @@ async def lookup_imdb_id(title):
     
     return None
 
-
 async def fetch_json(imdb_id):
     url = f"https://imdb.iamidiotareyoutoo.com/search?tt={imdb_id}"
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             return await response.json()
 
+# 🎬 RELATED MOVIES API
+async def get_related_movies_links(query):
+    clean_query = re.sub(r"kgf", "", query, flags=re.IGNORECASE).strip()
+    api_url = f"https://api.safone.co/asq?query=suggest%20movie%20like%20{clean_query}%20%28only%204%20movie%20names%29"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_url) as response:
+                data = await response.json()
+                full_text = data.get("answer", "").strip()
+
+                # Extract movie names
+                movie_names = re.findall(r"\*\*(.*?)\*\*", full_text)
+
+                # Remove lines with numbered movie names
+                text_without_movies = re.sub(r"\n\d+\.\s+\*\*.*?\*\*", "", full_text).strip()
+
+                # Build Telegram Markdown links with 🎬
+                links = [
+                    f"🎬 [{name}](https://t.me/moovidexrobot?start=Search_{name.replace(' ', '%20')})"
+                    for name in movie_names
+                ]
+
+                return {
+                    "text": text_without_movies,
+                    "links": links
+                }
+    except Exception:
+        logger.exception("Related movies fetch failed for query: %s", query)
+        return {
+            "text": "",
+            "links": []
+        }
+
+# 🎥 MAIN FUNCTION
 async def get_poster(query, bulk=False, id=False, file=None):
     imdb_id = query if id else await lookup_imdb_id(query)
     if not imdb_id:
@@ -199,6 +232,9 @@ async def get_poster(query, bulk=False, id=False, file=None):
     music_team  = [m.get("name") for m in main.get("musicDepartment", [])]
     distributors= [d.get("name") for d in main.get("distributors", [])]
 
+    # 🔗 Related movies
+    related = await get_related_movies_links(title or query)
+
     movie = {
         'title': title,
         'votes': votes,
@@ -226,11 +262,14 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'poster': short.get("image"),
         'plot': short.get("description"),
         'rating': rating,
-        'url': short.get("url") or f'https://www.imdb.com/title/{imdb_id}'
+        'url': short.get("url") or f'https://www.imdb.com/title/{imdb_id}',
+
+        # 🎬 Related movies block
+        'related_text': related.get("text"),
+        'related_links': related.get("links")
     }
 
     return movie
-
 
 
 async def broadcast_messages(user_id, message):
