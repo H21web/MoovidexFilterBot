@@ -2485,7 +2485,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         
         # Start IMDB fetch asynchronously and update the message
         asyncio.create_task(fetch_and_update_imdb(
-            client, message, search, files, btn, initial_response, settings
+            client, message, search, files, btn, initial_response, settings, remaining_seconds
         ))
     else:
         # No IMDB needed, send final response
@@ -2558,7 +2558,7 @@ def create_initial_caption(search, message, remaining_seconds, files, settings):
     
     return cap
 
-async def fetch_and_update_imdb(client, message, search, files, btn, initial_response, settings):
+async def fetch_and_update_imdb(client, message, search, files, btn, initial_response, settings, remaining_seconds):
     """Fetch IMDB data asynchronously and update the message"""
     try:
         # Fetch IMDB data
@@ -2595,7 +2595,9 @@ async def fetch_and_update_imdb(client, message, search, files, btn, initial_res
                 poster=imdb['poster'],
                 plot=imdb['plot'],
                 rating=imdb['rating'],
-                url=imdb['url']
+                url=imdb['url'],
+                related_link=imdb['related_links'],
+                remaining_seconds=remaining_seconds
             )
             
             # Store IMDB caption
@@ -2697,6 +2699,7 @@ async def handle_auto_delete(settings, message, response):
     except Exception as e:
         logger.exception(f"Error in auto delete: {e}")
         pass
+
 
 async def handle_no_results(client, reply_msg, mv_rqst, reqstr):
     try:
