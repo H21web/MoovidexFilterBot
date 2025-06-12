@@ -161,32 +161,20 @@ async def get_related_movies_links(query):
                 # Extract movie names
                 movie_names = re.findall(r"\*\*(.*?)\*\*", full_text)
 
-                # Remove lines with numbered movie names
-                text_without_movies = re.sub(r"\n\d+\.\s+\*\*.*?\*\*", "", full_text).strip()
-
                 if not movie_names:
-                    return {
-                        "text": "No related movies found.",
-                        "links": []
-                    }
+                    return "🎬 No related movies found."
 
-                # Build Telegram Markdown links with 🎬
+                # Build Markdown links (🎬 MovieName)
                 links = [
                     f"🎬 [{name}](https://t.me/moovidexrobot?start=Search_{name.replace(' ', '%20')})"
                     for name in movie_names
                 ]
 
-                return {
-                    "text": text_without_movies or "No related movies found.",
-                    "links": links
-                }
+                return "\n".join(links)
 
     except Exception:
         logger.exception("Related movies fetch failed for query: %s", query)
-        return {
-            "text": "❌ No related movies found.",
-            "links": []
-        }
+        return "🎬 No related movies found."
 
 
 # 🎥 MAIN FUNCTION
@@ -271,9 +259,6 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'plot': short.get("description"),
         'rating': rating,
         'url': short.get("url") or f'https://www.imdb.com/title/{imdb_id}',
-
-        # 🎬 Related movies block
-        'related_text': related.get("text"),
         'related_links': related.get("links")
     }
 
@@ -802,7 +787,6 @@ async def get_cap(settings, remaining_seconds, files, query, total_results, sear
                     plot=imdb['plot'],
                     rating=imdb['rating'],
                     url=imdb['url'],
-                    related_text=imdb['related_text'],
                     related_link=imdb['related_links'],
                     **locals()
                 )
