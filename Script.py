@@ -267,7 +267,7 @@ Series Format:
 🏷️ 𝙽𝙰𝙼𝙴 : <code>{}</code> 
 📜 𝙼𝙴𝚂𝚂𝙰𝙶𝙴 : <code>{}</code></blockquote> """
     
-    PM_SEARCH= """ 
+    PM_SEARCH_TEMPLATE= """ 
 <b>𝙿𝙼 𝚂𝙴𝙰𝚁𝙲𝙷   </b>                                        🕵  
 <blockquote>🏷️ 𝙽𝙰𝙼𝙴 :   {user}                                       
 📟 𝙸𝙳   :   {user_id}
