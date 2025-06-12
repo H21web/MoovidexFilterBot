@@ -2457,7 +2457,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         settings = await get_settings(message.chat.id)
         await msg.message.delete()
 
-    # Common setup
+    # Generate buttons and initial response data
     pre = 'filep' if settings['file_secure'] else 'file'
     key = f"{message.chat.id}-{message.id}"
     req = message.from_user.id if message.from_user else 0
@@ -2465,79 +2465,86 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     temp.GETALL[key] = files
     temp.SHORT[message.from_user.id] = message.chat.id
     total_results_str = str(total_results)
-
+    
     # Create buttons
-    btn = await create_buttons(settings, files, pre, key, total_results_str, offset, req)
-
+    btn = create_buttons(files, settings, key, req, offset, total_results, total_results_str, pre)
+    
     # Calculate response time
     cur_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
     time_difference = timedelta(hours=cur_time.hour, minutes=cur_time.minute, seconds=(cur_time.second+(cur_time.microsecond/1000000))) - timedelta(hours=curr_time.hour, minutes=curr_time.minute, seconds=(curr_time.second+(curr_time.microsecond/1000000)))
     remaining_seconds = "{:.2f}".format(time_difference.total_seconds())
-
-    # Initial response without IMDB data
-    initial_cap = create_initial_caption(search, message, remaining_seconds, files, settings)
     
-    # Send initial response quickly
-    if settings.get("imdb", False):
-        # Show loading indicator for IMDB
-        loading_cap = initial_cap + "\n\n🔄 <i>Loading movie details...</i>"
-        initial_response = await reply_msg.edit_text(text=loading_cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
+    # Send fast initial response without IMDB data
+    initial_cap = create_initial_caption(search, message, remaining_seconds, settings, files)
+    
+    try:
+        # Send initial response immediately
+        if settings["button"]:
+            initial_msg = await reply_msg.edit_text(text=initial_cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
+        else:
+            initial_msg = await reply_msg.edit_text(text=initial_cap, disable_web_page_preview=True)
         
-        # Start IMDB fetch asynchronously and update the message
-        asyncio.create_task(fetch_and_update_imdb(
-            client, message, search, files, btn, initial_response, settings, remaining_seconds
-        ))
-    else:
-        # No IMDB needed, send final response
-        final_response = await reply_msg.edit_text(text=initial_cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
+        # Load IMDB data in background and update message
+        if settings.get("imdb", True):
+            asyncio.create_task(update_with_imdb(client, message, initial_msg, search, files, btn, settings, key))
         
-        # Handle auto-delete
-        await handle_auto_delete(settings, message, final_response)
+        # Auto-delete functionality
+        try:
+            if settings.get('auto_delete', True):
+                asyncio.create_task(auto_delete_messages(initial_msg, message, 300))
+        except KeyError:
+            await save_group_settings(message.chat.id, 'auto_delete', True)
+            asyncio.create_task(auto_delete_messages(initial_msg, message, 300))
+            
+    except Exception as e:
+        logger.exception(f"Error in auto_filter: {e}")
 
-async def create_buttons(settings, files, pre, key, total_results_str, offset, req):
+def create_buttons(files, settings, key, req, offset, total_results, total_results_str, pre):
     """Create inline keyboard buttons"""
     btn = []
     
     if settings["button"]:
-        # Add file buttons
-        file_buttons = [
+        # File buttons
+        btn = [
             [
                 InlineKeyboardButton(
-                    text=f"📁[{get_size(file['file_size'])}] ⊳ {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}", 
+                    text=f"📁[{get_size(file['file_size'])}] ⊳ {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}",
                     callback_data=f'{pre}#{file["file_id"]}'
                 ),
             ]
             for file in files
         ]
-        btn.extend(file_buttons)
     
-    # Add control buttons
-    btn.insert(0, [
-        InlineKeyboardButton(f'🎚️ ǫᴜᴀʟɪᴛʏ', callback_data=f"qualities#{key}"),
-        InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
-        InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs", callback_data=f"seasons#{key}")
-    ])
+    # Control buttons
+    control_buttons = [
+        [
+            InlineKeyboardButton(f'🎚️ ǫᴜᴀʟɪᴛʏ', callback_data=f"qualities#{key}"),
+            InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
+            InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs", callback_data=f"seasons#{key}")
+        ],
+        [
+            InlineKeyboardButton(f"🗂 ꜰɪʟᴇꜱ: {total_results_str}", 'total'),
+            InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}")
+        ]
+    ]
     
-    btn.insert(0, [
-        InlineKeyboardButton(f"🗂 ꜰɪʟᴇꜱ: {total_results_str}", 'total'),
-        InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}")
-    ])
+    btn = control_buttons + btn
     
-    # Add pagination buttons
+    # Pagination buttons
     if offset != "":
         try:
             max_btn = settings.get('max_btn', True)
             per_page = 10 if max_btn else int(MAX_B_TN)
             btn.append([
                 InlineKeyboardButton("📑 𝖯𝖠𝖦𝖤", callback_data="pages"),
-                InlineKeyboardButton(text=f"1/{math.ceil(int(total_results_str)/per_page)}", callback_data="pages"),
+                InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/per_page)}", callback_data="pages"),
                 InlineKeyboardButton(text="𝖭𝖤𝖷𝖳 ⌦", callback_data=f"next_{req}_{key}_{offset}")
             ])
         except (KeyError, NameError):
-            await save_group_settings(message.chat.id, 'max_btn', True) if 'message' in locals() else None
+            await save_group_settings(message.chat.id, 'max_btn', True)
             btn.append([
                 InlineKeyboardButton("📑 𝖯𝖠𝖦𝖤", callback_data="pages"),
-                InlineKeyboardButton(text=f"1/{math.ceil(int(total_results_str)/10)}", callback_data="pages"),
+                InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/10)}", callback_data="pages"),
                 InlineKeyboardButton(text="𝖭𝖤𝖷𝖳 ⌦", callback_data=f"next_{req}_{key}_{offset}")
             ])
     else:
@@ -2547,19 +2554,19 @@ async def create_buttons(settings, files, pre, key, total_results_str, offset, r
     
     return btn
 
-def create_initial_caption(search, message, remaining_seconds, files, settings):
+def create_initial_caption(search, message, remaining_seconds, settings, files):
     """Create initial caption without IMDB data"""
-    cap = f"<b>𝖱𝖾𝗌𝗎𝗅𝗍 𝖥𝗈𝗎𝗇𝖽 𝖥𝗈𝗋 {search}\n\n🧑‍💻 𝖱𝖾𝗊𝗎𝖾𝗌𝗍𝖾𝖽 𝖡𝗒: {message.from_user.mention}\n⏰ 𝖱𝖾𝗌𝗎𝗅𝗍 𝖲𝗁𝗈𝗐𝗇 𝗂𝗇: {remaining_seconds} 𝗌𝖾𝖼𝗈𝗇𝖽𝗌\n\n<blockquote>⚠️ ᴀꜰᴛᴇʀ 5 ᴍɪɴᴜᴛᴇꜱ ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴅᴇʟᴇᴛᴇᴅ 🗑️</blockquote>\n\n</b>"
+    base_cap = f"<b>🔍 𝖲𝖾𝖺𝗋𝖼𝗁𝗂𝗇𝗀 𝖥𝗈𝗋: {search}\n\n🧑‍💻 𝖱𝖾𝗊𝗎𝖾𝗌𝗍𝖾𝖽 𝖡𝗒: {message.from_user.mention}\n⏰ 𝖱𝖾𝗌𝗎𝗅𝗍 𝖲𝗁𝗈𝗐𝗇 𝗂𝗇: {remaining_seconds} 𝗌𝖾𝖼𝗈𝗇𝖽𝗌\n\n<blockquote>📽️ ʟᴏᴀᴅɪɴɢ ɪᴍᴅʙ ᴅᴀᴛᴀ...</blockquote>\n\n<blockquote>⚠️ ᴀꜰᴛᴇʀ 5 ᴍɪɴᴜᴛᴇꜱ ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴅᴇʟᴇᴛᴇᴅ 🗑️</blockquote></b>"
     
-    # Add file links if button mode is disabled
+    # Add file list if buttons are disabled
     if not settings.get("button", True):
         for file in files:
-            cap += f"<b>📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}'>[{get_size(file['file_size'])}] {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}\n\n</a></b>"
+            base_cap += f"<b>\n📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}'>[{get_size(file['file_size'])}] {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}</a></b>"
     
-    return cap
+    return base_cap
 
-async def fetch_and_update_imdb(client, message, search, files, btn, initial_response, settings, remaining_seconds):
-    """Fetch IMDB data asynchronously and update the message"""
+async def update_with_imdb(client, message, initial_msg, search, files, btn, settings, key):
+    """Background task to fetch IMDB data and update message"""
     try:
         # Fetch IMDB data
         imdb = await get_poster(search, file=(files[0])['file_name'])
@@ -2596,110 +2603,85 @@ async def fetch_and_update_imdb(client, message, search, files, btn, initial_res
                 plot=imdb['plot'],
                 rating=imdb['rating'],
                 url=imdb['url'],
-                related_link=imdb['related_links'],
-                remaining_seconds=remaining_seconds
+                related_link=imdb['related_links']
             )
             
-            # Store IMDB caption
             temp.IMDB_CAP[message.from_user.id] = cap
             
-            # Add file links if button mode is disabled
+            # Add file list if buttons are disabled
             if not settings.get("button", True):
                 for file in files:
-                    cap += f"<b>\n📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}'>[{get_size(file['file_size'])}] {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}\n</a></b>"
-
-            # Try to update with poster
+                    cap += f"<b>\n📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}'>[{get_size(file['file_size'])}] {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}</a></b>"
+            
+            # Update message with IMDB data
             if imdb.get('poster'):
                 try:
-                    # Delete the text message and send photo message
-                    await initial_response.delete()
-                    updated_response = await message.reply_photo(
-                        photo=imdb.get('poster'), 
-                        caption=cap, 
+                    # Try to update with photo
+                    new_msg = await message.reply_photo(
+                        photo=imdb.get('poster'),
+                        caption=cap,
                         reply_markup=InlineKeyboardMarkup(btn)
                     )
-                    await handle_auto_delete(settings, message, updated_response)
-                    
+                    await initial_msg.delete()
+                    return new_msg
                 except (MediaEmpty, PhotoInvalidDimensions, WebpageMediaEmpty):
                     # Try alternative poster URL
-                    pic = imdb.get('poster')
-                    poster = pic.replace('.jpg', "._V1_UX360.jpg")
                     try:
-                        await initial_response.delete()
-                        updated_response = await message.reply_photo(
-                            photo=poster, 
-                            caption=cap, 
+                        poster = imdb.get('poster').replace('.jpg', "._V1_UX360.jpg")
+                        new_msg = await message.reply_photo(
+                            photo=poster,
+                            caption=cap,
                             reply_markup=InlineKeyboardMarkup(btn)
                         )
-                        await handle_auto_delete(settings, message, updated_response)
+                        await initial_msg.delete()
+                        return new_msg
                     except Exception:
-                        # Fallback to text update
-                        updated_response = await initial_response.edit_text(
-                            text=cap, 
-                            reply_markup=InlineKeyboardMarkup(btn)
-                        )
-                        await handle_auto_delete(settings, message, updated_response)
-                        
+                        # Fall back to text update
+                        await initial_msg.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
                 except Exception as e:
-                    logger.exception(e)
-                    # Fallback to text update
-                    updated_response = await initial_response.edit_text(
-                        text=cap, 
-                        reply_markup=InlineKeyboardMarkup(btn)
-                    )
-                    await handle_auto_delete(settings, message, updated_response)
+                    logger.exception(f"Error updating with photo: {e}")
+                    await initial_msg.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
             else:
-                # No poster, just update text
-                updated_response = await initial_response.edit_text(
-                    text=cap, 
-                    reply_markup=InlineKeyboardMarkup(btn),
-                    disable_web_page_preview=True
-                )
-                await handle_auto_delete(settings, message, updated_response)
+                # Update with text only
+                await initial_msg.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
         else:
-            # No IMDB data found, remove loading indicator
-            current_text = initial_response.text or initial_response.caption or ""
-            updated_text = current_text.replace("\n\n🔄 <i>Loading movie details...</i>", "")
-            updated_response = await initial_response.edit_text(
-                text=updated_text, 
-                reply_markup=InlineKeyboardMarkup(btn),
-                disable_web_page_preview=True
-            )
-            await handle_auto_delete(settings, message, updated_response)
+            # No IMDB data found, update status
+            updated_cap = initial_msg.text.replace("📽️ ʟᴏᴀᴅɪɴɢ ɪᴍᴅʙ ᴅᴀᴛᴀ...", "❌ ɪᴍᴅʙ ᴅᴀᴛᴀ ɴᴏᴛ ꜰᴏᴜɴᴅ")
+            await initial_msg.edit_text(text=updated_cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
             
     except Exception as e:
-        logger.exception(f"Error fetching IMDB data: {e}")
-        # Remove loading indicator on error
+        logger.exception(f"Error updating with IMDB data: {e}")
         try:
-            current_text = initial_response.text or initial_response.caption or ""
-            updated_text = current_text.replace("\n\n🔄 <i>Loading movie details...</i>", "")
-            updated_response = await initial_response.edit_text(
-                text=updated_text, 
-                reply_markup=InlineKeyboardMarkup(btn),
-                disable_web_page_preview=True
-            )
-            await handle_auto_delete(settings, message, updated_response)
+            # Update to show IMDB loading failed
+            updated_cap = initial_msg.text.replace("📽️ ʟᴏᴀᴅɪɴɢ ɪᴍᴅʙ ᴅᴀᴛᴀ...", "⚠️ ɪᴍᴅʙ ᴅᴀᴛᴀ ʟᴏᴀᴅɪɴɢ ꜰᴀɪʟᴇᴅ")
+            await initial_msg.edit_text(text=updated_cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
         except Exception:
             pass
 
-async def handle_auto_delete(settings, message, response):
-    """Handle automatic message deletion"""
+async def auto_delete_messages(reply_msg, original_msg, delay=300):
+    """Auto-delete messages after specified delay"""
     try:
-        auto_delete = settings.get('auto_delete', True)
-        if auto_delete:
-            await asyncio.sleep(300)  # 5 minutes
-            await response.delete()
-            await message.delete()
-    except KeyError:
-        # Set default auto_delete if not exists
-        await save_group_settings(message.chat.id, 'auto_delete', True)
-        await asyncio.sleep(300)
-        await response.delete()
-        await message.delete()
+        await asyncio.sleep(delay)
+        await reply_msg.delete()
+        await original_msg.delete()
     except Exception as e:
-        logger.exception(f"Error in auto delete: {e}")
-        pass
+        logger.exception(f"Error in auto_delete_messages: {e}")
 
+async def handle_no_results(client, reply_msg, mv_rqst, reqstr):
+    """Handle case when no results are found"""
+    try:
+        reqst_gle = mv_rqst.replace(" ", "+")
+        button = [[
+            InlineKeyboardButton("Gᴏᴏɢʟᴇ", url=f"https://www.google.com/search?q={reqst_gle}")
+        ]]
+        if NO_RESULTS_MSG:
+            await client.send_message(chat_id=LOG_CHANNEL, text=script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst))
+        if reply_msg and hasattr(reply_msg, 'edit_text'):
+            k = await reply_msg.edit_text(text=script.I_CUDNT.format(mv_rqst), reply_markup=InlineKeyboardMarkup(button))
+            await asyncio.sleep(30)
+            await k.delete()
+    except Exception as e:
+        logger.exception("Error in handle_no_results: %s", e)
 
 async def handle_no_results(client, reply_msg, mv_rqst, reqstr):
     try:
