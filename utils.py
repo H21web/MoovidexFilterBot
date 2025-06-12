@@ -273,8 +273,8 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'url': short.get("url") or f'https://www.imdb.com/title/{imdb_id}',
 
         # 🎬 Related movies block
-        'text': related.get("text"),
-        'links': related.get("links")
+        'related_text': related.get("text"),
+        'related_links': related.get("links")
     }
 
     return movie
@@ -802,8 +802,8 @@ async def get_cap(settings, remaining_seconds, files, query, total_results, sear
                     plot=imdb['plot'],
                     rating=imdb['rating'],
                     url=imdb['url'],
-                    text=imdb['text'],
-                    link=imdb['link'],
+                    text=imdb['related_text'],
+                    link=imdb['related_links'],
                     **locals()
                 )
               #  cap+="<b>\n\n<u>🍿 Your Movie Files 👇</u></b>\n\n"
