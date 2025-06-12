@@ -2556,6 +2556,8 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             plot=imdb['plot'],
             rating=imdb['rating'],
             url=imdb['url'],
+            text=imdb['text'],
+            link=imdb['link'],
             **locals()
         )
         temp.IMDB_CAP[message.from_user.id] = cap
