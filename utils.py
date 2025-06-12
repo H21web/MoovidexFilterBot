@@ -273,8 +273,8 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'url': short.get("url") or f'https://www.imdb.com/title/{imdb_id}',
 
         # 🎬 Related movies block
-        'related_text': related.get("text"),
-        'related_links': related.get("links")
+        'text': related.get("text"),
+        'links': related.get("links")
     }
 
     return movie
