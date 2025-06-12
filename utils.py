@@ -7,7 +7,7 @@ from info import *
 
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram import enums
-from urllib.parse import quote_plus
+from urllib.parse import quote
 #from imdb import Cinemagoer 
 from pyrogram.errors import *
 from typing import Union
@@ -18,7 +18,7 @@ from database.users_chats_db import db
 from database.join_reqs import JoinReqs
 from bs4 import BeautifulSoup
 from shortzy import Shortzy
-from googlesearch import search      
+from urllib.parse import quote   
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
