@@ -43,7 +43,8 @@ async def send_movie_buttons(client, message):
             return
 
         buttons = []
-        for movie in movies_data:
+        for movie in reversed(movies_data):
+
             title = movie.get('title', 'No title available')
             callback_data = f"movie_detail_{title}"
             buttons.append([InlineKeyboardButton(title, callback_data=callback_data)])
