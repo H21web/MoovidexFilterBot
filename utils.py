@@ -802,8 +802,8 @@ async def get_cap(settings, remaining_seconds, files, query, total_results, sear
                     plot=imdb['plot'],
                     rating=imdb['rating'],
                     url=imdb['url'],
-                    text=imdb['related_text'],
-                    link=imdb['related_links'],
+                    related_text=imdb['related_text'],
+                    related_link=imdb['related_links'],
                     **locals()
                 )
               #  cap+="<b>\n\n<u>🍿 Your Movie Files 👇</u></b>\n\n"
