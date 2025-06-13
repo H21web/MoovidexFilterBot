@@ -161,32 +161,34 @@ Cᴏᴍᴍᴀɴᴅs Aɴᴅ Usᴀɢᴇ:
 ★ Usᴇᴅ Sᴛᴏʀᴀɢᴇ: <code>{} MB</code>
 ★ Fʀᴇᴇ Sᴛᴏʀᴀɢᴇ: <code>{} MB</code></b>"""
     
-    STATUS_TXT = """<b>📊 BOT STATUS DASHBOARD</b>
+    STATUS_TXT = """
+<b>📊 BOT STATUS DASHBOARD</b>
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
 <b>📈 OVERVIEW</b>
-├ 📁 <b>Total Files:</b> <code>{0}</code>
-├ 👥 <b>Users:</b> <code>{1}</code>
-└ 💬 <b>Chats:</b> <code>{2}</code>
+├ 📁 <b>Total Files:</b> <code>{}</code>
+├ 👥 <b>Users:</b> <code>{}</code>
+└ 💬 <b>Chats:</b> <code>{}</code>
 
 <b>🗄️ DATABASE STORAGE</b>
 ┌─ <b>Database 1</b>
-│   Files: <code>{3}</code>
-│   Usage: {4}
-│   
+│   ├ Files: <code>{}</code>
+│   └ Usage: {}
+│
 ├─ <b>Database 2</b>
-│   Files: <code>{5}</code>
-│   Usage: {6}
-│   
+│   ├ Files: <code>{}</code>
+│   └ Usage: {}
+│
 └─ <b>Database 3</b>
-    Usage: {7}
+    └ Usage: {}
 
 <b>🖥️ SERVER STATUS</b>
-├ CPU: {8} <code>{9:.1f}%</code>
-├ RAM: {10} <code>{11:.1f}%</code>
-└ Traffic: {12} <code>{13:.1f} MB/s</code>
+├ 🔋 CPU: {} <code>{}%</code>
+├ 🧠 RAM: {} <code>{}%</code>
+└ 🌐 Traffic: {} <code>{} MB/s</code>
 
-<i>Last updated: {14}</i>"""
+<i>🕓 Last Updated:</i> <code>{}</code>
+</i>"""
 
     
     LOG_TEXT_G = """<b>𝙱𝙾𝚃 𝙰𝙳𝙳𝙴𝙳 𝚃𝙾 𝙽𝙴𝚆 𝙶𝚁𝙾𝚄𝙿</b>                      🚨
