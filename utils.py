@@ -812,8 +812,9 @@ async def get_seconds(time_string):
     else:
         return 0
 
-def make_bar(used_percent):
-    filled = int(used_percent / 10)
-    empty = 10 - filled
-    return f"[{'█' * filled}{'░' * empty}] {used_percent:.0f}%"
-
+def make_bar(percent: int) -> str:
+    full = "█"
+    empty = "░"
+    bar_length = 10
+    filled = int(bar_length * percent / 100)
+    return "[" + (full * filled) + (empty * (bar_length - filled)) + "]"
