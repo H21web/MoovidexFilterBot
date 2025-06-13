@@ -1880,9 +1880,10 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 reply_markup=reply_markup,
                 parse_mode=enums.ParseMode.HTML
             )
-            await handle_admin_button(query.data)
+            #await handle_admin_button(query.data)
         else:
             await query.answer("⚙️ Yᴏᴜ ᴅᴏɴᴛ ʜᴀᴠᴇ ᴀᴄᴄᴇss ᴛᴏ ᴛʜɪs sᴇᴛᴛɪɴɢs!", show_alert=True)
+            
     elif query.data == "store_file":
         buttons = [[
             InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='help')
