@@ -1986,121 +1986,64 @@ async def cb_handler(client: Client, query: CallbackQuery):
             InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='help'),
             InlineKeyboardButton('⟲ Rᴇғʀᴇsʜ', callback_data='rfrsh')
         ]]
+    
         await client.edit_message_media(
-            query.message.chat.id, 
-            query.message.id, 
+            query.message.chat.id,
+            query.message.id,
             InputMediaPhoto(random.choice(PICS))
         )
+    
         reply_markup = InlineKeyboardMarkup(buttons)
     
-        # Data
+        # Get data
         total_users = await db.total_users_count()
         totl_chats = await db.total_chat_count()
         filesp = col.count_documents({})
         totalsec = sec_col.count_documents({})
-        total_files = filesp + totalsec
     
+        # Database usage
         stats = vjdb.command('dbStats')
-        used_dbSize = (stats['dataSize'] + stats['indexSize']) / (1024 * 1024)
-        used1_pct = min((used_dbSize / 512) * 100, 100)
+        used1 = (stats['dataSize'] + stats['indexSize']) / (1024 * 1024)
+        used1_pct = min(int((used1 / 512) * 100), 100)
     
         stats2 = sec_db.command('dbStats')
-        used_dbSize2 = (stats2['dataSize'] + stats2['indexSize']) / (1024 * 1024)
-        used2_pct = min((used_dbSize2 / 512) * 100, 100)
+        used2 = (stats2['dataSize'] + stats2['indexSize']) / (1024 * 1024)
+        used2_pct = min(int((used2 / 512) * 100), 100)
     
         stats3 = mydb.command('dbStats')
-        used_dbSize3 = (stats3['dataSize'] + stats3['indexSize']) / (1024 * 1024)
-        used3_pct = min((used_dbSize3 / 512) * 100, 100)
+        used3 = (stats3['dataSize'] + stats3['indexSize']) / (1024 * 1024)
+        used3_pct = min(int((used3 / 512) * 100), 100)
     
-        # Fake server data
-        cpu = random.randint(20, 90)
-        ram = random.randint(30, 95)
-        traffic = random.randint(10, 80)
+        # Fake server stats
+        cpu = random.randint(10, 90)
+        ram = random.randint(20, 85)
+        traffic = random.randint(10, 100)
     
         # Time
         now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
+        # Send response
         await query.message.edit_text(
             text=script.STATUS_TXT.format(
-                total_files,                # 1
-                total_users,               # 2
-                totl_chats,                # 3
-                filesp,                    # 4
-                script.make_bar(used1_pct),# 5
-                totalsec,                  # 6
-                script.make_bar(used2_pct),# 7
-                script.make_bar(used3_pct),# 8
-                script.make_bar(cpu),      # 9
-                cpu,                       #10
-                script.make_bar(ram),      #11
-                ram,                       #12
-                script.make_bar(traffic),  #13
-                traffic,                   #14
-                now_time                   #15
+                int(filesp) + int(totalsec),       # total files
+                total_users,                       # users
+                totl_chats,                        # chats
+                filesp,                            # DB1 files
+                make_bar(used1_pct),               # DB1 usage bar
+                totalsec,                          # DB2 files
+                make_bar(used2_pct),               # DB2 usage bar
+                make_bar(used3_pct),               # DB3 usage bar
+                make_bar(cpu),                     # CPU usage bar
+                cpu,                               # CPU %
+                make_bar(ram),                     # RAM usage bar
+                ram,                               # RAM %
+                make_bar(traffic),                 # Network traffic bar
+                traffic,                           # Traffic Mbps
+                now_time                           # Last updated
             ),
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
-
-    elif query.data == "rfrsh":
-        await query.answer("Fetching MongoDb DataBase")
-        buttons = [[
-            InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='help'),
-            InlineKeyboardButton('⟲ Rᴇғʀᴇsʜ', callback_data='rfrsh')
-        ]]
-        await client.edit_message_media(
-            query.message.chat.id, 
-            query.message.id, 
-            InputMediaPhoto(random.choice(PICS))
-        )
-        reply_markup = InlineKeyboardMarkup(buttons)
-    
-        # Same as stats block
-        total_users = await db.total_users_count()
-        totl_chats = await db.total_chat_count()
-        filesp = col.count_documents({})
-        totalsec = sec_col.count_documents({})
-        total_files = filesp + totalsec
-    
-        stats = vjdb.command('dbStats')
-        used_dbSize = (stats['dataSize'] + stats['indexSize']) / (1024 * 1024)
-        used1_pct = min((used_dbSize / 512) * 100, 100)
-    
-        stats2 = sec_db.command('dbStats')
-        used_dbSize2 = (stats2['dataSize'] + stats2['indexSize']) / (1024 * 1024)
-        used2_pct = min((used_dbSize2 / 512) * 100, 100)
-    
-        stats3 = mydb.command('dbStats')
-        used_dbSize3 = (stats3['dataSize'] + stats3['indexSize']) / (1024 * 1024)
-        used3_pct = min((used_dbSize3 / 512) * 100, 100)
-    
-        cpu = random.randint(20, 90)
-        ram = random.randint(30, 95)
-        traffic = random.randint(10, 80)
-        now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-        await query.message.edit_text(
-            text=script.STATUS_TXT.format(
-                total_files,                # 1
-                total_users,               # 2
-                totl_chats,                # 3
-                filesp,                    # 4
-                script.make_bar(used1_pct),# 5
-                totalsec,                  # 6
-                script.make_bar(used2_pct),# 7
-                script.make_bar(used3_pct),# 8
-                script.make_bar(cpu),      # 9
-                cpu,                       #10
-                script.make_bar(ram),      #11
-                ram,                       #12
-                script.make_bar(traffic),  #13
-                traffic,                   #14
-                now_time                   #15
-            ),
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
-
 
             
     elif query.data == "extra":
