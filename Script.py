@@ -165,28 +165,28 @@ Cᴏᴍᴍᴀɴᴅs Aɴᴅ Usᴀɢᴇ:
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
 <b>📈 OVERVIEW</b>
-├ 📁 <b>Total Files:</b> <code>{}</code>
-├ 👥 <b>Users:</b> <code>{}</code>
-└ 💬 <b>Chats:</b> <code>{}</code>
+├ 📁 <b>Total Files:</b> <code>{0}</code>
+├ 👥 <b>Users:</b> <code>{1}</code>
+└ 💬 <b>Chats:</b> <code>{2}</code>
 
 <b>🗄️ DATABASE STORAGE</b>
 ┌─ <b>Database 1</b>
-│   Files: <code>{}</code>
-│   Usage: {}
+│   Files: <code>{3}</code>
+│   Usage: {4}
 │   
 ├─ <b>Database 2</b>
-│   Files: <code>{}</code>
-│   Usage: {}
+│   Files: <code>{5}</code>
+│   Usage: {6}
 │   
 └─ <b>Database 3</b>
-    Usage: {}
+    Usage: {7}
 
 <b>🖥️ SERVER STATUS</b>
-├ CPU: {} <code>{}%</code>
-├ RAM: {} <code>{}%</code>
-└ Traffic: {} <code>{} MB/s</code>
+├ CPU: {8} <code>{9:.1f}%</code>
+├ RAM: {10} <code>{11:.1f}%</code>
+└ Traffic: {12} <code>{13:.1f} MB/s</code>
 
-<i>Last updated: {}</i>"""
+<i>Last updated: {14}</i>"""
 
     
     LOG_TEXT_G = """<b>𝙱𝙾𝚃 𝙰𝙳𝙳𝙴𝙳 𝚃𝙾 𝙽𝙴𝚆 𝙶𝚁𝙾𝚄𝙿</b>                      🚨
