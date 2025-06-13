@@ -188,7 +188,7 @@ Cᴏᴍᴍᴀɴᴅs Aɴᴅ Usᴀɢᴇ:
 └ 🌐 Traffic: {} <code>{} MB/s</code>
 
 <i>🕓 Last Updated:</i> <code>{}</code>
-</i>"""
+"""
 
     
     LOG_TEXT_G = """<b>𝙱𝙾𝚃 𝙰𝙳𝙳𝙴𝙳 𝚃𝙾 𝙽𝙴𝚆 𝙶𝚁𝙾𝚄𝙿</b>                      🚨
