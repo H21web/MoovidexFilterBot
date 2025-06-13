@@ -188,6 +188,7 @@ Cᴏᴍᴍᴀɴᴅs Aɴᴅ Usᴀɢᴇ:
 └ 🌐 Traffic: {} <code>{} MB/s</code>
 
 <i>🕓 Last Updated:</i> <code>{}</code>
+
 """
 
     
