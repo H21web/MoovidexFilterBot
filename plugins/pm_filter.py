@@ -2022,23 +2022,26 @@ async def cb_handler(client: Client, query: CallbackQuery):
     
         await query.message.edit_text(
             text=script.STATUS_TXT.format(
-                total_files,
-                total_users,
-                totl_chats,
-                filesp,
-                script.make_bar(used1_pct),
-                totalsec,
-                script.make_bar(used2_pct),
-                script.make_bar(used3_pct),
-                script.make_bar(cpu),
-                script.make_bar(ram),
-                script.make_bar(traffic),
-                now_time
+                total_files,                # 1
+                total_users,               # 2
+                totl_chats,                # 3
+                filesp,                    # 4
+                script.make_bar(used1_pct),# 5
+                totalsec,                  # 6
+                script.make_bar(used2_pct),# 7
+                script.make_bar(used3_pct),# 8
+                script.make_bar(cpu),      # 9
+                cpu,                       #10
+                script.make_bar(ram),      #11
+                ram,                       #12
+                script.make_bar(traffic),  #13
+                traffic,                   #14
+                now_time                   #15
             ),
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
-    
+
     elif query.data == "rfrsh":
         await query.answer("Fetching MongoDb DataBase")
         buttons = [[
@@ -2078,22 +2081,26 @@ async def cb_handler(client: Client, query: CallbackQuery):
     
         await query.message.edit_text(
             text=script.STATUS_TXT.format(
-                total_files,
-                total_users,
-                totl_chats,
-                filesp,
-                script.make_bar(used1_pct),
-                totalsec,
-                script.make_bar(used2_pct),
-                script.make_bar(used3_pct),
-                script.make_bar(cpu),
-                script.make_bar(ram),
-                script.make_bar(traffic),
-                now_time
+                total_files,                # 1
+                total_users,               # 2
+                totl_chats,                # 3
+                filesp,                    # 4
+                script.make_bar(used1_pct),# 5
+                totalsec,                  # 6
+                script.make_bar(used2_pct),# 7
+                script.make_bar(used3_pct),# 8
+                script.make_bar(cpu),      # 9
+                cpu,                       #10
+                script.make_bar(ram),      #11
+                ram,                       #12
+                script.make_bar(traffic),  #13
+                traffic,                   #14
+                now_time                   #15
             ),
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
+
 
             
     elif query.data == "extra":
