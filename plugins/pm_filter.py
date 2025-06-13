@@ -1947,31 +1947,37 @@ async def cb_handler(client: Client, query: CallbackQuery):
             await query.answer("🛒 ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ ᴛᴏ ᴜsᴇ ᴛʜɪs ғᴇᴀᴛᴜʀᴇ! 💳", show_alert=True)
 
     elif query.data == "spin":
-        user_id = query.from_user.id
-    
-        # Check if the user has premium access
-        if await db.has_premium_access(user_id):
-            buttons = [
-                [InlineKeyboardButton('ᴊᴏɪɴ ᴛᴏ ᴄʜᴀɴɴᴇʟ 🎰', url=f'https://t.me/moovidex')],
-                [InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='start')]
-            ]
-            reply_markup = InlineKeyboardMarkup(buttons)
-            await query.message.edit_text(text="● ◌ ◌")
-            await query.message.edit_text(text="● ● ◌")
-            await query.message.edit_text(text="● ● ●")
-            await client.edit_message_media(
-                query.message.chat.id,
-                query.message.id,
-                InputMediaPhoto(random.choice(PICS))
+            user_id = query.from_user.id
+            # Check if the user has premium access
+            if await db.has_premium_access(user_id):
+                buttons = [
+                    [InlineKeyboardButton('ᴊᴏɪɴ ᴛᴏ ᴄʜᴀɴɴᴇʟ 🎰', url=f'https://t.me/moovidex')],
+                    [InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='start')]
+                ]
+                reply_markup = InlineKeyboardMarkup(buttons)
+                await query.message.edit_text(
+                    text="● ◌ ◌"
+                )
+                await query.message.edit_text(
+                    text="● ● ◌"
+                )
+                await query.message.edit_text(
+                    text="● ● ●"
+                )
+                reply_markup = InlineKeyboardMarkup(buttons)
+                await client.edit_message_media(
+                    query.message.chat.id, 
+                    query.message.id, 
+                    InputMediaPhoto(random.choice(PICS))
+                )
+                await query.message.edit_text(
+                    text=script.ADULT_TXT,
+                    reply_markup=reply_markup,
+                    parse_mode=enums.ParseMode.HTML
             )
-            await query.message.edit_text(
-                text=script.ADULT_TXT,
-                reply_markup=reply_markup,
-                parse_mode=enums.ParseMode.HTML
-            )
-        else:
-            # If the user doesn't have premium access, show an alert
-            await query.answer("🛒 ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ ᴛᴏ ᴜsᴇ ᴛʜɪs ғᴇᴀᴛᴜʀᴇ! 💳", show_alert=True)
+            else:
+                # If the user doesn't have premium access, show an alert
+                await query.answer("🛒 ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ ᴛᴏ ᴜsᴇ ᴛʜɪs ғᴇᴀᴛᴜʀᴇ! 💳", show_alert=True)
 
     elif query.data == "stats":
         buttons = [[
@@ -1979,36 +1985,36 @@ async def cb_handler(client: Client, query: CallbackQuery):
             InlineKeyboardButton('⟲ Rᴇғʀᴇsʜ', callback_data='rfrsh')
         ]]
         await client.edit_message_media(
-            query.message.chat.id,
-            query.message.id,
+            query.message.chat.id, 
+            query.message.id, 
             InputMediaPhoto(random.choice(PICS))
         )
         reply_markup = InlineKeyboardMarkup(buttons)
-    
+        
         # Get database stats
         total_users = await db.total_users_count()
         totl_chats = await db.total_chat_count()
         filesp = col.count_documents({})
         totalsec = sec_col.count_documents({})
-    
+        
         # Database 1 stats
         stats = vjdb.command('dbStats')
-        used_dbSize = (stats['dataSize'] / (1024 * 1024)) + (stats['indexSize'] / (1024 * 1024))
+        used_dbSize = (stats['dataSize']/(1024*1024))+(stats['indexSize']/(1024*1024))
         db1_percentage = (used_dbSize / 512) * 100
         db1_progress = create_progress_bar(db1_percentage)
-    
+        
         # Database 2 stats
         stats2 = sec_db.command('dbStats')
-        used_dbSize2 = (stats2['dataSize'] / (1024 * 1024)) + (stats2['indexSize'] / (1024 * 1024))
+        used_dbSize2 = (stats2['dataSize']/(1024*1024))+(stats2['indexSize']/(1024*1024))
         db2_percentage = (used_dbSize2 / 512) * 100
         db2_progress = create_progress_bar(db2_percentage)
-    
+        
         # Database 3 stats
         stats3 = mydb.command('dbStats')
-        used_dbSize3 = (stats3['dataSize'] / (1024 * 1024)) + (stats3['indexSize'] / (1024 * 1024))
+        used_dbSize3 = (stats3['dataSize']/(1024*1024))+(stats3['indexSize']/(1024*1024))
         db3_percentage = (used_dbSize3 / 512) * 100
         db3_progress = create_progress_bar(db3_percentage)
-    
+        
         # Generate fake server stats
         server_stats = generate_fake_server_stats()
         cpu_progress = create_progress_bar(server_stats['cpu'])
@@ -2016,34 +2022,32 @@ async def cb_handler(client: Client, query: CallbackQuery):
         ram_progress = create_progress_bar(server_stats['ram'])
         ram_emoji = get_status_emoji(server_stats['ram'])
         traffic_emoji = "📊"
-    
+        
         # Current time
         current_time = datetime.now().strftime("%H:%M:%S")
-    
+        
         await query.message.edit_text(
             text=script.STATUS_TXT.format(
-                int(filesp) + int(totalsec),
-                total_users,
-                totl_chats,
-                filesp,
-                db1_progress,
-                totalsec,
-                db2_progress,
-                db3_progress,
-                cpu_emoji,
-                cpu_progress,
-                server_stats['cpu'],
-                ram_emoji,
-                ram_progress,
-                server_stats['ram'],
-                traffic_emoji,
-                server_stats['traffic'],
-                current_time
+                (int(filesp)+int(totalsec)),  # 0: Total files
+                total_users,                   # 1: Total users
+                totl_chats,                   # 2: Total chats
+                filesp,                       # 3: Database 1 files
+                db1_progress,                 # 4: Database 1 progress
+                totalsec,                     # 5: Database 2 files
+                db2_progress,                 # 6: Database 2 progress
+                db3_progress,                 # 7: Database 3 progress
+                cpu_emoji,                    # 8: CPU emoji
+                server_stats['cpu'],          # 9: CPU percentage
+                ram_emoji,                    # 10: RAM emoji
+                server_stats['ram'],          # 11: RAM percentage
+                traffic_emoji,                # 12: Traffic emoji
+                server_stats['traffic'],      # 13: Traffic value
+                current_time                  # 14: Current time
             ),
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
-    
+
     elif query.data == "rfrsh":
         await query.answer("🔄 Refreshing server statistics...", show_alert=False)
         buttons = [[
@@ -2051,36 +2055,36 @@ async def cb_handler(client: Client, query: CallbackQuery):
             InlineKeyboardButton('⟲ Rᴇғʀᴇsʜ', callback_data='rfrsh')
         ]]
         await client.edit_message_media(
-            query.message.chat.id,
-            query.message.id,
+            query.message.chat.id, 
+            query.message.id, 
             InputMediaPhoto(random.choice(PICS))
         )
         reply_markup = InlineKeyboardMarkup(buttons)
-    
+        
         # Get fresh database stats
         total_users = await db.total_users_count()
         totl_chats = await db.total_chat_count()
         filesp = col.count_documents({})
         totalsec = sec_col.count_documents({})
-    
+        
         # Database 1 stats
         stats = vjdb.command('dbStats')
-        used_dbSize = (stats['dataSize'] / (1024 * 1024)) + (stats['indexSize'] / (1024 * 1024))
+        used_dbSize = (stats['dataSize']/(1024*1024))+(stats['indexSize']/(1024*1024))
         db1_percentage = (used_dbSize / 512) * 100
         db1_progress = create_progress_bar(db1_percentage)
-    
+        
         # Database 2 stats
         stats2 = sec_db.command('dbStats')
-        used_dbSize2 = (stats2['dataSize'] / (1024 * 1024)) + (stats2['indexSize'] / (1024 * 1024))
+        used_dbSize2 = (stats2['dataSize']/(1024*1024))+(stats2['indexSize']/(1024*1024))
         db2_percentage = (used_dbSize2 / 512) * 100
         db2_progress = create_progress_bar(db2_percentage)
-    
+        
         # Database 3 stats
         stats3 = mydb.command('dbStats')
-        used_dbSize3 = (stats3['dataSize'] / (1024 * 1024)) + (stats3['indexSize'] / (1024 * 1024))
+        used_dbSize3 = (stats3['dataSize']/(1024*1024))+(stats3['indexSize']/(1024*1024))
         db3_percentage = (used_dbSize3 / 512) * 100
         db3_progress = create_progress_bar(db3_percentage)
-    
+        
         # Generate new fake server stats
         server_stats = generate_fake_server_stats()
         cpu_progress = create_progress_bar(server_stats['cpu'])
@@ -2088,41 +2092,39 @@ async def cb_handler(client: Client, query: CallbackQuery):
         ram_progress = create_progress_bar(server_stats['ram'])
         ram_emoji = get_status_emoji(server_stats['ram'])
         traffic_emoji = "📊"
-    
+        
         # Current time
         current_time = datetime.now().strftime("%H:%M:%S")
-    
+        
         await query.message.edit_text(
             text=script.STATUS_TXT.format(
-                int(filesp) + int(totalsec),
-                total_users,
-                totl_chats,
-                filesp,
-                db1_progress,
-                totalsec,
-                db2_progress,
-                db3_progress,
-                cpu_emoji,
-                cpu_progress,
-                server_stats['cpu'],
-                ram_emoji,
-                ram_progress,
-                server_stats['ram'],
-                traffic_emoji,
-                server_stats['traffic'],
-                current_time
+                (int(filesp)+int(totalsec)),  # 0: Total files
+                total_users,                   # 1: Total users
+                totl_chats,                   # 2: Total chats
+                filesp,                       # 3: Database 1 files
+                db1_progress,                 # 4: Database 1 progress
+                totalsec,                     # 5: Database 2 files
+                db2_progress,                 # 6: Database 2 progress
+                db3_progress,                 # 7: Database 3 progress
+                cpu_emoji,                    # 8: CPU emoji
+                server_stats['cpu'],          # 9: CPU percentage
+                ram_emoji,                    # 10: RAM emoji
+                server_stats['ram'],          # 11: RAM percentage
+                traffic_emoji,                # 12: Traffic emoji
+                server_stats['traffic'],      # 13: Traffic value
+                current_time                  # 14: Current time
             ),
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
-    
+            
     elif query.data == "extra":
         buttons = [[
             InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='admin')
         ]]
         await client.edit_message_media(
-            query.message.chat.id,
-            query.message.id,
+            query.message.chat.id, 
+            query.message.id, 
             InputMediaPhoto(random.choice(PICS))
         )
         reply_markup = InlineKeyboardMarkup(buttons)
@@ -2131,7 +2133,6 @@ async def cb_handler(client: Client, query: CallbackQuery):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
-    
     
         
     elif query.data == "shortlink_info":
