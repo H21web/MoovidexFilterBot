@@ -812,29 +812,8 @@ async def get_seconds(time_string):
     else:
         return 0
 
-def create_progress_bar(percentage, length=10):
-    """Create a visual progress bar"""
-    filled = int(percentage / 100 * length)
-    bar = '█' * filled + '░' * (length - filled)
-    return f"[{bar}] {percentage:.1f}%"
+def make_bar(used_percent):
+    filled = int(used_percent / 10)
+    empty = 10 - filled
+    return f"[{'█' * filled}{'░' * empty}] {used_percent:.0f}%"
 
-def get_status_emoji(percentage):
-    """Get status emoji based on percentage"""
-    if percentage < 50:
-        return "🟢"
-    elif percentage < 80:
-        return "🟡"
-    else:
-        return "🔴"
-
-def generate_fake_server_stats():
-    """Generate fake server statistics"""
-    cpu_usage = random.uniform(15, 85)
-    ram_usage = random.uniform(25, 75)
-    traffic = random.uniform(0.5, 15.2)
-    
-    return {
-        'cpu': cpu_usage,
-        'ram': ram_usage,
-        'traffic': traffic
-    }
