@@ -1945,194 +1945,194 @@ async def cb_handler(client: Client, query: CallbackQuery):
         # If the user doesn't have premium access, show an alert
             await query.answer("🛒 ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ ᴛᴏ ᴜsᴇ ᴛʜɪs ғᴇᴀᴛᴜʀᴇ! 💳", show_alert=True)
 
-elif query.data == "spin":
-    user_id = query.from_user.id
+    elif query.data == "spin":
+        user_id = query.from_user.id
+    
+        # Check if the user has premium access
+        if await db.has_premium_access(user_id):
+            buttons = [
+                [InlineKeyboardButton('ᴊᴏɪɴ ᴛᴏ ᴄʜᴀɴɴᴇʟ 🎰', url=f'https://t.me/moovidex')],
+                [InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='start')]
+            ]
+            reply_markup = InlineKeyboardMarkup(buttons)
+            await query.message.edit_text(text="● ◌ ◌")
+            await query.message.edit_text(text="● ● ◌")
+            await query.message.edit_text(text="● ● ●")
+            await client.edit_message_media(
+                query.message.chat.id,
+                query.message.id,
+                InputMediaPhoto(random.choice(PICS))
+            )
+            await query.message.edit_text(
+                text=script.ADULT_TXT,
+                reply_markup=reply_markup,
+                parse_mode=enums.ParseMode.HTML
+            )
+        else:
+            # If the user doesn't have premium access, show an alert
+            await query.answer("🛒 ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ ᴛᴏ ᴜsᴇ ᴛʜɪs ғᴇᴀᴛᴜʀᴇ! 💳", show_alert=True)
 
-    # Check if the user has premium access
-    if await db.has_premium_access(user_id):
-        buttons = [
-            [InlineKeyboardButton('ᴊᴏɪɴ ᴛᴏ ᴄʜᴀɴɴᴇʟ 🎰', url=f'https://t.me/moovidex')],
-            [InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='start')]
-        ]
-        reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.edit_text(text="● ◌ ◌")
-        await query.message.edit_text(text="● ● ◌")
-        await query.message.edit_text(text="● ● ●")
+    elif query.data == "stats":
+        buttons = [[
+            InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='help'),
+            InlineKeyboardButton('⟲ Rᴇғʀᴇsʜ', callback_data='rfrsh')
+        ]]
         await client.edit_message_media(
             query.message.chat.id,
             query.message.id,
             InputMediaPhoto(random.choice(PICS))
         )
+        reply_markup = InlineKeyboardMarkup(buttons)
+    
+        # Get database stats
+        total_users = await db.total_users_count()
+        totl_chats = await db.total_chat_count()
+        filesp = col.count_documents({})
+        totalsec = sec_col.count_documents({})
+    
+        # Database 1 stats
+        stats = vjdb.command('dbStats')
+        used_dbSize = (stats['dataSize'] / (1024 * 1024)) + (stats['indexSize'] / (1024 * 1024))
+        db1_percentage = (used_dbSize / 512) * 100
+        db1_progress = create_progress_bar(db1_percentage)
+    
+        # Database 2 stats
+        stats2 = sec_db.command('dbStats')
+        used_dbSize2 = (stats2['dataSize'] / (1024 * 1024)) + (stats2['indexSize'] / (1024 * 1024))
+        db2_percentage = (used_dbSize2 / 512) * 100
+        db2_progress = create_progress_bar(db2_percentage)
+    
+        # Database 3 stats
+        stats3 = mydb.command('dbStats')
+        used_dbSize3 = (stats3['dataSize'] / (1024 * 1024)) + (stats3['indexSize'] / (1024 * 1024))
+        db3_percentage = (used_dbSize3 / 512) * 100
+        db3_progress = create_progress_bar(db3_percentage)
+    
+        # Generate fake server stats
+        server_stats = generate_fake_server_stats()
+        cpu_progress = create_progress_bar(server_stats['cpu'])
+        cpu_emoji = get_status_emoji(server_stats['cpu'])
+        ram_progress = create_progress_bar(server_stats['ram'])
+        ram_emoji = get_status_emoji(server_stats['ram'])
+        traffic_emoji = "📊"
+    
+        # Current time
+        current_time = datetime.now().strftime("%H:%M:%S")
+    
         await query.message.edit_text(
-            text=script.ADULT_TXT,
+            text=script.STATUS_TXT.format(
+                int(filesp) + int(totalsec),
+                total_users,
+                totl_chats,
+                filesp,
+                db1_progress,
+                totalsec,
+                db2_progress,
+                db3_progress,
+                cpu_emoji,
+                cpu_progress,
+                server_stats['cpu'],
+                ram_emoji,
+                ram_progress,
+                server_stats['ram'],
+                traffic_emoji,
+                server_stats['traffic'],
+                current_time
+            ),
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
-    else:
-        # If the user doesn't have premium access, show an alert
-        await query.answer("🛒 ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ ᴛᴏ ᴜsᴇ ᴛʜɪs ғᴇᴀᴛᴜʀᴇ! 💳", show_alert=True)
-
-elif query.data == "stats":
-    buttons = [[
-        InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='help'),
-        InlineKeyboardButton('⟲ Rᴇғʀᴇsʜ', callback_data='rfrsh')
-    ]]
-    await client.edit_message_media(
-        query.message.chat.id,
-        query.message.id,
-        InputMediaPhoto(random.choice(PICS))
-    )
-    reply_markup = InlineKeyboardMarkup(buttons)
-
-    # Get database stats
-    total_users = await db.total_users_count()
-    totl_chats = await db.total_chat_count()
-    filesp = col.count_documents({})
-    totalsec = sec_col.count_documents({})
-
-    # Database 1 stats
-    stats = vjdb.command('dbStats')
-    used_dbSize = (stats['dataSize'] / (1024 * 1024)) + (stats['indexSize'] / (1024 * 1024))
-    db1_percentage = (used_dbSize / 512) * 100
-    db1_progress = create_progress_bar(db1_percentage)
-
-    # Database 2 stats
-    stats2 = sec_db.command('dbStats')
-    used_dbSize2 = (stats2['dataSize'] / (1024 * 1024)) + (stats2['indexSize'] / (1024 * 1024))
-    db2_percentage = (used_dbSize2 / 512) * 100
-    db2_progress = create_progress_bar(db2_percentage)
-
-    # Database 3 stats
-    stats3 = mydb.command('dbStats')
-    used_dbSize3 = (stats3['dataSize'] / (1024 * 1024)) + (stats3['indexSize'] / (1024 * 1024))
-    db3_percentage = (used_dbSize3 / 512) * 100
-    db3_progress = create_progress_bar(db3_percentage)
-
-    # Generate fake server stats
-    server_stats = generate_fake_server_stats()
-    cpu_progress = create_progress_bar(server_stats['cpu'])
-    cpu_emoji = get_status_emoji(server_stats['cpu'])
-    ram_progress = create_progress_bar(server_stats['ram'])
-    ram_emoji = get_status_emoji(server_stats['ram'])
-    traffic_emoji = "📊"
-
-    # Current time
-    current_time = datetime.now().strftime("%H:%M:%S")
-
-    await query.message.edit_text(
-        text=script.STATUS_TXT.format(
-            int(filesp) + int(totalsec),
-            total_users,
-            totl_chats,
-            filesp,
-            db1_progress,
-            totalsec,
-            db2_progress,
-            db3_progress,
-            cpu_emoji,
-            cpu_progress,
-            server_stats['cpu'],
-            ram_emoji,
-            ram_progress,
-            server_stats['ram'],
-            traffic_emoji,
-            server_stats['traffic'],
-            current_time
-        ),
-        reply_markup=reply_markup,
-        parse_mode=enums.ParseMode.HTML
-    )
-
-elif query.data == "rfrsh":
-    await query.answer("🔄 Refreshing server statistics...", show_alert=False)
-    buttons = [[
-        InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='help'),
-        InlineKeyboardButton('⟲ Rᴇғʀᴇsʜ', callback_data='rfrsh')
-    ]]
-    await client.edit_message_media(
-        query.message.chat.id,
-        query.message.id,
-        InputMediaPhoto(random.choice(PICS))
-    )
-    reply_markup = InlineKeyboardMarkup(buttons)
-
-    # Get fresh database stats
-    total_users = await db.total_users_count()
-    totl_chats = await db.total_chat_count()
-    filesp = col.count_documents({})
-    totalsec = sec_col.count_documents({})
-
-    # Database 1 stats
-    stats = vjdb.command('dbStats')
-    used_dbSize = (stats['dataSize'] / (1024 * 1024)) + (stats['indexSize'] / (1024 * 1024))
-    db1_percentage = (used_dbSize / 512) * 100
-    db1_progress = create_progress_bar(db1_percentage)
-
-    # Database 2 stats
-    stats2 = sec_db.command('dbStats')
-    used_dbSize2 = (stats2['dataSize'] / (1024 * 1024)) + (stats2['indexSize'] / (1024 * 1024))
-    db2_percentage = (used_dbSize2 / 512) * 100
-    db2_progress = create_progress_bar(db2_percentage)
-
-    # Database 3 stats
-    stats3 = mydb.command('dbStats')
-    used_dbSize3 = (stats3['dataSize'] / (1024 * 1024)) + (stats3['indexSize'] / (1024 * 1024))
-    db3_percentage = (used_dbSize3 / 512) * 100
-    db3_progress = create_progress_bar(db3_percentage)
-
-    # Generate new fake server stats
-    server_stats = generate_fake_server_stats()
-    cpu_progress = create_progress_bar(server_stats['cpu'])
-    cpu_emoji = get_status_emoji(server_stats['cpu'])
-    ram_progress = create_progress_bar(server_stats['ram'])
-    ram_emoji = get_status_emoji(server_stats['ram'])
-    traffic_emoji = "📊"
-
-    # Current time
-    current_time = datetime.now().strftime("%H:%M:%S")
-
-    await query.message.edit_text(
-        text=script.STATUS_TXT.format(
-            int(filesp) + int(totalsec),
-            total_users,
-            totl_chats,
-            filesp,
-            db1_progress,
-            totalsec,
-            db2_progress,
-            db3_progress,
-            cpu_emoji,
-            cpu_progress,
-            server_stats['cpu'],
-            ram_emoji,
-            ram_progress,
-            server_stats['ram'],
-            traffic_emoji,
-            server_stats['traffic'],
-            current_time
-        ),
-        reply_markup=reply_markup,
-        parse_mode=enums.ParseMode.HTML
-    )
-
-elif query.data == "extra":
-    buttons = [[
-        InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='admin')
-    ]]
-    await client.edit_message_media(
-        query.message.chat.id,
-        query.message.id,
-        InputMediaPhoto(random.choice(PICS))
-    )
-    reply_markup = InlineKeyboardMarkup(buttons)
-    await query.message.edit_text(
-        text=script.EXTRAMOD_TXT.format(OWNER_LNK, CHNL_LNK),
-        reply_markup=reply_markup,
-        parse_mode=enums.ParseMode.HTML
-    )
-
-
     
+    elif query.data == "rfrsh":
+        await query.answer("🔄 Refreshing server statistics...", show_alert=False)
+        buttons = [[
+            InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='help'),
+            InlineKeyboardButton('⟲ Rᴇғʀᴇsʜ', callback_data='rfrsh')
+        ]]
+        await client.edit_message_media(
+            query.message.chat.id,
+            query.message.id,
+            InputMediaPhoto(random.choice(PICS))
+        )
+        reply_markup = InlineKeyboardMarkup(buttons)
+    
+        # Get fresh database stats
+        total_users = await db.total_users_count()
+        totl_chats = await db.total_chat_count()
+        filesp = col.count_documents({})
+        totalsec = sec_col.count_documents({})
+    
+        # Database 1 stats
+        stats = vjdb.command('dbStats')
+        used_dbSize = (stats['dataSize'] / (1024 * 1024)) + (stats['indexSize'] / (1024 * 1024))
+        db1_percentage = (used_dbSize / 512) * 100
+        db1_progress = create_progress_bar(db1_percentage)
+    
+        # Database 2 stats
+        stats2 = sec_db.command('dbStats')
+        used_dbSize2 = (stats2['dataSize'] / (1024 * 1024)) + (stats2['indexSize'] / (1024 * 1024))
+        db2_percentage = (used_dbSize2 / 512) * 100
+        db2_progress = create_progress_bar(db2_percentage)
+    
+        # Database 3 stats
+        stats3 = mydb.command('dbStats')
+        used_dbSize3 = (stats3['dataSize'] / (1024 * 1024)) + (stats3['indexSize'] / (1024 * 1024))
+        db3_percentage = (used_dbSize3 / 512) * 100
+        db3_progress = create_progress_bar(db3_percentage)
+    
+        # Generate new fake server stats
+        server_stats = generate_fake_server_stats()
+        cpu_progress = create_progress_bar(server_stats['cpu'])
+        cpu_emoji = get_status_emoji(server_stats['cpu'])
+        ram_progress = create_progress_bar(server_stats['ram'])
+        ram_emoji = get_status_emoji(server_stats['ram'])
+        traffic_emoji = "📊"
+    
+        # Current time
+        current_time = datetime.now().strftime("%H:%M:%S")
+    
+        await query.message.edit_text(
+            text=script.STATUS_TXT.format(
+                int(filesp) + int(totalsec),
+                total_users,
+                totl_chats,
+                filesp,
+                db1_progress,
+                totalsec,
+                db2_progress,
+                db3_progress,
+                cpu_emoji,
+                cpu_progress,
+                server_stats['cpu'],
+                ram_emoji,
+                ram_progress,
+                server_stats['ram'],
+                traffic_emoji,
+                server_stats['traffic'],
+                current_time
+            ),
+            reply_markup=reply_markup,
+            parse_mode=enums.ParseMode.HTML
+        )
+    
+    elif query.data == "extra":
+        buttons = [[
+            InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='admin')
+        ]]
+        await client.edit_message_media(
+            query.message.chat.id,
+            query.message.id,
+            InputMediaPhoto(random.choice(PICS))
+        )
+        reply_markup = InlineKeyboardMarkup(buttons)
+        await query.message.edit_text(
+            text=script.EXTRAMOD_TXT.format(OWNER_LNK, CHNL_LNK),
+            reply_markup=reply_markup,
+            parse_mode=enums.ParseMode.HTML
+        )
+    
+    
+        
     elif query.data == "shortlink_info":
         btn = [[
             InlineKeyboardButton("👇Select Your Language 👇", callback_data="laninfo")
