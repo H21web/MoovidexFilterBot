@@ -1980,12 +1980,14 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 await query.answer("🛒 ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ ᴛᴏ ᴜsᴇ ᴛʜɪs ғᴇᴀᴛᴜʀᴇ! 💳", show_alert=True)
 
 
+
+
     elif query.data in ["stats", "rfrsh"]:
         if query.data == "rfrsh":
             await query.answer("Refreshing status...")
     
         buttons = [[
-            InlineKeyboardButton('⨞ Bᴀᴄᴋ', callback_data='help'),
+            InlineKeyboardButton('⟸ Bᴀᴄᴋ', callback_data='help'),
             InlineKeyboardButton('⟲ Rᴇғʀᴇsʜ', callback_data='rfrsh')
         ]]
     
@@ -2003,48 +2005,55 @@ async def cb_handler(client: Client, query: CallbackQuery):
         filesp = col.count_documents({})
         totalsec = sec_col.count_documents({})
     
+        # DB1
         stats = vjdb.command('dbStats')
         used1 = (stats['dataSize'] + stats['indexSize']) / (1024 * 1024)
+        free1 = 512 - used1
         used1_pct = min(int((used1 / 512) * 100), 100)
     
+        # DB2
         stats2 = sec_db.command('dbStats')
         used2 = (stats2['dataSize'] + stats2['indexSize']) / (1024 * 1024)
+        free2 = 512 - used2
         used2_pct = min(int((used2 / 512) * 100), 100)
     
+        # DB3
         stats3 = mydb.command('dbStats')
         used3 = (stats3['dataSize'] + stats3['indexSize']) / (1024 * 1024)
+        free3 = 512 - used3
         used3_pct = min(int((used3 / 512) * 100), 100)
     
-        # Fake server stats
+        # Server stats (Fake)
         cpu = random.randint(10, 95)
         ram = random.randint(20, 90)
         traffic = random.randint(5, 120)
     
-        # Time
+        # Timestamp
         now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
         await query.message.edit_text(
             text=script.STATUS_TXT.format(
-                int(filesp) + int(totalsec),  # 1 Total Files
-                total_users,                  # 2 Users
-                totl_chats,                   # 3 Chats
-                filesp,                       # 4 DB1 Files
-                make_bar(used1_pct),          # 5 DB1 Usage
-                totalsec,                     # 6 DB2 Files
-                make_bar(used2_pct),          # 7 DB2 Usage
-                make_bar(used3_pct),          # 8 DB3 Usage
-                make_bar(cpu),                # 9 CPU Bar
-                cpu,                          # 10 CPU %
-                make_bar(ram),                # 11 RAM Bar
-                ram,                          # 12 RAM %
-                make_bar(traffic),            # 13 Traffic Bar
-                traffic,                      # 14 Traffic MB/s
-                now_time                      # 15 Timestamp
+                int(filesp) + int(totalsec),    # Total Files
+                total_users,                    # Users
+                totl_chats,                     # Chats
+    
+                filesp,                         # DB1 Files
+                round(used1, 2), round(free1, 2), make_bar(used1_pct),
+    
+                totalsec,                       # DB2 Files
+                round(used2, 2), round(free2, 2), make_bar(used2_pct),
+    
+                round(used3, 2), round(free3, 2), make_bar(used3_pct),
+    
+                make_bar(cpu), cpu,
+                make_bar(ram), ram,
+                make_bar(traffic), traffic,
+    
+                now_time
             ),
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
-
 
             
     elif query.data == "extra":
