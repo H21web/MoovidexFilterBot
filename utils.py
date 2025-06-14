@@ -771,6 +771,13 @@ async def get_cap(settings, remaining_seconds, files, query, total_results, sear
         for file in files:
             cap += f"<b>📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}'>[{get_size(file['file_size'])}] {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}\n\n</a></b>"
     return cap
+
+def make_bar(percent: int) -> str:
+    full = "█"
+    empty = "░"
+    bar_length = 10
+    filled = int(bar_length * percent / 100)
+    return "[" + (full * filled) + (empty * (bar_length - filled)) + "]"
     
 def get_wish():
     tz = pytz.timezone('Asia/Colombo')
@@ -812,9 +819,4 @@ async def get_seconds(time_string):
     else:
         return 0
 
-def make_bar(percent: int) -> str:
-    full = "█"
-    empty = "░"
-    bar_length = 10
-    filled = int(bar_length * percent / 100)
-    return "[" + (full * filled) + (empty * (bar_length - filled)) + "]"
+
