@@ -161,38 +161,33 @@ Cᴏᴍᴍᴀɴᴅs Aɴᴅ Usᴀɢᴇ:
 ★ Usᴇᴅ Sᴛᴏʀᴀɢᴇ: <code>{} MB</code>
 ★ Fʀᴇᴇ Sᴛᴏʀᴀɢᴇ: <code>{} MB</code></b>"""
     
-    STATUS_TXT = """
-<b>📊 BOT STATUS DASHBOARD</b>
-━━━━━━━━━━━━━━━━━━━━━━━━
+    STATUS_TXT = """<b>📊 SYSTEM STATUS</b>
+━━━━━━━━━━━━━━━━━━━━
+<b>🔹 Total Files Across Databases:</b> <code>{}</code>
 
-<b>📈 OVERVIEW</b>
-├ 📁 <b>Total Files:</b> <code>{}</code>
-├ 👥 <b>Users:</b> <code>{}</code>
-└ 💬 <b>Chats:</b> <code>{}</code>
+<b>⚙ BOT STATUS</b>
+━━━━━━━━━━━━━━━━━━━━
+• 👤 <b>Users:</b> <code>{}</code>  
+• 💬 <b>Chats:</b> <code>{}</code>
 
-<b>🗄️ DATABASE STORAGE</b>
-┌─ <b>Database 1</b>
-│   ├ Files: <code>{}</code>
-│   ├ Used: <code>{} MB</code> | Free: <code>{} MB</code>
-│   └ {}
-│
-├─ <b>Database 2</b>
-│   ├ Files: <code>{}</code>
-│   ├ Used: <code>{} MB</code> | Free: <code>{} MB</code>
-│   └ {}
-│
-└─ <b>Database 3</b>
-    ├ Used: <code>{} MB</code> | Free: <code>{} MB</code>
-    └ {}
+<b>🗃 DATABASE 1</b>
+━━━━━━━━━━━━━━━━━━━━
+• 🗂️ <b>Stored Files:</b> <code>{}</code>
+• 📈 <b>Used Storage:</b> <code>{} MB</code>
+• 📉 <b>Free Storage:</b> <code>{} MB</code>
 
-<b>🖥️ SERVER STATUS</b>
-├ 🔋 CPU: {} <code>{}%</code>
-├ 🧠 RAM: {} <code>{}%</code>
-└ 🌐 Traffic: {} <code>{} MB/s</code>
+<b>🗃 DATABASE 2</b>
+━━━━━━━━━━━━━━━━━━━━
+• 🗂️ <b>Stored Files:</b> <code>{}</code>
+• 📈 <b>Used Storage:</b> <code>{} MB</code>
+• 📉 <b>Free Storage:</b> <code>{} MB</code>
 
-<i>🕓 Last Updated:</i> <code>{}</code>
+<b>📦 OTHER DATABASE</b>
+━━━━━━━━━━━━━━━━━━━━
+• 📈 <b>Used Storage:</b> <code>{} MB</code>
+• 📉 <b>Free Storage:</b> <code>{} MB</code>
+ """
 
-"""
 
     
     LOG_TEXT_G = """<b>𝙱𝙾𝚃 𝙰𝙳𝙳𝙴𝙳 𝚃𝙾 𝙽𝙴𝚆 𝙶𝚁𝙾𝚄𝙿</b>                      🚨
