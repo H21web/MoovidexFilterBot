@@ -10,7 +10,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQ
 from pyrogram import Client, filters, enums
 from pyrogram.errors import FloodWait, UserIsBlocked, MessageNotModified, PeerIdInvalid
 from pyrogram.errors.exceptions.bad_request_400 import MediaEmpty, PhotoInvalidDimensions, WebpageMediaEmpty
-from utils import get_wish, get_size, is_subscribed, pub_is_subscribed, get_poster, search_gagala, temp, get_settings, save_group_settings, get_shortlink, get_tutorial, send_all, get_cap, make_bar
+from utils import get_wish, get_size, is_subscribed, pub_is_subscribed, get_poster, search_gagala, temp, get_settings, save_group_settings, get_shortlink, get_tutorial, send_all, get_cap
 from database.users_chats_db import db
 from database.ia_filterdb import col, sec_col, db as vjdb, sec_db, get_file_details, get_search_results, get_bad_files
 from database.filters_mdb import del_all, find_filter, get_filters
@@ -1982,79 +1982,65 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
 
 
-    elif query.data in ["stats", "rfrsh"]:
-        if query.data == "rfrsh":
-            await query.answer("Refreshing status...")
-    
+    elif query.data == "stats":
         buttons = [[
             InlineKeyboardButton('⟸ Bᴀᴄᴋ', callback_data='help'),
             InlineKeyboardButton('⟲ Rᴇғʀᴇsʜ', callback_data='rfrsh')
         ]]
-    
         await client.edit_message_media(
-            chat_id=query.message.chat.id,
-            message_id=query.message.id,
-            media=InputMediaPhoto(random.choice(PICS))
+            query.message.chat.id, 
+            query.message.id, 
+            InputMediaPhoto(random.choice(PICS))
         )
-    
         reply_markup = InlineKeyboardMarkup(buttons)
-    
-        # Real stats
         total_users = await db.total_users_count()
         totl_chats = await db.total_chat_count()
         filesp = col.count_documents({})
         totalsec = sec_col.count_documents({})
-    
-        # DB1
         stats = vjdb.command('dbStats')
-        used1 = (stats['dataSize'] + stats['indexSize']) / (1024 * 1024)
-        free1 = 512 - used1
-        used1_pct = min(int((used1 / 512) * 100), 100)
-    
-        # DB2
+        used_dbSize = (stats['dataSize']/(1024*1024))+(stats['indexSize']/(1024*1024))
+        free_dbSize = 512-used_dbSize
         stats2 = sec_db.command('dbStats')
-        used2 = (stats2['dataSize'] + stats2['indexSize']) / (1024 * 1024)
-        free2 = 512 - used2
-        used2_pct = min(int((used2 / 512) * 100), 100)
-    
-        # DB3
+        used_dbSize2 = (stats2['dataSize']/(1024*1024))+(stats2['indexSize']/(1024*1024))
+        free_dbSize2 = 512-used_dbSize2
         stats3 = mydb.command('dbStats')
-        used3 = (stats3['dataSize'] + stats3['indexSize']) / (1024 * 1024)
-        free3 = 512 - used3
-        used3_pct = min(int((used3 / 512) * 100), 100)
-    
-        # Server stats (Fake)
-        cpu = random.randint(10, 95)
-        ram = random.randint(20, 90)
-        traffic = random.randint(5, 120)
-    
-        # Timestamp
-        now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
+        used_dbSize3 = (stats3['dataSize']/(1024*1024))+(stats3['indexSize']/(1024*1024))
+        free_dbSize3 = 512-used_dbSize3
         await query.message.edit_text(
-            text=script.STATUS_TXT.format(
-                int(filesp) + int(totalsec),    # Total Files
-                total_users,                    # Users
-                totl_chats,                     # Chats
-    
-                filesp,                         # DB1 Files
-                round(used1, 2), round(free1, 2), make_bar(used1_pct),
-    
-                totalsec,                       # DB2 Files
-                round(used2, 2), round(free2, 2), make_bar(used2_pct),
-    
-                round(used3, 2), round(free3, 2), make_bar(used3_pct),
-    
-                make_bar(cpu), cpu,
-                make_bar(ram), ram,
-                make_bar(traffic), traffic,
-    
-                now_time
-            ),
+            text=script.STATUS_TXT.format((int(filesp)+int(totalsec)), total_users, totl_chats, filesp, round(used_dbSize, 2), round(free_dbSize, 2), totalsec, round(used_dbSize2, 2), round(free_dbSize2, 2), round(used_dbSize3, 2), round(free_dbSize3, 2)),
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
-
+    elif query.data == "rfrsh":
+        await query.answer("Fetching MongoDb DataBase")
+        buttons = [[
+            InlineKeyboardButton('⟸ Bᴀᴄᴋ', callback_data='help'),
+            InlineKeyboardButton('⟲ Rᴇғʀᴇsʜ', callback_data='rfrsh')
+        ]]
+        await client.edit_message_media(
+            query.message.chat.id, 
+            query.message.id, 
+            InputMediaPhoto(random.choice(PICS))
+        )
+        reply_markup = InlineKeyboardMarkup(buttons)
+        total_users = await db.total_users_count()
+        totl_chats = await db.total_chat_count()
+        filesp = col.count_documents({})
+        totalsec = sec_col.count_documents({})
+        stats = vjdb.command('dbStats')
+        used_dbSize = (stats['dataSize']/(1024*1024))+(stats['indexSize']/(1024*1024))
+        free_dbSize = 512-used_dbSize
+        stats2 = sec_db.command('dbStats')
+        used_dbSize2 = (stats2['dataSize']/(1024*1024))+(stats2['indexSize']/(1024*1024))
+        free_dbSize2 = 512-used_dbSize2
+        stats3 = mydb.command('dbStats')
+        used_dbSize3 = (stats3['dataSize']/(1024*1024))+(stats3['indexSize']/(1024*1024))
+        free_dbSize3 = 512-used_dbSize3
+        await query.message.edit_text(
+            text=script.STATUS_TXT.format((int(filesp)+int(totalsec)), total_users, totl_chats, filesp, round(used_dbSize, 2), round(free_dbSize, 2), totalsec, round(used_dbSize2, 2), round(free_dbSize2, 2), round(used_dbSize3, 2), round(free_dbSize3, 2)),
+            reply_markup=reply_markup,
+            parse_mode=enums.ParseMode.HTML
+        )
             
     elif query.data == "extra":
         buttons = [[
