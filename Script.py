@@ -277,14 +277,14 @@ Series Format:
 📜 𝙼𝙴𝚂𝚂𝙰𝙶𝙴 : {content}</blockquote>
 """
 
-    CAPTION = """📁 **File:** {file_name}
-📊 **Size:** {file_size}
+    CAPTION = """📁 **ғɪʟᴇ:** **{file_name}**
+📊 **sɪᴢᴇ:** **{file_size}**
 
-🔗 **Quick Links:**
-├ 📢 Updates: @MooviDex
-└ 👥 Group: @MoovidexSphere
+🔗 **↤↤↤↤↤ ǫᴜɪᴄᴋ ʟɪɴᴋs ↦↦↦↦↦**
+├ 📢** ᴄʜᴀɴɴᴇʟ: @MooviDex**
+└ 👥** ɢʀᴏᴜᴘ: @MoovidexSphere**
 
-━━━━━━━━━━━━━━━━━━━━━━━━""" 
+""" 
 
     IMDB_TEMPLATE_TXT = """
 <b>🎪 {kind} : {title} ({year})</b>
