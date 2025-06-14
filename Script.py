@@ -173,14 +173,17 @@ Cᴏᴍᴍᴀɴᴅs Aɴᴅ Usᴀɢᴇ:
 <b>🗄️ DATABASE STORAGE</b>
 ┌─ <b>Database 1</b>
 │   ├ Files: <code>{}</code>
-│   └ Usage: {}
+│   ├ Used: <code>{} MB</code> | Free: <code>{} MB</code>
+│   └ {}
 │
 ├─ <b>Database 2</b>
 │   ├ Files: <code>{}</code>
-│   └ Usage: {}
+│   ├ Used: <code>{} MB</code> | Free: <code>{} MB</code>
+│   └ {}
 │
 └─ <b>Database 3</b>
-    └ Usage: {}
+    ├ Used: <code>{} MB</code> | Free: <code>{} MB</code>
+    └ {}
 
 <b>🖥️ SERVER STATUS</b>
 ├ 🔋 CPU: {} <code>{}%</code>
