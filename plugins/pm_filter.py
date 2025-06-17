@@ -149,8 +149,8 @@ def extract_clean_title(filename: str, filesize: int) -> str:
     # 5) define your tag arrays (only these will be shown)
     LANGS   = ['Hindi','English','Tamil','Telugu','Malayalam','Kannada','Bengali','Dual Audio']
     QUALS   = ['2160p','1080p','720p','480p','4K']
-    SOURCES = ['NF','AMZN','DSNP','HMAX','BluRay','WEB-DL','WEBRip','HDR','HDRip']
-    CODECS  = ['x265','x264','HEVC']
+    SOURCES = ['NF','AMZN','DSNP','HMAX','BluRay','WEB-DL','WEBRip','HDR','HDRip','WEBRip','ESubs']
+    CODECS  = ['x265','x264','HEVC','10Bit']
     AUDIOS  = ['5.1','7.1','2.0','AAC','AC3','Atmos']
     
     # helper to pick all matches (in order) from an array
