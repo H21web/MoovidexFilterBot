@@ -127,7 +127,93 @@ async def doo(bot, data, message):
     )
     
     await auto_filter(bot, data, message, reply_msg, ai_search)
-    
+
+
+def extract_shortdetails(filename, file_size, max_length=64):
+    # Remove [tags], @handles, www. links
+    cleaned = ' '.join(
+        filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'),
+               filename.split())
+    )
+
+    lower = cleaned.lower()
+
+    # Detect season & episode (series)
+    se_match = re.search(r'[Ss](\d{1,2})[Eex](\d{1,2})', lower)
+    is_series = bool(se_match)
+    season_episode_str = ''
+    if is_series:
+        season = int(se_match.group(1))
+        episode = int(se_match.group(2))
+        season_episode_str = f"[S{season:02d}E{episode:02d}]"
+
+    # Year
+    year_match = re.search(r'(19|20)\d{2}', cleaned)
+    year = year_match.group() if year_match else ''
+
+    # Quality
+    quality_tags = ['480p', '720p', '1080p', '2160p', '4K', 'HDRip', 'BluRay', 'WEB-DL', 'WEBRip']
+    quality = next((q for q in quality_tags if q.lower() in lower), '')
+
+    # Language
+    language_tags = ['Hindi', 'English', 'Tamil', 'Telugu', 'Malayalam', 'Kannada', 'Bengali', 'Dual Audio']
+    language = [lang for lang in language_tags if lang.lower() in lower]
+    language = ' '.join(language)
+
+    # Tag priority
+    all_tags_priority = [
+        'NF', 'AMZN', 'DSNP', 'HMAX', 'WEBRip', 'WEB-DL', 'BluRay', 'HDRip', 'HDR',
+        'HEVC', 'x265', 'x264', '10bit',
+        'AAC', 'AC3', 'DDP', 'DD+', '5.1', '7.1', 'Atmos'
+    ]
+
+    found_tags = []
+    tag_set = set()
+    for tag in all_tags_priority:
+        if tag.lower() in lower and tag.upper() not in tag_set:
+            tag_set.add(tag.upper())
+            found_tags.append(tag)
+
+    # Clean redundant tags
+    if 'x265' in found_tags and 'HEVC' in found_tags:
+        found_tags.remove('HEVC')
+    if ('5.1' in found_tags or '7.1' in found_tags) and ('DDP' in found_tags or 'DD+' in found_tags):
+        found_tags = [t for t in found_tags if t not in ('DDP', 'DD+')]
+
+    # Title cleanup
+    title_no_ext = re.sub(r'\.(?=[^.]*$)', ' ', cleaned)
+    title_part = re.split(r'(19|20)\d{2}', title_no_ext)[0]
+    title = re.sub(r'[\._\-]', ' ', title_part).strip().title()
+
+    # Build title (with year)
+    title_year = f"{title} ({year})" if year else title
+    if len(title_year) > 30:
+        title_year = title_year[:27].rstrip() + "..."
+
+    # Emoji: 📺 for series, 🎞️ for movies
+    emoji = '📺' if is_series else '🎞️'
+
+    # Build initial parts
+    parts = [emoji, f"[{get_size(file_size)}]"]
+    if season_episode_str:
+        parts.append(season_episode_str)
+    parts.append(title_year)
+    if language:
+        parts.append(language)
+    if quality:
+        parts.append(quality)
+
+    # Add tags while within max length
+    current = ' '.join(parts)
+    for tag in found_tags:
+        test = current + f" {tag}"
+        if len(test) > max_length:
+            break
+        current = test
+
+    return current.strip()
+
+
 @Client.on_callback_query(filters.regex(r"^next"))
 async def next_page(bot, query):
     ident, req, key, offset = query.data.split("_")
@@ -163,11 +249,12 @@ async def next_page(bot, query):
     total_results_str = str(total)
     settings = await get_settings(query.message.chat.id)
     pre = 'filep' if settings['file_secure'] else 'file'
+    btntext = extract_shortdetails(file['file_name'], file['file_size'])
     if settings['button']:
         btn = [
             [
                 InlineKeyboardButton(
-                    text=f"📁[{get_size(file['file_size'])}] ⊳ {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}", callback_data=f'{pre}#{file["file_id"]}'
+                    text=btntext, callback_data=f"{pre}#{file['file_id']}"
                 ),
             ]
             for file in files
@@ -432,6 +519,7 @@ async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
     total_results_str = len(files)
     settings = await get_settings(message.chat.id)
     pre = 'filep' if settings['file_secure'] else 'file'
+    btntext = extract_shortdetails(file['file_name'], file['file_size'])
 
     btn = [
         [
@@ -452,8 +540,7 @@ async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
     for file in files:
         btn.append([
             InlineKeyboardButton(
-                text=f"📁[{get_size(file['file_size'])}] ⊳ {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}",
-                callback_data=f'{pre}#{file["file_id"]}'
+                text=btntext, callback_data=f"{pre}#{file['file_id']}"
             )
         ])
 
@@ -621,12 +708,12 @@ async def filter_seasons_cb_handler(client: Client, query: CallbackQuery):
     total_results_str = len(files)
     settings = await get_settings(message.chat.id)
     pre = 'filep' if settings['file_secure'] else 'file'
+    btntext = extract_shortdetails(file['file_name'], file['file_size'])
     if settings["button"]:
         btn = [
             [
                 InlineKeyboardButton(
-                    text=f"📁[{get_size(file['file_size'])}] ⊳ {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}", callback_data=f'{pre}#{file["file_id"]}'
-                ),
+                    text=btntext, callback_data=f"{pre}#{file['file_id']}"
             ]
             for file in files
         ]
@@ -770,11 +857,12 @@ async def filter_qualities_cb_handler(client: Client, query: CallbackQuery):
     total_results_str = len(files)
     settings = await get_settings(message.chat.id)
     pre = 'filep' if settings['file_secure'] else 'file'
+    btntext = extract_shortdetails(file['file_name'], file['file_size'])
     if settings["button"]:
         btn = [
             [
                 InlineKeyboardButton(
-                    text=f"📁[{get_size(file['file_size'])}] ⊳ {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}", callback_data=f'{pre}#{file["file_id"]}'
+                    text=btntext, callback_data=f"{pre}#{file['file_id']}"
                 ),
             ]
             for file in files
@@ -2468,11 +2556,12 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     temp.GETALL[key] = files
     temp.SHORT[message.from_user.id] = message.chat.id
     total_results_str = str(total_results)
+    btntext = extract_shortdetails(file['file_name'], file['file_size'])
     if settings["button"]:
         btn = [
             [
                 InlineKeyboardButton(
-                    text=f"📁[{get_size(file['file_size'])}] ⊳ {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}", callback_data=f'{pre}#{file["file_id"]}'
+                    text=btntext, callback_data=f"{pre}#{file['file_id']}"
                 ),
             ]
             for file in files
