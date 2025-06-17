@@ -131,113 +131,111 @@ async def doo(bot, data, message):
 
 
 def extract_shortdetails(filename: str, filesize: int) -> str:
-    """Extract and format a clean title from filename - optimized for speed"""
+    """Extract clean title with only: movie name + year + language + essential tags"""
     
-
+    # Pre-compiled regex patterns
     SE_PATTERN = re.compile(r'\b(?:[s](\d{1,2})(?:\s*[eex]\s*(\d{1,2}))?|season\s+(\d{1,2})(?:\s+(?:episode\s+|e)(\d{1,2}))?)\b', re.IGNORECASE)
     YEAR_PATTERN = re.compile(r'\b(19|20)\d{2}\b')
-    AUDIO_PATTERN = re.compile(r'\b(aac|ac3|dts)(\d\.\d|\d+)\b', re.IGNORECASE)
-    RELEASE_PATTERN = re.compile(r'\b\w*(?:rip|hub|team|encode)\w*\b|\b[a-z]+\d+[a-z]*\b|\b\w+-\w+\b', re.IGNORECASE)
+    RELEASE_PATTERN = re.compile(r'\b\w*(?:rip|hub|team|encode|group)\w*\b|\b[a-z]+\d+[a-z]*\b|\b\w+-\w+\b', re.IGNORECASE)
     
-    # Fast file size formatting
+    # Get file size
     size = get_size(filesize)
     
-    # Quick tokenization
+    # Remove extension and tokenize
     base = os.path.splitext(filename)[0]
     tokens = [t for t in re.split(r'[._\-\s]+', base) if t]
     lowered = base.lower()
     
-    # Fast pattern matching
+    # Detect series/season
     m_se = SE_PATTERN.search(lowered)
     is_series = bool(m_se)
     
     if m_se:
-        # Handle both formats: S01E01 and Season 1 Episode 1
         if m_se.group(1):  # Short format (S01E01)
             season = int(m_se.group(1))
             episode = int(m_se.group(2)) if m_se.group(2) else None
         else:  # Long format (Season 1 Episode 1)
             season = int(m_se.group(3))
             episode = int(m_se.group(4)) if m_se.group(4) else None
-        
         se = f"S{season:02d}" + (f"E{episode:02d}" if episode else "")
     else:
         se = ''
     
+    # Extract year
     m_yr = YEAR_PATTERN.search(lowered)
     year = m_yr.group() if m_yr else ''
-    yr = f"({year})" if year else ''
     
-    # Pre-defined tag sets for O(1) lookup
+    # Essential tags only
     LANGS = {'hindi', 'english', 'tamil', 'telugu', 'malayalam', 'kannada', 'bengali', 'multi', 'dual'}
-    QUALS = {'2160p', '1080p', '720p', '480p', '4k', 'uhd', 'fhd', 'hd', 'hq'}
-    SOURCES = {'hdrip', 'hdr', 'bluray', 'brrip', 'web-dl', 'webdl', 'webrip', 'nf', 'amzn', 'dsnp', 'hmax'}
-    CODECS = {'x265', 'x264', 'hevc', 'avc', 'av1', 'vp9', 'xvid'}
-    AUDIOS = {'5.1', '7.1', '2.0', '2.1', 'aac', 'ac3', 'dts', 'truehd', 'atmos', 'dd+', 'ddp'}
-    SUBS = {'esub', 'sub', 'subbed', 'subs'}
-    HDR_TAGS = {'hdr', 'hdr10', 'hdr10+', 'dv', 'dovi'}
-    MISC = {'repack', 'proper', 'extended', 'uncut', 'dc', 'imax'}
+    ESSENTIAL_TAGS = {'1080p', '720p', '480p', '4k', 'hdr', 'hdr10', 'x265', 'x264', 'hevc'}
     
-    # Fast tag extraction using set operations
-    token_set = {t.lower() for t in tokens}
-    
+    # Extract tags
     langs = [t for t in tokens if t.lower() in LANGS]
-    quals = [t for t in tokens if t.lower() in QUALS]
-    srcs = [] if is_series else [t for t in tokens if t.lower() in SOURCES]
-    codecs = [t for t in tokens if t.lower() in CODECS]
-    audios = [t for t in tokens if t.lower() in AUDIOS]
-    subs = [t for t in tokens if t.lower() in SUBS]
-    hdr = [t for t in tokens if t.lower() in HDR_TAGS]
-    misc = [t for t in tokens if t.lower() in MISC]
-    
-    # Handle combined audio (AAC5.1 -> AAC + 5.1)
-    for match in AUDIO_PATTERN.finditer(lowered):
-        codec, channels = match.groups()
-        if codec.upper() not in [a.upper() for a in audios]:
-            audios.append(codec.upper())
-        if channels not in audios:
-            audios.append(channels)
-    
-    # Remove HEVC if x265 present
-    if 'x265' in [c.lower() for c in codecs] and 'HEVC' in codecs:
-        codecs.remove('HEVC')
+    essential = [t for t in tokens if t.lower() in ESSENTIAL_TAGS]
     
     # Build removal set
     remove_set = set()
+    
+    # Remove season/episode patterns
     if se:
         remove_set.add(se.lower())
         if m_se:
             remove_set.add(m_se.group().lower())
+    
+    # Remove year
     if year:
         remove_set.add(year)
     
-    # Add all tag variations to removal set
-    all_tags = langs + quals + srcs + codecs + audios + subs + hdr + misc
-    remove_set.update(t.lower() for t in all_tags)
+    # Remove all detected tags
+    remove_set.update(t.lower() for t in langs + essential)
+    
+    # Remove technical/release stuff
+    tech_terms = {
+        'bluray', 'brrip', 'web-dl', 'webdl', 'webrip', 'hdrip', 'dvdrip',
+        'nf', 'amzn', 'dsnp', 'hmax', 'netflix', 'amazon', 'disney',
+        'aac', 'ac3', 'dts', 'truehd', 'atmos', 'dd+', 'ddp',
+        '5.1', '7.1', '2.0', '2.1', 'stereo', 'mono',
+        'esub', 'sub', 'subbed', 'subs', 'subtitle',
+        'repack', 'proper', 'extended', 'uncut', 'dc', 'imax',
+        'complete', 'collection', 'series', 'season', 'episode'
+    }
+    remove_set.update(tech_terms)
     
     # Remove release groups
-    for token in tokens[:]:
+    for token in tokens:
         if RELEASE_PATTERN.match(token):
             remove_set.add(token.lower())
     
-    # Build clean title
+    # Clean title
     title_tokens = [t for t in tokens if t.lower() not in remove_set and len(t) > 1]
     title = ' '.join(title_tokens)
     
-    # Fast assembly
-    parts = ['📺' if is_series else '🎞️', f'[{size}]']
+    # Build final output - simple format
+    parts = []
     
+    # Emoji and size
+    parts.append('📺' if is_series else '🎞️')
+    parts.append(f'[{size}]')
+    
+    # Season/Episode for series
     if is_series and se:
         parts.append(f'[{se}]')
     
+    # Title
     if title:
         parts.append(title)
     
-    if yr:
-        parts.append(yr)
+    # Year
+    if year:
+        parts.append(f'({year})')
     
-    # Add tags in order
-    parts.extend(langs + quals + hdr + srcs + codecs + audios + subs + misc)
+    # Language (only first one if multiple)
+    if langs:
+        parts.append(langs[0])
+    
+    # Essential tags (max 2-3)
+    if essential:
+        parts.extend(essential[:3])
     
     return ' '.join(parts)
 
