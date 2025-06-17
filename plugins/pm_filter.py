@@ -132,8 +132,9 @@ async def doo(bot, data, message):
 
 def extract_shortdetails(filename: str, filesize: int) -> str:
     """Extract and format a clean title from filename - optimized for speed"""
+    
 
-    SE_PATTERN = re.compile(r'\b[s](\d{1,2})(?:\s*[eex]\s*(\d{1,2}))?\b', re.IGNORECASE)
+    SE_PATTERN = re.compile(r'\b(?:[s](\d{1,2})(?:\s*[eex]\s*(\d{1,2}))?|season\s+(\d{1,2})(?:\s+(?:episode\s+|e)(\d{1,2}))?)\b', re.IGNORECASE)
     YEAR_PATTERN = re.compile(r'\b(19|20)\d{2}\b')
     AUDIO_PATTERN = re.compile(r'\b(aac|ac3|dts)(\d\.\d|\d+)\b', re.IGNORECASE)
     RELEASE_PATTERN = re.compile(r'\b\w*(?:rip|hub|team|encode)\w*\b|\b[a-z]+\d+[a-z]*\b|\b\w+-\w+\b', re.IGNORECASE)
@@ -149,7 +150,19 @@ def extract_shortdetails(filename: str, filesize: int) -> str:
     # Fast pattern matching
     m_se = SE_PATTERN.search(lowered)
     is_series = bool(m_se)
-    se = f"S{int(m_se.group(1)):02d}" + (f"E{int(m_se.group(2)):02d}" if m_se.group(2) else "") if m_se else ''
+    
+    if m_se:
+        # Handle both formats: S01E01 and Season 1 Episode 1
+        if m_se.group(1):  # Short format (S01E01)
+            season = int(m_se.group(1))
+            episode = int(m_se.group(2)) if m_se.group(2) else None
+        else:  # Long format (Season 1 Episode 1)
+            season = int(m_se.group(3))
+            episode = int(m_se.group(4)) if m_se.group(4) else None
+        
+        se = f"S{season:02d}" + (f"E{episode:02d}" if episode else "")
+    else:
+        se = ''
     
     m_yr = YEAR_PATTERN.search(lowered)
     year = m_yr.group() if m_yr else ''
@@ -227,7 +240,8 @@ def extract_shortdetails(filename: str, filesize: int) -> str:
     parts.extend(langs + quals + hdr + srcs + codecs + audios + subs + misc)
     
     return ' '.join(parts)
-    
+
+
 
 @Client.on_callback_query(filters.regex(r"^next"))
 async def next_page(bot, query):
