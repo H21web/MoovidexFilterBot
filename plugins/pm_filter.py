@@ -131,78 +131,77 @@ async def doo(bot, data, message):
 
 
 def extract_shortdetails(filename: str, filesize: int) -> str:
-    # 1) strip extension
+    # --- 1) size & strip extension/tokenize ---
+    size_str = get_size(filesize)
     name, _ = os.path.splitext(filename)
-    # 2) tokenize
     tokens = re.split(r'[._\-\s]+', name)
     joined = ' '.join(tokens).lower()
-    
-    # 3) detect season/episode
+
+    # --- 2) season/episode ---
     m_se = re.search(r'\b[s](\d{1,2})\s*[eex]\s*(\d{1,2})\b', joined)
     is_series = bool(m_se)
     se_str = f"S{int(m_se[1]):02d}E{int(m_se[2]):02d}" if m_se else ''
-    
-    # 4) detect year
+
+    # --- 3) year ---
     m_yr = re.search(r'\b(19|20)\d{2}\b', joined)
-    yr_str = f"({m_yr.group()})" if m_yr else ''
-    
-    # 5) define your tag arrays (only these will be shown)
-    LANGS   = ['Hindi','English','Tamil','Telugu','Malayalam','Kannada','Bengali','Dual Audio']
-    QUALS   = ['2160p','1080p','720p','480p','4K']
-    SOURCES = ['NF','AMZN','DSNP','HMAX','BluRay','WEB-DL','WEBRip','HDR','HDRip','WEBRip','ESubs']
-    CODECS  = ['x265','x264','HEVC','10Bit']
-    AUDIOS  = ['5.1','7.1','2.0','AAC','AC3','Atmos']
-    
-    # helper to pick all matches (in order) from an array
+    yr = m_yr.group() if m_yr else ''
+    yr_str = f"({yr})" if yr else ''
+
+    # --- 4) define allowed tags ---
+    LANGS     = ['Hindi','English','Tamil','Telugu','Malayalam','Kannada','Bengali']
+    QUALS     = ['2160p','1080p','720p','480p','4K','HQ']
+    SOURCES   = ['HDRip','HDR','BluRay','WEB-DL','WEBRip','NF','AMZN','DSNP','HMAX']
+    CODECS    = ['x265','x264','HEVC']
+    AUDIOS    = ['5.1','7.1','2.0','AAC','AC3','Atmos']
+    SUBTITLES = ['ESub','SUB','SUBBED']
+
+    # helper to pick all matches in order
     def pick_all(arr):
         out = []
         for tag in arr:
             if tag.lower() in joined:
                 out.append(tag)
         return out
-    
+
     langs   = pick_all(LANGS)
     quals   = pick_all(QUALS)
     srcs    = [] if is_series else pick_all(SOURCES)
     codecs  = pick_all(CODECS)
     audios  = pick_all(AUDIOS)
-    
-    # if both HEVC & x265, keep only x265
+    subs    = pick_all(SUBTITLES)
+
+    # prefer x265 over HEVC
     if 'x265' in codecs and 'HEVC' in codecs:
         codecs.remove('HEVC')
-    
-    # 6) build clean title by removing any token that matches SE, year, or any tag
-    remove = {se_str, m_yr.group() if m_yr else ''}
-    remove |= {t.lower() for t in (langs + quals + srcs + codecs + audios)}
-    clean_tokens = [t for t in tokens if t and t.lower() not in remove]
-    title = ' '.join(clean_tokens)
-    
-    # 7) choose emoji
+
+    # drop any DDP/DD+ in favor of 5.1/7.1
+    # (we’re not listing DDP/DD+ in AUDIOS so it won’t appear)
+
+    # --- 5) build clean title ---
+    # remove season, year, any size-like tokens, and all picked tags
+    size_tokens = re.findall(r'\d+(?:\.\d+)?(?:mb|gb|kb)', joined)
+    remove = {se_str.lower(), yr.lower()} \
+           | {t.lower() for t in langs + quals + srcs + codecs + audios + subs} \
+           | set(size_tokens)
+    title_tokens = [t for t in tokens if t and t.lower() not in remove]
+    title = ' '.join(title_tokens)
+
+    # --- 6) emoji & assemble ---
     emoji = '📺' if is_series else '🎞️'
-    
-    # 8) assemble in your exact order
-    parts = [
-        emoji,
-        f"[{get_size(filesize)}]",
-    ]
+    parts = [emoji, f"[{size_str}]"]
     if is_series and se_str:
         parts.append(f"[{se_str}]")
     parts.append(title)
     if yr_str:
         parts.append(yr_str)
-    
+
     # languages immediately after year
-    parts.extend(langs)
-    # then quality, source, codec, audio—in that priority
-    parts.extend(quals)
-    parts.extend(srcs)
-    parts.extend(codecs)
-    parts.extend(audios)
-    
-    # 9) join and return
+    parts += langs
+    # then quality, source, codec, audio, subtitles
+    parts += quals + srcs + codecs + audios + subs
+
     return ' '.join(parts)
-
-
+    
 
 @Client.on_callback_query(filters.regex(r"^next"))
 async def next_page(bot, query):
