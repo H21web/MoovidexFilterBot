@@ -131,82 +131,74 @@ async def doo(bot, data, message):
 
 
 def extract_shortdetails(filename: str, filesize: int) -> str:
+    # 1) Size
     size_str = get_size(filesize)  # e.g. "1.2GB"
     
-    # strip extension & split tokens
+    # 2) Strip extension & tokenize
     name, _ = os.path.splitext(filename)
-    tokens = re.split(r'[._\-\s]+', name)
-    joined = ' '.join(tokens)
-    lower = joined.lower()
+    parts = re.split(r'[._\-\s]+', name)
+    joined = ' '.join(parts).lower()
     
-    # season/episode
-    se = ''
-    m = re.search(r'\b[Ss](\d{1,2})[Eex](\d{1,2})\b', joined)
-    if m:
-        se = f"S{int(m.group(1)):02d}E{int(m.group(2)):02d}"
+    # 3) Season/Episode: matches S01E01, S01 E01, s1 e1, etc.
+    se_match = re.search(r'\b[s](\d{1,2})\s*[eex]\s*(\d{1,2})\b', joined)
+    if se_match:
+        se_str = f"S{int(se_match[1]):02d}E{int(se_match[2]):02d}"
+        is_series = True
+    else:
+        se_str = ''
+        is_series = False
     
-    # year
-    ym = re.search(r'\b(19|20)\d{2}\b', joined)
-    year = f"({ym.group()})" if ym else ''
+    # 4) Year
+    yr_match = re.search(r'\b(19|20)\d{2}\b', joined)
+    yr_str = f"({yr_match.group()})" if yr_match else ''
     
-    # priority lists
-    quality_list = ['2160p','1080p','720p','480p','4k']
-    src_list     = ['nf','amzn','dsnp','hmax','bluray','web-dl','webrip','hdr','hdrip']
-    codec_list   = ['x265','x264','hevc']
-    audio_list   = ['5.1','7.1','2.0','aac','ac3','atmos']
-    lang_list    = ['hindi','english','tamil','telugu','malayalam','kannada','bengali','dual audio']
+    # 5) Priority detection lists
+    langs   = ['hindi','english','tamil','telugu','malayalam','kannada','bengali','dual audio']
+    quals   = ['2160p','1080p','720p','480p','4k']
+    srcs    = ['nf','amzn','dsnp','hmax','bluray','web-dl','webrip','hdr','hdrip']
+    codecs  = ['x265','x264','hevc']
+    audios  = ['5.1','7.1','2.0']
     
-    def find_first(lst):
-        for tag in lst:
-            if tag in lower:
+    def pick(list_):
+        for tag in list_:
+            if tag in joined:
                 return tag
         return ''
     
-    quality = find_first(quality_list)
-    codec   = find_first(codec_list)
-    audio   = find_first(audio_list)
-    lang    = find_first(lang_list)
-    extras  = [tag for tag in src_list if tag in lower]
+    lang  = pick(langs)
+    qual  = pick(quals)
+    src   = '' if is_series else pick(srcs)
+    codec = pick(codecs)
+    audio = pick(audios)
     
-    # dedupe implied
-    if 'x265' in extras and 'hevc' in extras:
-        extras.remove('hevc')
-    if audio in ('5.1','7.1') and any(x in lower for x in ('ddp','dd+')):
-        # drop ddp/dd+
-        extras = [e for e in extras if e not in ('ddp','dd+')]
+    # prefer x265 over HEVC
+    if codec == 'hevc' and 'x265' in joined:
+        codec = 'x265'
+    # drop DDP/DD+ since we show 5.1/7.1
+    if audio and any(x in joined for x in ('ddp','dd+')):
+        pass
     
-    # build clean title
-    remove = {se, ym.group() if ym else '', quality, codec, audio, lang} | set(extras)
-    title_tokens = [t for t in tokens if t and t.lower() not in remove]
-    title = ' '.join(title_tokens)
+    # 6) Build clean title by removing detected tokens
+    remove = {se_str, yr_match.group() if yr_match else '', lang, qual, src, codec, audio}
+    title = ' '.join(t for t in parts if t and t.lower() not in {r.lower() for r in remove})
     
-    # emoji
-    emoji = '📺' if se else '🎞️'
+    # 7) Emoji
+    emoji = '📺' if is_series else '🎞️'
     
-    # formatting helpers
-    def fmt_src(tag):
-        # e.g. "bluray" → "BluRay", "web-dl" → "Web‑DL"
-        return tag.title().replace('-', '‑')
-    def fmt_lang(tag):
-        return 'Dual Audio' if tag=='dual audio' else tag.title()
-    def fmt_codec(tag):
-        return 'x265' if '265' in tag else 'x264'
-    def fmt_audio(tag):
-        return tag if tag in ('5.1','7.1','2.0') else tag.upper()
-    
-    # assemble
-    parts = [emoji, f"[{size_str}]"]
-    if se:    parts.append(f"[{se}]")
-    parts.append(title)
-    if year:  parts.append(year)
-    if quality: parts.append(quality.lower().replace('4k','4K'))
-    if lang:    parts.append(fmt_lang(lang))
-    if codec:   parts.append(fmt_codec(codec))
-    if audio:   parts.append(fmt_audio(audio))
-    for e in extras:
-        parts.append(fmt_src(e))
-    
-    return ' '.join(parts)
+    # 8) Assemble
+    out = [emoji, f"[{size_str}]"]
+    if se_str: out.append(f"[{se_str}]")
+    out.append(title)
+    if yr_str: out.append(yr_str)
+    for tag in (lang, qual, src, codec, audio):
+        if tag:
+            # proper casing
+            if tag in quals:      out.append(tag)
+            elif tag in audios:   out.append(tag)
+            elif tag in codecs:   out.append(tag.lower())
+            elif tag in srcs:     out.append(tag.upper().replace('-', '‑'))
+            else:                 out.append(tag.title())
+    return ' '.join(out)
 
 
 
