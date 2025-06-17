@@ -137,6 +137,19 @@ def get_size(file_size):
     return f"{file_size:.1f}PB"
 
 def extract_shortdetails(filename, file_size, max_length=64):
+    # Language short code mapping
+    language_map = {
+        'hin': 'Hindi', 'eng': 'English', 'tam': 'Tamil', 'tel': 'Telugu',
+        'mal': 'Malayalam', 'kan': 'Kannada', 'ben': 'Bengali', 'kor': 'Korean',
+        'multi': 'Multi Audio', 'dual': 'Dual Audio'
+    }
+
+    # Full language names for direct match
+    language_tags = [
+        'Hindi', 'English', 'Tamil', 'Telugu', 'Malayalam', 'Kannada',
+        'Bengali', 'Dual Audio', 'Multi Audio', 'Korean'
+    ]
+
     # Remove [tags], @handles, www. links
     cleaned = ' '.join(
         filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'),
@@ -147,10 +160,10 @@ def extract_shortdetails(filename, file_size, max_length=64):
     # Detect season & episode
     se_match = re.search(
         r'(?:(?:s(?:eason)?[\s._-]*(?P<season>\d{1,2}))[\s._x-]*'
-        r'(?:e(?:p(?:isode)?)?[\s._-]*(?P<episode>\d{1,2})))|'  # S01E02, Season 1 EP02
-        r'(?:(?P<season_alt>\d{1,2})x(?P<episode_alt>\d{1,2}))|'  # 1x02
-        r'(?:(?:season[\s._-]*(?P<season_only>\d{1,2})))|'       # Season 1
-        r'(?:(?:e(?:p(?:isode)?)?[\s._-]*(?P<episode_only>\d{1,2})))',  # Episode 2
+        r'(?:e(?:p(?:isode)?)?[\s._-]*(?P<episode>\d{1,2})))|'
+        r'(?:(?P<season_alt>\d{1,2})x(?P<episode_alt>\d{1,2}))|'
+        r'(?:(?:season[\s._-]*(?P<season_only>\d{1,2})))|'
+        r'(?:(?:e(?:p(?:isode)?)?[\s._-]*\d{1,2}))',
         lower
     )
 
@@ -165,31 +178,31 @@ def extract_shortdetails(filename, file_size, max_length=64):
             season, episode = int(gd['season_alt']), int(gd['episode_alt'])
         elif gd['season_only']:
             season = int(gd['season_only'])
-        elif gd['episode_only']:
-            episode = int(gd['episode_only'])
 
         if season is not None and episode is not None:
             season_episode_str = f"[S{season:02d}E{episode:02d}]"
         elif season is not None:
             season_episode_str = f"[S{season:02d}]"
-        elif episode is not None:
-            season_episode_str = f"[E{episode:02d}]"
 
-    # Year detection
+    # Year
     year_match = re.search(r'(19|20)\d{2}', cleaned)
     year = year_match.group() if year_match else ''
 
-    # Quality detection
+    # Quality
     quality_tags = ['480p', '720p', '1080p', '2160p', '4K', 'HDRip', 'BluRay', 'WEB-DL', 'WEBRip']
     quality = next((q for q in quality_tags if q.lower() in lower), '')
 
-    # Language detection
-    language_tags = ['Hindi', 'English', 'Tamil', 'Telugu', 'Malayalam', 'Kannada',
-                     'Bengali', 'Dual Audio', 'Multi', 'Korean', 'Multi Audio']
-    language = [lang for lang in language_tags if lang.lower() in lower]
-    language = ' '.join(language)
+    # Detect language (full or short codes)
+    found_languages = set()
+    for tag in language_tags:
+        if tag.lower() in lower:
+            found_languages.add(tag)
+    for code, full in language_map.items():
+        if re.search(r'\b' + re.escape(code) + r'\b', lower):
+            found_languages.add(full)
+    language = ' '.join(sorted(found_languages))
 
-    # Tag detection
+    # Tags
     all_tags_priority = [
         'NF', 'AMZN', 'DSNP', 'HMAX', 'WEBRip', 'WEB-DL', 'BluRay', 'HDRip', 'HDR', 'HQ',
         'HEVC', 'x265', 'x264', '10bit',
@@ -208,7 +221,7 @@ def extract_shortdetails(filename, file_size, max_length=64):
     if ('5.1' in found_tags or '7.1' in found_tags) and ('DDP' in found_tags or 'DD+' in found_tags):
         found_tags = [t for t in found_tags if t not in ('DDP', 'DD+')]
 
-    # Title cleanup: remove episode/season info before title parsing
+    # Title cleanup: remove season/episode info before formatting
     title_cleaned = re.sub(
         r'(s(?:eason)?[\s._-]*\d{1,2}[\s._x-]*e(?:p(?:isode)?)?[\s._-]*\d{1,2})|'
         r'(\d{1,2}x\d{1,2})|'
@@ -216,22 +229,20 @@ def extract_shortdetails(filename, file_size, max_length=64):
         r'(e(?:p(?:isode)?)?[\s._-]*\d{1,2})',
         '', cleaned, flags=re.IGNORECASE
     )
-
-    # Remove extension delimiter
     title_no_ext = re.sub(r'\.(?=[^.]*$)', ' ', title_cleaned)
     title_part = re.split(r'(19|20)\d{2}', title_no_ext)[0]
     title = re.sub(r'[\._\-]', ' ', title_part).strip().title()
 
-    # Final title with year
+    # Final title
     title_year = f"{title} ({year})" if year else title
     if len(title_year) > 30:
         title_year = title_year[:27].rstrip() + "..."
 
-    # Emoji: 📺 for series, 🎞️ for movie
+    # Emoji
     is_series = bool(season or episode)
     emoji = '📺' if is_series else '🎞️'
 
-    # Build initial parts
+    # Build output
     parts = [emoji, f"[{get_size(file_size)}]"]
     if season_episode_str:
         parts.append(season_episode_str)
@@ -241,7 +252,6 @@ def extract_shortdetails(filename, file_size, max_length=64):
     if quality:
         parts.append(quality)
 
-    # Add tags while within max length
     current = ' '.join(parts)
     for tag in found_tags:
         test = current + f" {tag}"
