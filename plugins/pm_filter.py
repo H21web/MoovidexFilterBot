@@ -129,86 +129,82 @@ async def doo(bot, data, message):
     await auto_filter(bot, data, message, reply_msg, ai_search)
 
 
-def extract_shortdetails(filename, filesize):
-    filename = filename.replace(".", " ").replace("_", " ").strip()
 
-    # Detect season and episode info
-    season_ep_pattern = re.search(r'\b[Ss](\d{1,2})[\s\.]?[Ee](\d{1,2})\b', filename)
-    season_only = re.search(r'\b[Ss](\d{1,2})\b', filename)
-    episode_only = re.search(r'\b[Ee](\d{1,2})\b', filename)
+def extract_shortdetails(filename, filesize, max_len=64):
+    # Remove extension
+    filename = re.sub(r'\.\w{2,4}$', '', filename)
+    filename = re.sub(r'[_\.]', ' ', filename).strip()
 
-    season_episode = ""
-    if season_ep_pattern:
-        s = int(season_ep_pattern.group(1))
-        e = int(season_ep_pattern.group(2))
-        season_episode = f"S{s:02d}E{e:02d}"
-    elif season_only:
-        s = int(season_only.group(1))
-        season_episode = f"S{s:02d}"
-    elif episode_only:
-        e = int(episode_only.group(1))
-        season_episode = f"E{e:02d}"
+    # Detect Season & Episode
+    se = ''
+    match = re.search(r'\b[Ss]eason\s?(\d{1,2})[\s_]*[Ee]pisode\s?(\d{1,2})\b', filename) or \
+            re.search(r'\b[Ss](\d{1,2})[\s_\.]?[Ee](\d{1,2})\b', filename)
+    if match:
+        se = f"S{int(match.group(1)):02d}E{int(match.group(2)):02d}"
+    else:
+        s = re.search(r'\b[Ss](eason)?\s?(\d{1,2})\b', filename)
+        e = re.search(r'\b[Ee](pisode)?\s?(\d{1,2})\b', filename)
+        if s and e:
+            se = f"S{int(s.group(2)):02d}E{int(e.group(2)):02d}"
+        elif s:
+            se = f"S{int(s.group(2)):02d}"
+        elif e:
+            se = f"E{int(e.group(2)):02d}"
 
-    # Remove SxxExx from filename
-    filename = re.sub(r'\b[Ss]\d{1,2}[\s\.]?[Ee]\d{1,2}\b', '', filename)
-    filename = re.sub(r'\b[Ss]\d{1,2}\b', '', filename)
-    filename = re.sub(r'\b[Ee]\d{1,2}\b', '', filename)
+    # Remove SE from filename
+    filename = re.sub(r'\b[Ss]eason\s?\d+\s?[Ee]pisode\s?\d+|\b[Ss]\d{1,2}[\s\.]?[Ee]\d{1,2}|\b[Ss]eason\s?\d+|\b[Ee]pisode\s?\d+|\b[Ss]\d+|\b[Ee]\d+', '', filename)
 
-    # Extract tags
-    year_match = re.search(r'(19|20)\d{2}', filename)
-    year = f"({year_match.group()})" if year_match else ""
+    # Extract metadata
+    year = re.search(r'\b(19|20)\d{2}\b', filename)
+    year = f"({year.group()})" if year else ""
 
-    lang_match = re.search(r'\b(Hindi|English|Tamil|Telugu|Malayalam|Kannada|Dual Audio)\b', filename, re.I)
-    lang = lang_match.group().title() if lang_match else ""
+    lang = re.search(r'\b(Hindi|English|Tamil|Telugu|Malayalam|Kannada|Dual Audio)\b', filename, re.I)
+    lang = lang.group().title() if lang else ""
 
-    quality_match = re.search(r'\b(480p|720p|1080p|2160p|4k|HDR)\b', filename, re.I)
-    quality = quality_match.group().upper() if quality_match else ""
+    quality = re.search(r'\b(2160p|1080p|720p|480p|4K|HDR)\b', filename, re.I)
+    quality = quality.group().upper() if quality else ""
 
-    codec_match = re.search(r'\b(x264|x265|HEVC|H\.?264|H\.?265)\b', filename, re.I)
-    codec = codec_match.group().upper().replace("HEVC", "x265") if codec_match else ""
+    codec = re.search(r'\b(x265|x264|HEVC)\b', filename, re.I)
+    codec = "x265" if codec and '265' in codec.group() else "x264" if codec else ""
 
-    audio_match = re.search(r'\b(DDP\s?5\.1|5\.1|AAC|MP3|2\.0|7\.1)\b', filename, re.I)
-    audio = audio_match.group().upper().replace("DDP ", "") if audio_match else ""
+    audio = re.search(r'\b(5\.1|7\.1|2\.0|DDP\s?5\.1|AAC)\b', filename, re.I)
+    audio = audio.group().replace("DDP ", "") if audio else ""
 
-    # Remove extra spaces
-    filename = re.sub(r'\s+', ' ', filename).strip()
+    # Remove known tags from title
+    known_tags = ['480p', '720p', '1080p', '2160p', '4k', 'HDR', 'x264', 'x265', 'HEVC',
+                  'AAC', '5.1', '7.1', '2.0', 'DDP', 'Dual Audio', 'Hindi', 'English',
+                  'Tamil', 'Telugu', 'Malayalam', 'Kannada']
+    title = re.sub(r'\b(' + '|'.join(map(re.escape, known_tags)) + r')\b', '', filename, flags=re.I)
+    title = re.sub(r'\s+', ' ', title).strip().title()  # Capitalize title
 
-    # Clean up file name: remove common tags and keep clean title
-    tags_to_remove = [
-        '480p', '720p', '1080p', '2160p', '4k', 'x264', 'x265', 'HEVC', 'H264', 'H265', 'AAC', 'DDP', '5.1', '2.0', '7.1',
-        'BluRay', 'WEBRip', 'HDRip', 'HDR', 'NF', 'AMZN', 'WEB DL', 'WEB', 'HDTV', 'DVDRip', '10bit', '8bit',
-    ]
-    pattern = re.compile(r'\b(?:' + '|'.join(re.escape(tag) for tag in tags_to_remove) + r')\b', re.IGNORECASE)
-    title = pattern.sub('', filename)
-    title = re.sub(r'\s+', ' ', title).strip()
+    # Emoji based on SE presence
+    emoji = "📺" if se else "🎞️"
 
-    # Decide media type
-    media_type = "📺" if season_episode else "🎞️"
+    # Parts assembly
+    parts = [emoji, f"[{get_size(filesize)}]"]
+    if se: parts.append(f"[{se}]")
+    parts.append(title)
+    if year: parts.append(year)
 
-    # Format file size
-    size_str = f"[{get_size(filesize)}]"
+    # Prioritized tags
+    for tag in [quality, codec, audio, lang]:
+        if tag:
+            parts.append(tag)
 
-    # Compose final title
-    parts = [media_type, size_str]
-    if season_episode:
-        parts.append(f"[{season_episode}]")
-    if title:
-        parts.append(title)
-    if year:
-        parts.append(year)
-    if lang:
-        parts.append(lang)
-    if quality:
-        parts.append(quality)
-    if codec:
-        if codec.lower() == "x265":
-            parts.append("x265")
-        elif codec.lower() == "x264":
-            parts.append("x264")
-    if audio:
-        parts.append(audio)
+    result = " ".join(parts)
 
-    return " ".join(parts)
+    # Truncate result safely
+    if len(result) > max_len:
+        static = " ".join(parts[:4 if se else 3])  # up to year
+        dynamic = [x for x in parts[4 if se else 3:] if x]
+        for i in range(len(dynamic), -1, -1):
+            result = f"{static} {' '.join(dynamic[:i])}".strip()
+            if len(result) <= max_len:
+                break
+        if len(result) > max_len:
+            result = result[:max_len-1] + "…"
+
+    return result
 
 @Client.on_callback_query(filters.regex(r"^next"))
 async def next_page(bot, query):
