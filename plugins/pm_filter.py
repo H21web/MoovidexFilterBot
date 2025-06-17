@@ -100,6 +100,110 @@ async def doo(bot, data, message):
     )
     await auto_filter(bot, data, message, reply_msg, ai_search)
 
+
+def get_size(file_size_bytes):
+    gb = file_size_bytes / (1024 ** 3)
+    return f"{gb:.1f}GB" if gb >= 0.1 else f"{file_size_bytes / (1024 ** 2):.1f}MB"
+
+def extract_shortdetails(filename, file_size, max_length=64):
+    # Remove [tags], @handles, www. links
+    cleaned = ' '.join(
+        filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'),
+               filename.split())
+    )
+    lower = cleaned.lower()
+
+    # Season/Episode detection (strict & flexible)
+    se_match = re.search(
+        r'(?:(?:s(?:eason)?)[\s\._\-]*(\d{1,2})[\s\._\-]*e(?:p(?:isode)?)?[\s\._\-]*(\d{1,2}))|'  # S01E01 / Season 1 Ep 1
+        r'(?:s[\s\._\-]*(\d{1,2})[\s\._\-]*e[\s\._\-]*(\d{1,2}))|'                                # s 1 e 1 / s01e01
+        r'(?:season[\s\._\-]*(\d{1,2}))',                                                         # Season 1
+        lower
+    )
+
+    is_series = bool(se_match)
+    season_episode_str = ''
+    if se_match:
+        groups = se_match.groups()
+        season = episode = None
+        if groups[0] and groups[1]:       # S01E01
+            season, episode = int(groups[0]), int(groups[1])
+        elif groups[2] and groups[3]:     # s 1 e 1
+            season, episode = int(groups[2]), int(groups[3])
+        elif groups[4]:                   # Season 1 only
+            season = int(groups[4])
+
+        if season and season < 100 and (episode is None or episode < 100):
+            if episode is not None:
+                season_episode_str = f"[S{season:02d}E{episode:02d}]"
+            else:
+                season_episode_str = f"[S{season:02d}]"
+
+    # Year detection
+    year_match = re.search(r'(19|20)\d{2}', cleaned)
+    year = year_match.group() if year_match else ''
+
+    # Quality detection
+    quality_tags = ['480p', '720p', '1080p', '2160p', '4K', 'HDRip', 'BluRay', 'WEB-DL', 'WEBRip']
+    quality = next((q for q in quality_tags if q.lower() in lower), '')
+
+    # Language detection
+    language_tags = ['Hindi', 'English', 'Tamil', 'Telugu', 'Malayalam', 'Kannada',
+                     'Bengali', 'Dual Audio', 'Multi', 'Korean', 'Multi Audio']
+    language = ' '.join(lang for lang in language_tags if lang.lower() in lower)
+
+    # Tag priority
+    all_tags_priority = [
+        'NF', 'AMZN', 'DSNP', 'HMAX', 'WEBRip', 'WEB-DL', 'BluRay', 'HDRip', 'HDR', 'HQ',
+        'HEVC', 'x265', 'x264', '10bit',
+        'AAC', 'AC3', 'DDP', 'DD+', '5.1', '7.1', 'Atmos', 'ESubs', 'Esub'
+    ]
+
+    found_tags = []
+    tag_set = set()
+    for tag in all_tags_priority:
+        if tag.lower() in lower and tag.upper() not in tag_set:
+            tag_set.add(tag.upper())
+            found_tags.append(tag)
+
+    # Remove redundant tags
+    if 'x265' in found_tags and 'HEVC' in found_tags:
+        found_tags.remove('HEVC')
+    if ('5.1' in found_tags or '7.1' in found_tags) and ('DDP' in found_tags or 'DD+' in found_tags):
+        found_tags = [t for t in found_tags if t not in ('DDP', 'DD+')]
+
+    # Title extraction and cleanup
+    title_no_ext = re.sub(r'\.(?=[^.]*$)', ' ', cleaned)
+    title_part = re.split(r'(19|20)\d{2}', title_no_ext)[0]
+    title = re.sub(r'[\._\-]', ' ', title_part).strip().title()
+
+    # Add year if available
+    title_year = f"{title} ({year})" if year else title
+    if len(title_year) > 30:
+        title_year = title_year[:27].rstrip() + "..."
+
+    # Emoji
+    emoji = '📺' if is_series else '🎞️'
+
+    # Build initial parts
+    parts = [emoji, f"[{get_size(file_size)}]"]
+    if season_episode_str:
+        parts.append(season_episode_str)
+    parts.append(title_year)
+    if language:
+        parts.append(language)
+    if quality:
+        parts.append(quality)
+
+    # Add tags within max_length
+    current = ' '.join(parts)
+    for tag in found_tags:
+        test = f"{current} {tag}"
+        if len(test) > max_length:
+            break
+        current = test
+
+    return current.strip()
     
     
 @Client.on_callback_query(filters.regex(r"^next"))
