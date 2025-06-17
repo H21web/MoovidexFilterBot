@@ -130,8 +130,12 @@ async def doo(bot, data, message):
 
 
 def get_size(file_size):
-    size_in_gb = file_size / (1024 ** 3)
-    return f"{size_in_gb:.1f}GB"
+    if file_size < (1024 ** 3):  # Less than 1GB
+        size_in_mb = file_size / (1024 ** 2)
+        return f"{int(size_in_mb)}MB"
+    else:
+        size_in_gb = file_size / (1024 ** 3)
+        return f"{size_in_gb:.1f}GB"
 
 def extract_shortdetails(filename, file_size, max_length=64):
     # Pre-cleaning
@@ -141,12 +145,13 @@ def extract_shortdetails(filename, file_size, max_length=64):
     )
     lower = cleaned.lower()
 
+    # Season and episode detection
     se_match = re.search(
-    r'(?i)(?:(?:S(?P<season>\d{2}))\s?E(?:P)?(?P<episode>\d{1,2}))|'  # S01E01, S01 EP01, S01EP1
-    r'(?:S(?P<season_only>\d{2}))|'                                  # S01
-    r'(?:EP(?P<episode_only>\d{1,2}))|'                              # EP1
-    r'(?:SEASON[\s._-]?(?P<season_text>\d{1,2}))',                   # Season 1
-    lower
+        r'(?i)(?:(?:S(?P<season>\d{2}))\s?E(?:P)?(?P<episode>\d{1,2}))|'  # S01E01, S01 EP01, S01EP1
+        r'(?:S(?P<season_only>\d{2}))|'                                  # S01
+        r'(?:EP(?P<episode_only>\d{1,2}))|'                              # EP1
+        r'(?:SEASON[\s._-]?(?P<season_text>\d{1,2}))',                   # Season 1
+        lower
     )
 
     season_episode_str = ''
@@ -171,6 +176,7 @@ def extract_shortdetails(filename, file_size, max_length=64):
             season_episode_str = f"[S{season:02d}]"
         elif episode is not None:
             season_episode_str = f"[E{episode:02d}]"
+
     # Year detection
     year_match = re.search(r'(19|20)\d{2}', cleaned)
     year = year_match.group() if year_match else ''
@@ -179,7 +185,7 @@ def extract_shortdetails(filename, file_size, max_length=64):
     quality_tags = ['480p', '720p', '1080p', '2160p', '4K', 'HDRip', 'BluRay', 'WEB-DL', 'WEBRip']
     quality = next((q for q in quality_tags if q.lower() in lower), '')
 
-    # Language shorthand mapping
+    # Language detection
     shorthand_lang_map = {
         'hin': 'Hindi',
         'eng': 'English',
@@ -233,14 +239,13 @@ def extract_shortdetails(filename, file_size, max_length=64):
 
     # Remove season/episode patterns from title
     title_cleaned = re.sub(
-    r'(S\d{2}\s?E(?:P)?\d{1,2})|'     # S01E01, S01 EP01, S01EP1
-    r'(S\d{2})|'                      # S01
-    r'(EP\d{1,2})',                   # EP1, EP01
-    '',
-    title_no_ext,
-    flags=re.IGNORECASE
+        r'(S\d{2}\s?E(?:P)?\d{1,2})|'     # S01E01, S01 EP01, S01EP1
+        r'(S\d{2})|'                      # S01
+        r'(EP\d{1,2})',                   # EP1, EP01
+        '',
+        title_no_ext,
+        flags=re.IGNORECASE
     )
-    
 
     title_part = re.split(r'(19|20)\d{2}', title_cleaned)[0]
     title = re.sub(r'[\._\-]', ' ', title_part).strip().title()
@@ -253,8 +258,8 @@ def extract_shortdetails(filename, file_size, max_length=64):
     # Emoji
     emoji = '📺' if is_series else '🎞️'
 
-    # Build parts
-    parts = [emoji, f"[{get_size(file_size)}]"]
+    # Build parts with a space after the size
+    parts = [emoji, f"[{get_size(file_size)}] "]
     if season_episode_str:
         parts.append(season_episode_str)
     parts.append(title_year)
