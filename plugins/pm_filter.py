@@ -130,75 +130,77 @@ async def doo(bot, data, message):
 
 
 
-def extract_shortdetails(filename: str, filesize: int) -> str:
-    # 1) Size
-    size_str = get_size(filesize)  # e.g. "1.2GB"
-    
-    # 2) Strip extension & tokenize
+def extract_clean_title(filename: str, filesize: int) -> str:
+    # 1) strip extension
     name, _ = os.path.splitext(filename)
-    parts = re.split(r'[._\-\s]+', name)
-    joined = ' '.join(parts).lower()
+    # 2) tokenize
+    tokens = re.split(r'[._\-\s]+', name)
+    joined = ' '.join(tokens).lower()
     
-    # 3) Season/Episode: matches S01E01, S01 E01, s1 e1, etc.
-    se_match = re.search(r'\b[s](\d{1,2})\s*[eex]\s*(\d{1,2})\b', joined)
-    if se_match:
-        se_str = f"S{int(se_match[1]):02d}E{int(se_match[2]):02d}"
-        is_series = True
-    else:
-        se_str = ''
-        is_series = False
+    # 3) detect season/episode
+    m_se = re.search(r'\b[s](\d{1,2})\s*[eex]\s*(\d{1,2})\b', joined)
+    is_series = bool(m_se)
+    se_str = f"S{int(m_se[1]):02d}E{int(m_se[2]):02d}" if m_se else ''
     
-    # 4) Year
-    yr_match = re.search(r'\b(19|20)\d{2}\b', joined)
-    yr_str = f"({yr_match.group()})" if yr_match else ''
+    # 4) detect year
+    m_yr = re.search(r'\b(19|20)\d{2}\b', joined)
+    yr_str = f"({m_yr.group()})" if m_yr else ''
     
-    # 5) Priority detection lists
-    langs   = ['hindi','english','tamil','telugu','malayalam','kannada','bengali','dual audio']
-    quals   = ['2160p','1080p','720p','480p','4k']
-    srcs    = ['nf','amzn','dsnp','hmax','bluray','web-dl','webrip','hdr','hdrip']
-    codecs  = ['x265','x264','hevc']
-    audios  = ['5.1','7.1','2.0']
+    # 5) define your tag arrays (only these will be shown)
+    LANGS   = ['Hindi','English','Tamil','Telugu','Malayalam','Kannada','Bengali','Dual Audio']
+    QUALS   = ['2160p','1080p','720p','480p','4K']
+    SOURCES = ['NF','AMZN','DSNP','HMAX','BluRay','WEB-DL','WEBRip','HDR','HDRip']
+    CODECS  = ['x265','x264','HEVC']
+    AUDIOS  = ['5.1','7.1','2.0','AAC','AC3','Atmos']
     
-    def pick(list_):
-        for tag in list_:
-            if tag in joined:
-                return tag
-        return ''
+    # helper to pick all matches (in order) from an array
+    def pick_all(arr):
+        out = []
+        for tag in arr:
+            if tag.lower() in joined:
+                out.append(tag)
+        return out
     
-    lang  = pick(langs)
-    qual  = pick(quals)
-    src   = '' if is_series else pick(srcs)
-    codec = pick(codecs)
-    audio = pick(audios)
+    langs   = pick_all(LANGS)
+    quals   = pick_all(QUALS)
+    srcs    = [] if is_series else pick_all(SOURCES)
+    codecs  = pick_all(CODECS)
+    audios  = pick_all(AUDIOS)
     
-    # prefer x265 over HEVC
-    if codec == 'hevc' and 'x265' in joined:
-        codec = 'x265'
-    # drop DDP/DD+ since we show 5.1/7.1
-    if audio and any(x in joined for x in ('ddp','dd+')):
-        pass
+    # if both HEVC & x265, keep only x265
+    if 'x265' in codecs and 'HEVC' in codecs:
+        codecs.remove('HEVC')
     
-    # 6) Build clean title by removing detected tokens
-    remove = {se_str, yr_match.group() if yr_match else '', lang, qual, src, codec, audio}
-    title = ' '.join(t for t in parts if t and t.lower() not in {r.lower() for r in remove})
+    # 6) build clean title by removing any token that matches SE, year, or any tag
+    remove = {se_str, m_yr.group() if m_yr else ''}
+    remove |= {t.lower() for t in (langs + quals + srcs + codecs + audios)}
+    clean_tokens = [t for t in tokens if t and t.lower() not in remove]
+    title = ' '.join(clean_tokens)
     
-    # 7) Emoji
+    # 7) choose emoji
     emoji = '📺' if is_series else '🎞️'
     
-    # 8) Assemble
-    out = [emoji, f"[{size_str}]"]
-    if se_str: out.append(f"[{se_str}]")
-    out.append(title)
-    if yr_str: out.append(yr_str)
-    for tag in (lang, qual, src, codec, audio):
-        if tag:
-            # proper casing
-            if tag in quals:      out.append(tag)
-            elif tag in audios:   out.append(tag)
-            elif tag in codecs:   out.append(tag.lower())
-            elif tag in srcs:     out.append(tag.upper().replace('-', '‑'))
-            else:                 out.append(tag.title())
-    return ' '.join(out)
+    # 8) assemble in your exact order
+    parts = [
+        emoji,
+        f"[{get_size(filesize)}]",
+    ]
+    if is_series and se_str:
+        parts.append(f"[{se_str}]")
+    parts.append(title)
+    if yr_str:
+        parts.append(yr_str)
+    
+    # languages immediately after year
+    parts.extend(langs)
+    # then quality, source, codec, audio—in that priority
+    parts.extend(quals)
+    parts.extend(srcs)
+    parts.extend(codecs)
+    parts.extend(audios)
+    
+    # 9) join and return
+    return ' '.join(parts)
 
 
 
