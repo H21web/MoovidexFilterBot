@@ -129,6 +129,14 @@ async def doo(bot, data, message):
     await auto_filter(bot, data, message, reply_msg, ai_search)
 
 
+def get_size(file_size):
+    # Simple file size formatter
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if file_size < 1024.0:
+            return f"{file_size:.1f}{unit}"
+        file_size /= 1024.0
+    return f"{file_size:.1f}PB"
+
 def extract_shortdetails(filename, file_size, max_length=64):
     # Remove [tags], @handles, www. links
     cleaned = ' '.join(
@@ -138,47 +146,53 @@ def extract_shortdetails(filename, file_size, max_length=64):
 
     lower = cleaned.lower()
 
-    # Detect season & episode (more flexible patterns)
+    # Detect season & episode (very flexible)
     se_match = re.search(
-        r'(?:s(?:eason)?\s*(\d{1,2}))[\s\.x\-]*?(?:e(?:pisode)?\s*(\d{1,2}))|'  # S01E02, Season 1 Episode 2
-        r's\s*(\d{1,2})\s*e\s*(\d{1,2})|'                                      # s 01 e 02
-        r'season\s*(\d{1,2})',                                                 # Season 1 (no episode)
+        r'(?:(?:s(?:eason)?[\s._-]*(?P<season>\d{1,2}))[\s._x-]*'
+        r'(?:e(?:p(?:isode)?)?[\s._-]*(?P<episode>\d{1,2})))|'  # S01E02, S1EP2, Season 1 Episode 2
+        r'(?:(?P<season_alt>\d{1,2})x(?P<episode_alt>\d{1,2}))|'  # 1x02
+        r'(?:(?:season[\s._-]*(?P<season_only>\d{1,2})))|'       # Season 1
+        r'(?:(?:e(?:p(?:isode)?)?[\s._-]*(?P<episode_only>\d{1,2})))',  # Episode 2
         lower
     )
 
-    is_series = bool(se_match)
     season_episode_str = ''
-    if is_series:
-        groups = se_match.groups()
-        season = None
-        episode = None
-        # Try different group patterns based on what matched
-        if groups[0] and groups[1]:
-            season, episode = int(groups[0]), int(groups[1])
-        elif groups[2] and groups[3]:
-            season, episode = int(groups[2]), int(groups[3])
-        elif groups[4]:
-            season = int(groups[4])
+    season = episode = None
+
+    if se_match:
+        gd = se_match.groupdict()
+
+        if gd['season'] and gd['episode']:
+            season, episode = int(gd['season']), int(gd['episode'])
+        elif gd['season_alt'] and gd['episode_alt']:
+            season, episode = int(gd['season_alt']), int(gd['episode_alt'])
+        elif gd['season_only']:
+            season = int(gd['season_only'])
+        elif gd['episode_only']:
+            episode = int(gd['episode_only'])
 
         if season is not None and episode is not None:
             season_episode_str = f"[S{season:02d}E{episode:02d}]"
         elif season is not None:
             season_episode_str = f"[S{season:02d}]"
+        elif episode is not None:
+            season_episode_str = f"[E{episode:02d}]"
 
-    # Year
+    # Year detection
     year_match = re.search(r'(19|20)\d{2}', cleaned)
     year = year_match.group() if year_match else ''
 
-    # Quality
+    # Quality detection
     quality_tags = ['480p', '720p', '1080p', '2160p', '4K', 'HDRip', 'BluRay', 'WEB-DL', 'WEBRip']
     quality = next((q for q in quality_tags if q.lower() in lower), '')
 
-    # Language
-    language_tags = ['Hindi', 'English', 'Tamil', 'Telugu', 'Malayalam', 'Kannada', 'Bengali', 'Dual Audio', 'Multi', 'Korean', 'Multi Audio']
+    # Language detection
+    language_tags = ['Hindi', 'English', 'Tamil', 'Telugu', 'Malayalam', 'Kannada',
+                     'Bengali', 'Dual Audio', 'Multi', 'Korean', 'Multi Audio']
     language = [lang for lang in language_tags if lang.lower() in lower]
     language = ' '.join(language)
 
-    # Tag priority
+    # Additional tags
     all_tags_priority = [
         'NF', 'AMZN', 'DSNP', 'HMAX', 'WEBRip', 'WEB-DL', 'BluRay', 'HDRip', 'HDR', 'HQ',
         'HEVC', 'x265', 'x264', '10bit',
@@ -209,6 +223,7 @@ def extract_shortdetails(filename, file_size, max_length=64):
         title_year = title_year[:27].rstrip() + "..."
 
     # Emoji: 📺 for series, 🎞️ for movies
+    is_series = bool(season or episode)
     emoji = '📺' if is_series else '🎞️'
 
     # Build initial parts
@@ -230,7 +245,6 @@ def extract_shortdetails(filename, file_size, max_length=64):
         current = test
 
     return current.strip()
-
 
 @Client.on_callback_query(filters.regex(r"^next"))
 async def next_page(bot, query):
