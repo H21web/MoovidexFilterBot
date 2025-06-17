@@ -131,75 +131,101 @@ async def doo(bot, data, message):
 
 
 def extract_shortdetails(filename: str, filesize: int) -> str:
-    # --- 1) size & strip extension/tokenize ---
-    size_str = get_size(filesize)
-    name, _ = os.path.splitext(filename)
-    tokens = re.split(r'[._\-\s]+', name)
-    joined = ' '.join(tokens).lower()
+    """Extract and format a clean title from filename - optimized for speed"""
 
-    # --- 2) season/episode ---
-    m_se = re.search(r'\b[s](\d{1,2})\s*[eex]\s*(\d{1,2})\b', joined)
+    SE_PATTERN = re.compile(r'\b[s](\d{1,2})(?:\s*[eex]\s*(\d{1,2}))?\b', re.IGNORECASE)
+    YEAR_PATTERN = re.compile(r'\b(19|20)\d{2}\b')
+    AUDIO_PATTERN = re.compile(r'\b(aac|ac3|dts)(\d\.\d|\d+)\b', re.IGNORECASE)
+    RELEASE_PATTERN = re.compile(r'\b\w*(?:rip|hub|team|encode)\w*\b|\b[a-z]+\d+[a-z]*\b|\b\w+-\w+\b', re.IGNORECASE)
+    
+    # Fast file size formatting
+    size = get_size(filesize)
+    
+    # Quick tokenization
+    base = os.path.splitext(filename)[0]
+    tokens = [t for t in re.split(r'[._\-\s]+', base) if t]
+    lowered = base.lower()
+    
+    # Fast pattern matching
+    m_se = SE_PATTERN.search(lowered)
     is_series = bool(m_se)
-    se_str = f"S{int(m_se[1]):02d}E{int(m_se[2]):02d}" if m_se else ''
-
-    # --- 3) year ---
-    m_yr = re.search(r'\b(19|20)\d{2}\b', joined)
-    yr = m_yr.group() if m_yr else ''
-    yr_str = f"({yr})" if yr else ''
-
-    # --- 4) define allowed tags ---
-    LANGS     = ['Hindi','English','Tamil','Telugu','Malayalam','Kannada','Bengali']
-    QUALS     = ['2160p','1080p','720p','480p','4K','HQ']
-    SOURCES   = ['HDRip','HDR','BluRay','WEB-DL','WEBRip','NF','AMZN','DSNP','HMAX']
-    CODECS    = ['x265','x264','HEVC']
-    AUDIOS    = ['5.1','7.1','2.0','AAC','AC3','Atmos']
-    SUBTITLES = ['ESub','SUB','SUBBED']
-
-    # helper to pick all matches in order
-    def pick_all(arr):
-        out = []
-        for tag in arr:
-            if tag.lower() in joined:
-                out.append(tag)
-        return out
-
-    langs   = pick_all(LANGS)
-    quals   = pick_all(QUALS)
-    srcs    = [] if is_series else pick_all(SOURCES)
-    codecs  = pick_all(CODECS)
-    audios  = pick_all(AUDIOS)
-    subs    = pick_all(SUBTITLES)
-
-    # prefer x265 over HEVC
-    if 'x265' in codecs and 'HEVC' in codecs:
+    se = f"S{int(m_se.group(1)):02d}" + (f"E{int(m_se.group(2)):02d}" if m_se.group(2) else "") if m_se else ''
+    
+    m_yr = YEAR_PATTERN.search(lowered)
+    year = m_yr.group() if m_yr else ''
+    yr = f"({year})" if year else ''
+    
+    # Pre-defined tag sets for O(1) lookup
+    LANGS = {'hindi', 'english', 'tamil', 'telugu', 'malayalam', 'kannada', 'bengali', 'multi', 'dual'}
+    QUALS = {'2160p', '1080p', '720p', '480p', '4k', 'uhd', 'fhd', 'hd', 'hq'}
+    SOURCES = {'hdrip', 'hdr', 'bluray', 'brrip', 'web-dl', 'webdl', 'webrip', 'nf', 'amzn', 'dsnp', 'hmax'}
+    CODECS = {'x265', 'x264', 'hevc', 'avc', 'av1', 'vp9', 'xvid'}
+    AUDIOS = {'5.1', '7.1', '2.0', '2.1', 'aac', 'ac3', 'dts', 'truehd', 'atmos', 'dd+', 'ddp'}
+    SUBS = {'esub', 'sub', 'subbed', 'subs'}
+    HDR_TAGS = {'hdr', 'hdr10', 'hdr10+', 'dv', 'dovi'}
+    MISC = {'repack', 'proper', 'extended', 'uncut', 'dc', 'imax'}
+    
+    # Fast tag extraction using set operations
+    token_set = {t.lower() for t in tokens}
+    
+    langs = [t for t in tokens if t.lower() in LANGS]
+    quals = [t for t in tokens if t.lower() in QUALS]
+    srcs = [] if is_series else [t for t in tokens if t.lower() in SOURCES]
+    codecs = [t for t in tokens if t.lower() in CODECS]
+    audios = [t for t in tokens if t.lower() in AUDIOS]
+    subs = [t for t in tokens if t.lower() in SUBS]
+    hdr = [t for t in tokens if t.lower() in HDR_TAGS]
+    misc = [t for t in tokens if t.lower() in MISC]
+    
+    # Handle combined audio (AAC5.1 -> AAC + 5.1)
+    for match in AUDIO_PATTERN.finditer(lowered):
+        codec, channels = match.groups()
+        if codec.upper() not in [a.upper() for a in audios]:
+            audios.append(codec.upper())
+        if channels not in audios:
+            audios.append(channels)
+    
+    # Remove HEVC if x265 present
+    if 'x265' in [c.lower() for c in codecs] and 'HEVC' in codecs:
         codecs.remove('HEVC')
-
-    # drop any DDP/DD+ in favor of 5.1/7.1
-    # (we’re not listing DDP/DD+ in AUDIOS so it won’t appear)
-
-    # --- 5) build clean title ---
-    # remove season, year, any size-like tokens, and all picked tags
-    size_tokens = re.findall(r'\d+(?:\.\d+)?(?:mb|gb|kb)', joined)
-    remove = {se_str.lower(), yr.lower()} \
-           | {t.lower() for t in langs + quals + srcs + codecs + audios + subs} \
-           | set(size_tokens)
-    title_tokens = [t for t in tokens if t and t.lower() not in remove]
+    
+    # Build removal set
+    remove_set = set()
+    if se:
+        remove_set.add(se.lower())
+        if m_se:
+            remove_set.add(m_se.group().lower())
+    if year:
+        remove_set.add(year)
+    
+    # Add all tag variations to removal set
+    all_tags = langs + quals + srcs + codecs + audios + subs + hdr + misc
+    remove_set.update(t.lower() for t in all_tags)
+    
+    # Remove release groups
+    for token in tokens[:]:
+        if RELEASE_PATTERN.match(token):
+            remove_set.add(token.lower())
+    
+    # Build clean title
+    title_tokens = [t for t in tokens if t.lower() not in remove_set and len(t) > 1]
     title = ' '.join(title_tokens)
-
-    # --- 6) emoji & assemble ---
-    emoji = '📺' if is_series else '🎞️'
-    parts = [emoji, f"[{size_str}]"]
-    if is_series and se_str:
-        parts.append(f"[{se_str}]")
-    parts.append(title)
-    if yr_str:
-        parts.append(yr_str)
-
-    # languages immediately after year
-    parts += langs
-    # then quality, source, codec, audio, subtitles
-    parts += quals + srcs + codecs + audios + subs
-
+    
+    # Fast assembly
+    parts = ['📺' if is_series else '🎞️', f'[{size}]']
+    
+    if is_series and se:
+        parts.append(f'[{se}]')
+    
+    if title:
+        parts.append(title)
+    
+    if yr:
+        parts.append(yr)
+    
+    # Add tags in order
+    parts.extend(langs + quals + hdr + srcs + codecs + audios + subs + misc)
+    
     return ' '.join(parts)
     
 
