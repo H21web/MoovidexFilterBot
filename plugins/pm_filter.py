@@ -130,7 +130,7 @@ async def doo(bot, data, message):
 
 
 
-def extract_clean_title(filename: str, filesize: int) -> str:
+def extract_shortdetails(filename: str, filesize: int) -> str:
     """
     Extract clean title: Title + Year + Language + Quality + Codec
     Logic: Parse filename -> Extract metadata -> Clean title -> Format output
