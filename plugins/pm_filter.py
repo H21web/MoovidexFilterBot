@@ -128,14 +128,14 @@ async def doo(bot, data, message):
     
     await auto_filter(bot, data, message, reply_msg, ai_search)
 
-
-
-def extract_shortdetails(filename, filesize, max_len=64):
-    # Remove extension
+def extract_shortdetails(filename: str, filesize: int, max_len: int = 64) -> str:
+    # Remove file extension
     filename = re.sub(r'\.\w{2,4}$', '', filename)
+
+    # Replace separators with space
     filename = re.sub(r'[_\.]', ' ', filename).strip()
 
-    # Detect Season & Episode
+    # Detect SxxEyy
     se = ''
     match = re.search(r'\b[Ss]eason\s?(\d{1,2})[\s_]*[Ee]pisode\s?(\d{1,2})\b', filename) or \
             re.search(r'\b[Ss](\d{1,2})[\s_\.]?[Ee](\d{1,2})\b', filename)
@@ -151,60 +151,64 @@ def extract_shortdetails(filename, filesize, max_len=64):
         elif e:
             se = f"E{int(e.group(2)):02d}"
 
-    # Remove SE from filename
-    filename = re.sub(r'\b[Ss]eason\s?\d+\s?[Ee]pisode\s?\d+|\b[Ss]\d{1,2}[\s\.]?[Ee]\d{1,2}|\b[Ss]eason\s?\d+|\b[Ee]pisode\s?\d+|\b[Ss]\d+|\b[Ee]\d+', '', filename)
+    # Extract year
+    year_match = re.search(r'\b(19|20)\d{2}\b', filename)
+    year = f"({year_match.group()})" if year_match else ""
 
-    # Extract metadata
-    year = re.search(r'\b(19|20)\d{2}\b', filename)
-    year = f"({year.group()})" if year else ""
-
+    # Tag priority
+    quality = re.search(r'\b(2160p|1080p|720p|480p|4K|HDR)\b', filename, re.I)
+    codec = re.search(r'\b(x265|HEVC|x264)\b', filename, re.I)
+    audio = re.search(r'\b(5\.1|7\.1|2\.0|DDP\s?5\.1|AAC)\b', filename, re.I)
     lang = re.search(r'\b(Hindi|English|Tamil|Telugu|Malayalam|Kannada|Dual Audio)\b', filename, re.I)
+
+    quality = quality.group().upper() if quality else ""
+    codec = "x265" if codec and '265' in codec.group().lower() else "x264" if codec else ""
+    audio = audio.group().replace("DDP ", "") if audio else ""
     lang = lang.group().title() if lang else ""
 
-    quality = re.search(r'\b(2160p|1080p|720p|480p|4K|HDR)\b', filename, re.I)
-    quality = quality.group().upper() if quality else ""
+    # Remove known tags and SE/Year from title
+    known = ['480p', '720p', '1080p', '2160p', '4k', 'HDR',
+             'x264', 'x265', 'HEVC', 'AAC', '5.1', '7.1', '2.0', 'DDP',
+             'Dual Audio', 'Hindi', 'English', 'Tamil', 'Telugu',
+             'Malayalam', 'Kannada', 'Season', 'Episode']
+    known += [year_match.group()] if year_match else []
+    known += re.findall(r'[Ss]eason\s?\d+|[Ss]\d+|[Ee]pisode\s?\d+|[Ee]\d+', filename)
 
-    codec = re.search(r'\b(x265|x264|HEVC)\b', filename, re.I)
-    codec = "x265" if codec and '265' in codec.group() else "x264" if codec else ""
+    title = ' '.join(word for word in filename.split() if word not in known)
+    title = re.sub(r'\s+', ' ', title).strip().title()
 
-    audio = re.search(r'\b(5\.1|7\.1|2\.0|DDP\s?5\.1|AAC)\b', filename, re.I)
-    audio = audio.group().replace("DDP ", "") if audio else ""
-
-    # Remove known tags from title
-    known_tags = ['480p', '720p', '1080p', '2160p', '4k', 'HDR', 'x264', 'x265', 'HEVC',
-                  'AAC', '5.1', '7.1', '2.0', 'DDP', 'Dual Audio', 'Hindi', 'English',
-                  'Tamil', 'Telugu', 'Malayalam', 'Kannada']
-    title = re.sub(r'\b(' + '|'.join(map(re.escape, known_tags)) + r')\b', '', filename, flags=re.I)
-    title = re.sub(r'\s+', ' ', title).strip().title()  # Capitalize title
-
-    # Emoji based on SE presence
+    # Determine emoji
     emoji = "📺" if se else "🎞️"
 
-    # Parts assembly
+    # Build initial components
     parts = [emoji, f"[{get_size(filesize)}]"]
-    if se: parts.append(f"[{se}]")
+    if se:
+        parts.append(f"[{se}]")
     parts.append(title)
-    if year: parts.append(year)
+    if year:
+        parts.append(year)
 
-    # Prioritized tags
+    # Add prioritized tags
     for tag in [quality, codec, audio, lang]:
         if tag:
             parts.append(tag)
 
-    result = " ".join(parts)
+    # Compose result
+    result = ' '.join(parts)
 
-    # Truncate result safely
+    # Truncate if needed
     if len(result) > max_len:
-        static = " ".join(parts[:4 if se else 3])  # up to year
-        dynamic = [x for x in parts[4 if se else 3:] if x]
-        for i in range(len(dynamic), -1, -1):
-            result = f"{static} {' '.join(dynamic[:i])}".strip()
+        base = ' '.join(parts[:4 if se else 3])
+        extras = parts[4 if se else 3:]
+        for i in range(len(extras), -1, -1):
+            result = f"{base} {' '.join(extras[:i])}".strip()
             if len(result) <= max_len:
                 break
         if len(result) > max_len:
-            result = result[:max_len-1] + "…"
+            result = result[:max_len - 1] + "…"
 
     return result
+
 
 @Client.on_callback_query(filters.regex(r"^next"))
 async def next_page(bot, query):
