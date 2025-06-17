@@ -715,6 +715,7 @@ async def filter_seasons_cb_handler(client: Client, query: CallbackQuery):
             [
                 InlineKeyboardButton(
                     text=btntext, callback_data=f"{pre}#{file['file_id']}"
+                )
             ]
             for file in files
         ]
