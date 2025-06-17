@@ -130,7 +130,7 @@ async def doo(bot, data, message):
 
 
 
-def extract_clean_title(filename: str, filesize: int) -> str:
+def extract_shortdetails(filename: str, filesize: int) -> str:
     # 1) strip extension
     name, _ = os.path.splitext(filename)
     # 2) tokenize
