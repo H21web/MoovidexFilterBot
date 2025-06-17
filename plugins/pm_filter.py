@@ -129,90 +129,86 @@ async def doo(bot, data, message):
     await auto_filter(bot, data, message, reply_msg, ai_search)
 
 
-def extract_shortdetails(filename, file_size, max_length=64):
-    # Remove [tags], @handles, www. links
-    cleaned = ' '.join(
-        filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'),
-               filename.split())
-    )
+def extract_shortdetails(filename, filesize):
+    filename = filename.replace(".", " ").replace("_", " ").strip()
 
-    lower = cleaned.lower()
+    # Detect season and episode info
+    season_ep_pattern = re.search(r'\b[Ss](\d{1,2})[\s\.]?[Ee](\d{1,2})\b', filename)
+    season_only = re.search(r'\b[Ss](\d{1,2})\b', filename)
+    episode_only = re.search(r'\b[Ee](\d{1,2})\b', filename)
 
-    # Detect season & episode (series)
-    se_match = re.search(r'[Ss](\d{1,2})[Eex](\d{1,2})', lower)
-    is_series = bool(se_match)
-    season_episode_str = ''
-    if is_series:
-        season = int(se_match.group(1))
-        episode = int(se_match.group(2))
-        season_episode_str = f"[S{season:02d}E{episode:02d}]"
+    season_episode = ""
+    if season_ep_pattern:
+        s = int(season_ep_pattern.group(1))
+        e = int(season_ep_pattern.group(2))
+        season_episode = f"S{s:02d}E{e:02d}"
+    elif season_only:
+        s = int(season_only.group(1))
+        season_episode = f"S{s:02d}"
+    elif episode_only:
+        e = int(episode_only.group(1))
+        season_episode = f"E{e:02d}"
 
-    # Year
-    year_match = re.search(r'(19|20)\d{2}', cleaned)
-    year = year_match.group() if year_match else ''
+    # Remove SxxExx from filename
+    filename = re.sub(r'\b[Ss]\d{1,2}[\s\.]?[Ee]\d{1,2}\b', '', filename)
+    filename = re.sub(r'\b[Ss]\d{1,2}\b', '', filename)
+    filename = re.sub(r'\b[Ee]\d{1,2}\b', '', filename)
 
-    # Quality
-    quality_tags = ['480p', '720p', '1080p', '2160p', '4K', 'HDRip', 'BluRay', 'WEB-DL', 'WEBRip']
-    quality = next((q for q in quality_tags if q.lower() in lower), '')
+    # Extract tags
+    year_match = re.search(r'(19|20)\d{2}', filename)
+    year = f"({year_match.group()})" if year_match else ""
 
-    # Language
-    language_tags = ['Hindi', 'English', 'Tamil', 'Telugu', 'Malayalam', 'Kannada', 'Bengali', 'Dual Audio']
-    language = [lang for lang in language_tags if lang.lower() in lower]
-    language = ' '.join(language)
+    lang_match = re.search(r'\b(Hindi|English|Tamil|Telugu|Malayalam|Kannada|Dual Audio)\b', filename, re.I)
+    lang = lang_match.group().title() if lang_match else ""
 
-    # Tag priority
-    all_tags_priority = [
-        'NF', 'AMZN', 'DSNP', 'HMAX', 'WEBRip', 'WEB-DL', 'BluRay', 'HDRip', 'HDR',
-        'HEVC', 'x265', 'x264', '10bit',
-        'AAC', 'AC3', 'DDP', 'DD+', '5.1', '7.1', 'Atmos'
+    quality_match = re.search(r'\b(480p|720p|1080p|2160p|4k|HDR)\b', filename, re.I)
+    quality = quality_match.group().upper() if quality_match else ""
+
+    codec_match = re.search(r'\b(x264|x265|HEVC|H\.?264|H\.?265)\b', filename, re.I)
+    codec = codec_match.group().upper().replace("HEVC", "x265") if codec_match else ""
+
+    audio_match = re.search(r'\b(DDP\s?5\.1|5\.1|AAC|MP3|2\.0|7\.1)\b', filename, re.I)
+    audio = audio_match.group().upper().replace("DDP ", "") if audio_match else ""
+
+    # Remove extra spaces
+    filename = re.sub(r'\s+', ' ', filename).strip()
+
+    # Clean up file name: remove common tags and keep clean title
+    tags_to_remove = [
+        '480p', '720p', '1080p', '2160p', '4k', 'x264', 'x265', 'HEVC', 'H264', 'H265', 'AAC', 'DDP', '5.1', '2.0', '7.1',
+        'BluRay', 'WEBRip', 'HDRip', 'HDR', 'NF', 'AMZN', 'WEB DL', 'WEB', 'HDTV', 'DVDRip', '10bit', '8bit',
     ]
+    pattern = re.compile(r'\b(?:' + '|'.join(re.escape(tag) for tag in tags_to_remove) + r')\b', re.IGNORECASE)
+    title = pattern.sub('', filename)
+    title = re.sub(r'\s+', ' ', title).strip()
 
-    found_tags = []
-    tag_set = set()
-    for tag in all_tags_priority:
-        if tag.lower() in lower and tag.upper() not in tag_set:
-            tag_set.add(tag.upper())
-            found_tags.append(tag)
+    # Decide media type
+    media_type = "📺" if season_episode else "🎞️"
 
-    # Clean redundant tags
-    if 'x265' in found_tags and 'HEVC' in found_tags:
-        found_tags.remove('HEVC')
-    if ('5.1' in found_tags or '7.1' in found_tags) and ('DDP' in found_tags or 'DD+' in found_tags):
-        found_tags = [t for t in found_tags if t not in ('DDP', 'DD+')]
+    # Format file size
+    size_str = f"[{get_size(filesize)}]"
 
-    # Title cleanup
-    title_no_ext = re.sub(r'\.(?=[^.]*$)', ' ', cleaned)
-    title_part = re.split(r'(19|20)\d{2}', title_no_ext)[0]
-    title = re.sub(r'[\._\-]', ' ', title_part).strip().title()
-
-    # Build title (with year)
-    title_year = f"{title} ({year})" if year else title
-    if len(title_year) > 30:
-        title_year = title_year[:27].rstrip() + "..."
-
-    # Emoji: 📺 for series, 🎞️ for movies
-    emoji = '📺' if is_series else '🎞️'
-
-    # Build initial parts
-    parts = [emoji, f"[{get_size(file_size)}]"]
-    if season_episode_str:
-        parts.append(season_episode_str)
-    parts.append(title_year)
-    if language:
-        parts.append(language)
+    # Compose final title
+    parts = [media_type, size_str]
+    if season_episode:
+        parts.append(f"[{season_episode}]")
+    if title:
+        parts.append(title)
+    if year:
+        parts.append(year)
+    if lang:
+        parts.append(lang)
     if quality:
         parts.append(quality)
+    if codec:
+        if codec.lower() == "x265":
+            parts.append("x265")
+        elif codec.lower() == "x264":
+            parts.append("x264")
+    if audio:
+        parts.append(audio)
 
-    # Add tags while within max length
-    current = ' '.join(parts)
-    for tag in found_tags:
-        test = current + f" {tag}"
-        if len(test) > max_length:
-            break
-        current = test
-
-    return current.strip()
-
+    return " ".join(parts)
 
 @Client.on_callback_query(filters.regex(r"^next"))
 async def next_page(bot, query):
@@ -249,12 +245,12 @@ async def next_page(bot, query):
     total_results_str = str(total)
     settings = await get_settings(query.message.chat.id)
     pre = 'filep' if settings['file_secure'] else 'file'
-    btntext = extract_shortdetails(file['file_name'], file['file_size'])
     if settings['button']:
         btn = [
             [
                 InlineKeyboardButton(
-                    text=btntext, callback_data=f"{pre}#{file['file_id']}"
+                    text=extract_shortdetails(file['file_name'], file['file_size']),
+                    callback_data=f"{pre}#{file['file_id']}"
                 ),
             ]
             for file in files
