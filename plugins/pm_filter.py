@@ -129,9 +129,6 @@ async def doo(bot, data, message):
     await auto_filter(bot, data, message, reply_msg, ai_search)
 
 
-
-import re
-
 def extract_shortdetails(filename, file_size, max_length=64):
     # Remove [tags], @handles, www. links
     cleaned = ' '.join(
@@ -141,14 +138,32 @@ def extract_shortdetails(filename, file_size, max_length=64):
 
     lower = cleaned.lower()
 
-    # Detect season & episode (series)
-    se_match = re.search(r'[Ss](\d{1,2})[Eex](\d{1,2})', lower)
+    # Detect season & episode (more flexible patterns)
+    se_match = re.search(
+        r'(?:s(?:eason)?\s*(\d{1,2}))[\s\.x\-]*?(?:e(?:pisode)?\s*(\d{1,2}))|'  # S01E02, Season 1 Episode 2
+        r's\s*(\d{1,2})\s*e\s*(\d{1,2})|'                                      # s 01 e 02
+        r'season\s*(\d{1,2})',                                                 # Season 1 (no episode)
+        lower
+    )
+
     is_series = bool(se_match)
     season_episode_str = ''
     if is_series:
-        season = int(se_match.group(1))
-        episode = int(se_match.group(2))
-        season_episode_str = f"[S{season:02d}E{episode:02d}]"
+        groups = se_match.groups()
+        season = None
+        episode = None
+        # Try different group patterns based on what matched
+        if groups[0] and groups[1]:
+            season, episode = int(groups[0]), int(groups[1])
+        elif groups[2] and groups[3]:
+            season, episode = int(groups[2]), int(groups[3])
+        elif groups[4]:
+            season = int(groups[4])
+
+        if season is not None and episode is not None:
+            season_episode_str = f"[S{season:02d}E{episode:02d}]"
+        elif season is not None:
+            season_episode_str = f"[S{season:02d}]"
 
     # Year
     year_match = re.search(r'(19|20)\d{2}', cleaned)
@@ -159,15 +174,15 @@ def extract_shortdetails(filename, file_size, max_length=64):
     quality = next((q for q in quality_tags if q.lower() in lower), '')
 
     # Language
-    language_tags = ['Hindi', 'English', 'Tamil', 'Telugu', 'Malayalam', 'Kannada', 'Bengali', 'Dual Audio']
+    language_tags = ['Hindi', 'English', 'Tamil', 'Telugu', 'Malayalam', 'Kannada', 'Bengali', 'Dual Audio', 'Multi', 'Korean', 'Multi Audio']
     language = [lang for lang in language_tags if lang.lower() in lower]
     language = ' '.join(language)
 
     # Tag priority
     all_tags_priority = [
-        'NF', 'AMZN', 'DSNP', 'HMAX', 'WEBRip', 'WEB-DL', 'BluRay', 'HDRip', 'HDR',
+        'NF', 'AMZN', 'DSNP', 'HMAX', 'WEBRip', 'WEB-DL', 'BluRay', 'HDRip', 'HDR', 'HQ',
         'HEVC', 'x265', 'x264', '10bit',
-        'AAC', 'AC3', 'DDP', 'DD+', '5.1', '7.1', 'Atmos'
+        'AAC', 'AC3', 'DDP', 'DD+', '5.1', '7.1', 'Atmos', 'ESubs', 'Esub'
     ]
 
     found_tags = []
@@ -215,9 +230,6 @@ def extract_shortdetails(filename, file_size, max_length=64):
         current = test
 
     return current.strip()
-
-
-
 
 
 @Client.on_callback_query(filters.regex(r"^next"))
