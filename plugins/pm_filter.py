@@ -183,7 +183,7 @@ def extract_shortdetails(filename, file_size, max_length=64):
     year = year_match.group() if year_match else ''
 
     # Quality detection
-    quality_tags = ['480p', '720p', '1080p', '2160p', '4K', 'HDRip', 'BluRay', 'WEB-DL', 'WEBRip']
+    quality_tags = ['480p', '520p', '720p', '1080p', '2160p', '4K', 'HDRip', 'BluRay', 'WEB-DL', 'WEBRip']
     quality = next((q for q in quality_tags if q.lower() in lower), '')
 
     # Language detection
@@ -196,7 +196,7 @@ def extract_shortdetails(filename, file_size, max_length=64):
     all_tags_priority = [
         'NF', 'AMZN', 'DSNP', 'HMAX', 'WEBRip', 'WEB-DL', 'BluRay', 'HDRip', 'HDR', 'HQ',
         'HEVC', 'x265', 'x264', '10bit',
-        'AAC', 'AC3', 'DDP', 'DD+', '5.1', '7.1', 'Atmos', 'ESubs', 'Esub'
+        'AAC', 'AC3', 'DDP', 'DD+', '5.1', '7.1', 'Atmos', 'ESubs'
     ]
 
     found_tags = []
@@ -2691,7 +2691,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         if not settings["button"]:
             for file in files:
                 short_title = extract_shortdetails(file['file_name'], file['file_size'])
-                cap += f"<b>📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}'>{short_title}</a></b>\n\n"
+                cap += f"<b><a href='https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}'>{short_title}</a></b>\n\n"
     else:
         if settings["button"]:
             cap = f"<b>𝖱𝖾𝗌𝗎𝗅𝗍  𝖥𝗈𝗎𝗇𝖽 𝖥𝗈𝗋 {search}\n\n🧑‍💻 𝖱𝖾𝗊𝗎𝖾𝗌𝗍𝖾𝖽 𝖡𝗒  : {message.from_user.mention}\n⏰ 𝖱𝖾𝗌𝗎𝗅𝗍 𝖲𝗁𝗈𝗐𝗇 𝗂𝗇 : {remaining_seconds} 𝗌𝖾𝖼𝗈𝗇𝖽𝗌\n\n<blockquote>⚠️ ᴀꜰᴛᴇʀ 5 ᴍɪɴᴜᴛᴇꜱ ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴅᴇʟᴇᴛᴇᴅ 🗑️</blockquote>\n\n</b>"
@@ -2700,7 +2700,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         
             for file in files:
                 short_title = extract_shortdetails(file['file_name'], file['file_size'])
-                cap += f"<b>📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}'>{short_title}</a></b>\n\n"
+                cap += f"<b><a href='https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}'>{short_title}</a></b>\n\n"
 
     if imdb and imdb.get('poster'):
         try:
