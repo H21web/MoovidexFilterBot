@@ -141,12 +141,11 @@ def extract_shortdetails(filename, file_size, max_length=64):
     )
     lower = cleaned.lower()
 
-    # Season/Episode Detection
     se_match = re.search(
-    r'(S\d{2}\s?E(?:P)?\d{1,2})|'     # S01E01, S01 EP01, S01EP1
-    r'(S\d{2})|'                      # S01
-    r'(EP\d{1,2})',                   # EP1, EP01
-    '',
+    r'(?i)(?:(?:S(?P<season>\d{2}))\s?E(?:P)?(?P<episode>\d{1,2}))|'  # S01E01, S01 EP01, S01EP1
+    r'(?:S(?P<season_only>\d{2}))|'                                  # S01
+    r'(?:EP(?P<episode_only>\d{1,2}))|'                              # EP1
+    r'(?:SEASON[\s._-]?(?P<season_text>\d{1,2}))',                   # Season 1
     lower
     )
 
@@ -159,10 +158,10 @@ def extract_shortdetails(filename, file_size, max_length=64):
         is_series = True
         if gd['season'] and gd['episode']:
             season, episode = int(gd['season']), int(gd['episode'])
-        elif gd['season_alt'] and gd['episode_alt']:
-            season, episode = int(gd['season_alt']), int(gd['episode_alt'])
         elif gd['season_only']:
             season = int(gd['season_only'])
+        elif gd['season_text']:
+            season = int(gd['season_text'])
         elif gd['episode_only']:
             episode = int(gd['episode_only'])
 
@@ -172,7 +171,6 @@ def extract_shortdetails(filename, file_size, max_length=64):
             season_episode_str = f"[S{season:02d}]"
         elif episode is not None:
             season_episode_str = f"[E{episode:02d}]"
-
     # Year detection
     year_match = re.search(r'(19|20)\d{2}', cleaned)
     year = year_match.group() if year_match else ''
