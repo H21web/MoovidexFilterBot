@@ -130,169 +130,93 @@ async def doo(bot, data, message):
 
 
 
-def extract_shortdetails(filename: str, filesize: int) -> str:
-    """
-    Extract clean title: Title + Year + Language + Quality + Codec
-    Logic: Parse filename -> Extract metadata -> Clean title -> Format output
-    """
-    
-    # Step 1: Initialize and clean filename
-    base_name = os.path.splitext(filename)[0]
-    original_tokens = re.split(r'[._\-\s]+', base_name)
-    tokens = [token for token in original_tokens if token.strip()]
-    filename_lower = base_name.lower()
-    
-    # Step 2: Extract metadata with regex patterns
-    metadata = {}
-    
-    # Season/Episode detection
-    season_patterns = [
-        r'\bs(\d{1,2})(?:e(\d{1,2}))?\b',  # S01E01 or S01
-        r'\bseason\s*(\d{1,2})(?:\s*episode\s*(\d{1,2}))?\b'  # Season 1 Episode 1
-    ]
-    
-    for pattern in season_patterns:
-        match = re.search(pattern, filename_lower)
-        if match:
-            season = int(match.group(1))
-            episode = int(match.group(2)) if match.group(2) else None
-            metadata['season'] = f"S{season:02d}"
-            metadata['episode'] = f"E{episode:02d}" if episode else ""
-            metadata['is_series'] = True
-            break
-    else:
-        metadata['is_series'] = False
-    
-    # Year extraction
-    year_match = re.search(r'\b(19\d{2}|20\d{2})\b', filename_lower)
-    metadata['year'] = year_match.group(1) if year_match else ""
-    
-    # Step 3: Define tag categories
-    tag_definitions = {
-        'languages': [
-            'hindi', 'english', 'tamil', 'telugu', 'malayalam', 'kannada', 
-            'bengali', 'multi', 'dual', 'tri'
-        ],
-        'quality': [
-            '2160p', '1080p', '720p', '480p', '360p', '4k', 'uhd', 'fhd', 'hd'
-        ],
-        'codec': [
-            'x265', 'x264', 'hevc', 'avc', 'av1', 'vp9', 'h264', 'h265'
-        ],
-        'hdr': [
-            'hdr', 'hdr10', 'hdr10+', 'dolbyvision', 'dv'
-        ]
-    }
-    
-    # Noise words to remove from title
-    noise_words = {
-        # Technical terms
-        'bluray', 'brrip', 'web-dl', 'webdl', 'webrip', 'hdrip', 'dvdrip',
-        'cam', 'ts', 'tc', 'dvdscr', 'r5', 'bdrip', 'hdtv',
-        # Sources
-        'nf', 'netflix', 'amzn', 'amazon', 'dsnp', 'disney', 'hmax', 'hbo',
-        'hulu', 'atvp', 'apple', 'pcok', 'peacock', 'stan', 'showtime',
-        # Audio
-        'aac', 'ac3', 'dts', 'truehd', 'atmos', 'dd+', 'ddp', 'lpcm',
-        '5.1', '7.1', '2.0', '2.1', 'stereo', 'mono',
-        # Subtitles
-        'esub', 'sub', 'subbed', 'subs', 'subtitle', 'cc',
-        # Release info
-        'repack', 'proper', 'extended', 'uncut', 'dc', 'imax', 'complete',
-        'collection', 'boxset', 'trilogy', 'duology', 'internal', 'limited',
-        # Generic terms
-        'rip', 'encode', 'remux', 'hybrid', 'retail', 'final', 'cut'
-    }
-    
-    # Step 4: Extract tags from tokens
-    extracted_tags = {category: [] for category in tag_definitions}
-    
-    for token in tokens:
-        token_lower = token.lower()
-        for category, tag_list in tag_definitions.items():
-            if token_lower in tag_list:
-                # Keep original case for better readability
-                if category == 'languages':
-                    extracted_tags[category].append(token.capitalize())
-                else:
-                    extracted_tags[category].append(token.upper())
-                break
-    
-    # Step 5: Build removal set
-    removal_set = set()
-    
-    # Add year
-    if metadata['year']:
-        removal_set.add(metadata['year'])
-    
-    # Add season/episode
-    if metadata['is_series']:
-        removal_set.add(metadata['season'].lower())
-        if metadata['episode']:
-            removal_set.add(metadata['episode'].lower())
-    
-    # Add all extracted tags
-    for tag_list in extracted_tags.values():
-        removal_set.update(tag.lower() for tag in tag_list)
-    
-    # Add noise words
-    removal_set.update(noise_words)
-    
-    # Add release group patterns (team names, etc.)
-    release_patterns = [
-        r'\w*(?:team|group|rip|hub|release)\w*',
-        r'[a-z]+\d+[a-z]*',  # like x0r, h33t
-        r'\w+-\w+',  # hyphenated groups
-    ]
-    
-    for token in tokens:
-        for pattern in release_patterns:
-            if re.match(pattern, token.lower()):
-                removal_set.add(token.lower())
-                break
-    
-    # Step 6: Clean title
-    clean_tokens = []
-    for token in tokens:
-        if (token.lower() not in removal_set and 
-            len(token) > 1 and 
-            not token.isdigit()):
-            clean_tokens.append(token)
-    
-    title = ' '.join(clean_tokens)
-    
-    # Step 7: Format final output
-    output_parts = []
-    
-    # Emoji and size
-    emoji = '📺' if metadata['is_series'] else '🎞️'
-    size = get_size(filesize)
-    output_parts.extend([emoji, f"[{size}]"])
-    
-    # Season/Episode for series
-    if metadata['is_series']:
-        se_part = metadata['season'] + metadata['episode']
-        output_parts.append(f"[{se_part}]")
-    
-    # Title
-    if title:
-        output_parts.append(title)
-    
+import re
+
+def extract_shortdetails(filename, file_size, max_length=64):
+    # Remove [tags], @handles, www. links
+    cleaned = ' '.join(
+        filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'),
+               filename.split())
+    )
+
+    lower = cleaned.lower()
+
+    # Detect season & episode (series)
+    se_match = re.search(r'[Ss](\d{1,2})[Eex](\d{1,2})', lower)
+    is_series = bool(se_match)
+    season_episode_str = ''
+    if is_series:
+        season = int(se_match.group(1))
+        episode = int(se_match.group(2))
+        season_episode_str = f"[S{season:02d}E{episode:02d}]"
+
     # Year
-    if metadata['year']:
-        output_parts.append(f"({metadata['year']})")
-    
-    # Add essential tags in order: Language, Quality, HDR, Codec
-    tag_order = ['languages', 'quality', 'hdr', 'codec']
-    for category in tag_order:
-        if extracted_tags[category]:
-            # Only add first language, but all quality/codec tags
-            if category == 'languages':
-                output_parts.append(extracted_tags[category][0])
-            else:
-                output_parts.extend(extracted_tags[category][:2])  # Max 2 per category
-    
-    return ' '.join(output_parts)
+    year_match = re.search(r'(19|20)\d{2}', cleaned)
+    year = year_match.group() if year_match else ''
+
+    # Quality
+    quality_tags = ['480p', '720p', '1080p', '2160p', '4K', 'HDRip', 'BluRay', 'WEB-DL', 'WEBRip']
+    quality = next((q for q in quality_tags if q.lower() in lower), '')
+
+    # Language
+    language_tags = ['Hindi', 'English', 'Tamil', 'Telugu', 'Malayalam', 'Kannada', 'Bengali', 'Dual Audio']
+    language = [lang for lang in language_tags if lang.lower() in lower]
+    language = ' '.join(language)
+
+    # Tag priority
+    all_tags_priority = [
+        'NF', 'AMZN', 'DSNP', 'HMAX', 'WEBRip', 'WEB-DL', 'BluRay', 'HDRip', 'HDR',
+        'HEVC', 'x265', 'x264', '10bit',
+        'AAC', 'AC3', 'DDP', 'DD+', '5.1', '7.1', 'Atmos'
+    ]
+
+    found_tags = []
+    tag_set = set()
+    for tag in all_tags_priority:
+        if tag.lower() in lower and tag.upper() not in tag_set:
+            tag_set.add(tag.upper())
+            found_tags.append(tag)
+
+    # Clean redundant tags
+    if 'x265' in found_tags and 'HEVC' in found_tags:
+        found_tags.remove('HEVC')
+    if ('5.1' in found_tags or '7.1' in found_tags) and ('DDP' in found_tags or 'DD+' in found_tags):
+        found_tags = [t for t in found_tags if t not in ('DDP', 'DD+')]
+
+    # Title cleanup
+    title_no_ext = re.sub(r'\.(?=[^.]*$)', ' ', cleaned)
+    title_part = re.split(r'(19|20)\d{2}', title_no_ext)[0]
+    title = re.sub(r'[\._\-]', ' ', title_part).strip().title()
+
+    # Build title (with year)
+    title_year = f"{title} ({year})" if year else title
+    if len(title_year) > 30:
+        title_year = title_year[:27].rstrip() + "..."
+
+    # Emoji: 📺 for series, 🎞️ for movies
+    emoji = '📺' if is_series else '🎞️'
+
+    # Build initial parts
+    parts = [emoji, f"[{get_size(file_size)}]"]
+    if season_episode_str:
+        parts.append(season_episode_str)
+    parts.append(title_year)
+    if language:
+        parts.append(language)
+    if quality:
+        parts.append(quality)
+
+    # Add tags while within max length
+    current = ' '.join(parts)
+    for tag in found_tags:
+        test = current + f" {tag}"
+        if len(test) > max_length:
+            break
+        current = test
+
+    return current.strip()
+
+
 
 
 
