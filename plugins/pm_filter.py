@@ -143,12 +143,11 @@ def extract_shortdetails(filename, file_size, max_length=64):
 
     # Season/Episode Detection
     se_match = re.search(
-        r'(?:(?:s(?:eason)?[\s._-]*(?P<season>\d{1,2}))[\s._x-]*'
-        r'(?:e(?:p(?:isode)?)?[\s._-]*(?P<episode>\d{1,2})))|'  # S01E02, S1EP2, Season 1 Episode 2
-        r'(?:(?P<season_alt>\d{1,2})x(?P<episode_alt>\d{1,2}))|'  # 1x02
-        r'(?:(?:season[\s._-]*(?P<season_only>\d{1,2})))|'       # Season 1
-        r'(?:(?:e(?:p(?:isode)?)?[\s._-]*(?P<episode_only>\d{1,2})))',  # EP2
-        lower
+    r'(S\d{2}\s?E(?:P)?\d{1,2})|'     # S01E01, S01 EP01, S01EP1
+    r'(S\d{2})|'                      # S01
+    r'(EP\d{1,2})',                   # EP1, EP01
+    '',
+    lower
     )
 
     season_episode_str = ''
@@ -236,12 +235,14 @@ def extract_shortdetails(filename, file_size, max_length=64):
 
     # Remove season/episode patterns from title
     title_cleaned = re.sub(
-        r'(s(?:eason)?[\s._-]*\d{1,2}[\s._x-]*e(?:p(?:isode)?)?[\s._-]*\d{1,2})|'
-        r'(\d{1,2}x\d{1,2})|'
-        r'(s(?:eason)?[\s._-]*\d{1,2})|'
-        r'(e(?:p(?:isode)?)?[\s._-]*\d{1,2})',
-        '', title_no_ext, flags=re.IGNORECASE
+    r'(S\d{2}\s?E(?:P)?\d{1,2})|'     # S01E01, S01 EP01, S01EP1
+    r'(S\d{2})|'                      # S01
+    r'(EP\d{1,2})',                   # EP1, EP01
+    '',
+    title_no_ext,
+    flags=re.IGNORECASE
     )
+    
 
     title_part = re.split(r'(19|20)\d{2}', title_cleaned)[0]
     title = re.sub(r'[\._\-]', ' ', title_part).strip().title()
