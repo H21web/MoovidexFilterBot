@@ -130,36 +130,35 @@ async def doo(bot, data, message):
 
 
 
-def extract_shortdetails(filename: str, filesize: int, max_len: int = 64) -> str:
-    # 1) File size
+def extract_shortdetails(filename: str, filesize: int) -> str:
     size_str = get_size(filesize)  # e.g. "1.2GB"
     
-    # 2) Remove extension and split into tokens
-    name, _ext = os.path.splitext(filename)
-    tokens = re.split[r'[._\-\s]+', name]
-    
-    # 3) Extract SxxExx
-    se = ''
+    # strip extension & split tokens
+    name, _ = os.path.splitext(filename)
+    tokens = re.split(r'[._\-\s]+', name)
     joined = ' '.join(tokens)
+    lower = joined.lower()
+    
+    # season/episode
+    se = ''
     m = re.search(r'\b[Ss](\d{1,2})[Eex](\d{1,2})\b', joined)
     if m:
         se = f"S{int(m.group(1)):02d}E{int(m.group(2)):02d}"
     
-    # 4) Extract YEAR
+    # year
     ym = re.search(r'\b(19|20)\d{2}\b', joined)
     year = f"({ym.group()})" if ym else ''
     
-    # 5) Priority detection lists
-    quality_list = ['4K','2160p','1080p','720p','480p']
-    codec_list   = ['x265','x264','HEVC']
-    audio_list   = ['5.1','7.1','2.0','AAC','AC3','Atmos']
-    lang_list    = ['Hindi','English','Tamil','Telugu','Malayalam','Kannada','Bengali','Dual Audio']
-    src_list     = ['NF','AMZN','DSNP','HMAX','BluRay','WEB-DL','WEBRip','HDR','HDRip']
+    # priority lists
+    quality_list = ['2160p','1080p','720p','480p','4k']
+    src_list     = ['nf','amzn','dsnp','hmax','bluray','web-dl','webrip','hdr','hdrip']
+    codec_list   = ['x265','x264','hevc']
+    audio_list   = ['5.1','7.1','2.0','aac','ac3','atmos']
+    lang_list    = ['hindi','english','tamil','telugu','malayalam','kannada','bengali','dual audio']
     
-    lower = joined.lower()
     def find_first(lst):
         for tag in lst:
-            if tag.lower() in lower:
+            if tag in lower:
                 return tag
         return ''
     
@@ -167,58 +166,47 @@ def extract_shortdetails(filename: str, filesize: int, max_len: int = 64) -> str
     codec   = find_first(codec_list)
     audio   = find_first(audio_list)
     lang    = find_first(lang_list)
+    extras  = [tag for tag in src_list if tag in lower]
     
-    # 6) Other tags by priority
-    extras = []
-    for lst in (src_list,):
-        for tag in lst:
-            if tag.lower() in lower and tag not in extras:
-                extras.append(tag)
+    # dedupe implied
+    if 'x265' in extras and 'hevc' in extras:
+        extras.remove('hevc')
+    if audio in ('5.1','7.1') and any(x in lower for x in ('ddp','dd+')):
+        # drop ddp/dd+
+        extras = [e for e in extras if e not in ('ddp','dd+')]
     
-    # 7) Deduplicate implied
-    if 'x265' in extras and 'HEVC' in extras:
-        extras.remove('HEVC')
-    if audio and ('DDP' in extras or 'DD+' in extras):
-        # audio like "5.1" suffices
-        extras = [t for t in extras if t.upper() not in ('DDP','DD+')]
-    
-    # 8) Build clean title tokens
-    #    remove any token matching year, se, quality, codec, audio, lang, extras
-    remove_set = {se, ym.group() if ym else '', quality, codec, audio, lang}
-    remove_set |= set(extras)
-    title_tokens = [t for t in tokens if t and t not in remove_set]
+    # build clean title
+    remove = {se, ym.group() if ym else '', quality, codec, audio, lang} | set(extras)
+    title_tokens = [t for t in tokens if t and t.lower() not in remove]
     title = ' '.join(title_tokens)
     
-    # 9) Emoji for movie/series
+    # emoji
     emoji = '📺' if se else '🎞️'
     
-    # 10) Assemble parts
+    # formatting helpers
+    def fmt_src(tag):
+        # e.g. "bluray" → "BluRay", "web-dl" → "Web‑DL"
+        return tag.title().replace('-', '‑')
+    def fmt_lang(tag):
+        return 'Dual Audio' if tag=='dual audio' else tag.title()
+    def fmt_codec(tag):
+        return 'x265' if '265' in tag else 'x264'
+    def fmt_audio(tag):
+        return tag if tag in ('5.1','7.1','2.0') else tag.upper()
+    
+    # assemble
     parts = [emoji, f"[{size_str}]"]
-    if se:
-        parts.append(f"[{se}]")
+    if se:    parts.append(f"[{se}]")
     parts.append(title)
-    if year:
-        parts.append(year)
-    for tag in (quality, lang, codec, audio, *extras):
-        if tag:
-            parts.append(tag)
+    if year:  parts.append(year)
+    if quality: parts.append(quality.lower().replace('4k','4K'))
+    if lang:    parts.append(fmt_lang(lang))
+    if codec:   parts.append(fmt_codec(codec))
+    if audio:   parts.append(fmt_audio(audio))
+    for e in extras:
+        parts.append(fmt_src(e))
     
-    result = ' '.join(parts)
-    
-    # 11) Truncate to max_len
-    if len(result) > max_len:
-        # keep the first few parts, drop extras until fits
-        base = ' '.join(parts[:4 if se else 3])
-        tail = parts[4 if se else 3:]
-        for i in range(len(tail), -1, -1):
-            cand = f"{base} {' '.join(tail[:i])}".strip()
-            if len(cand) <= max_len:
-                result = cand
-                break
-        else:
-            result = result[:max_len-1] + '…'
-    
-    return result
+    return ' '.join(parts)
 
 
 
