@@ -516,7 +516,6 @@ async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
     total_results_str = len(files)
     settings = await get_settings(message.chat.id)
     pre = 'filep' if settings['file_secure'] else 'file'
-    btntext = extract_shortdetails(file['file_name'], file['file_size'])
 
     btn = [
         [
@@ -537,7 +536,8 @@ async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
     for file in files:
         btn.append([
             InlineKeyboardButton(
-                text=btntext, callback_data=f"{pre}#{file['file_id']}"
+                text=extract_shortdetails(file['file_name'], file['file_size']),
+                callback_data=f"{pre}#{file['file_id']}"
             )
         ])
 
@@ -705,12 +705,12 @@ async def filter_seasons_cb_handler(client: Client, query: CallbackQuery):
     total_results_str = len(files)
     settings = await get_settings(message.chat.id)
     pre = 'filep' if settings['file_secure'] else 'file'
-    btntext = extract_shortdetails(file['file_name'], file['file_size'])
     if settings["button"]:
         btn = [
             [
                 InlineKeyboardButton(
-                    text=btntext, callback_data=f"{pre}#{file['file_id']}"
+                    text=extract_shortdetails(file['file_name'], file['file_size']),
+                    callback_data=f"{pre}#{file['file_id']}"
                 )
             ]
             for file in files
@@ -855,12 +855,12 @@ async def filter_qualities_cb_handler(client: Client, query: CallbackQuery):
     total_results_str = len(files)
     settings = await get_settings(message.chat.id)
     pre = 'filep' if settings['file_secure'] else 'file'
-    btntext = extract_shortdetails(file['file_name'], file['file_size'])
     if settings["button"]:
         btn = [
             [
                 InlineKeyboardButton(
-                    text=btntext, callback_data=f"{pre}#{file['file_id']}"
+                    text=extract_shortdetails(file['file_name'], file['file_size']),
+                    callback_data=f"{pre}#{file['file_id']}"
                 ),
             ]
             for file in files
