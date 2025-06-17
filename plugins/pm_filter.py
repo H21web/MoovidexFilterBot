@@ -131,93 +131,93 @@ async def doo(bot, data, message):
 
 
 def extract_shortdetails(filename: str, filesize: int, max_len: int = 64) -> str:
-    # Remove file extension
-    filename = re.sub(r'\.\w{2,4}$', '', filename)
-
-    # Replace separators with space
-    filename = re.sub(r'[_\.]', ' ', filename).strip()
-
-    # Detect season/episode
+    # 1) File size
+    size_str = get_size(filesize)  # e.g. "1.2GB"
+    
+    # 2) Remove extension and split into tokens
+    name, _ext = os.path.splitext(filename)
+    tokens = re.split[r'[._\-\s]+', name]
+    
+    # 3) Extract SxxExx
     se = ''
-    match = re.search(r'\b[Ss]eason\s?(\d{1,2})[\s_]*[Ee]pisode\s?(\d{1,2})\b', filename) or \
-            re.search(r'\b[Ss](\d{1,2})[\s_\.]?[Ee](\d{1,2})\b', filename)
-    if match:
-        se = f"S{int(match.group(1)):02d}E{int(match.group(2)):02d}"
-    else:
-        s = re.search(r'\b[Ss](eason)?\s?(\d{1,2})\b', filename)
-        e = re.search(r'\b[Ee](pisode)?\s?(\d{1,2})\b', filename)
-        if s and e:
-            se = f"S{int(s.group(2)):02d}E{int(e.group(2)):02d}"
-        elif s:
-            se = f"S{int(s.group(2)):02d}"
-        elif e:
-            se = f"E{int(e.group(2)):02d}"
-
-    # Extract year
-    year_match = re.search(r'\b(19|20)\d{2}\b', filename)
-    year = f"({year_match.group()})" if year_match else ""
-
-    # Detect tags
-    quality = re.search(r'\b(2160p|1080p|720p|480p|4K|HDRip|HDR|BluRay|WEBRip|WEB[- ]DL)\b', filename, re.I)
-    codec = re.search(r'\b(x265|HEVC|x264)\b', filename, re.I)
-    audio = re.search(r'\b(5\.1|7\.1|2\.0|DDP\s?5\.1|AAC|AC3|Atmos)\b', filename, re.I)
-    lang = re.search(r'\b(Hindi|English|Tamil|Telugu|Malayalam|Kannada|Bengali|Dual Audio)\b', filename, re.I)
-
-    quality = quality.group().upper().replace('WEB-DL', 'WEBDL').replace(' ', '') if quality else ""
-    codec = "x265" if codec and '265' in codec.group().lower() else "x264" if codec else ""
-    audio = audio.group().replace("DDP ", "").replace(" ", "") if audio else ""
-    lang = lang.group().title() if lang else ""
-
-    # Deduplicate implied tags
-    tags = []
-    if quality: tags.append(quality)
-    if codec == "x265": tags.append("x265")
-    elif codec: tags.append(codec)
-    if audio and audio not in ["DDP", "DD+"]: tags.append(audio)
-    if lang: tags.append(lang)
-
-    # Remove known patterns from title
-    known_words = [
-        '480p', '720p', '1080p', '2160p', '4K', 'HDR', 'HDRip', 'WEBRip', 'WEBDL', 'BluRay',
-        'x264', 'x265', 'HEVC', 'AAC', 'AC3', '5.1', '7.1', '2.0', 'DDP', 'DD+', 'Dual Audio',
-        'Hindi', 'English', 'Tamil', 'Telugu', 'Malayalam', 'Kannada', 'Bengali', 'Atmos',
-        'Season', 'Episode', 'S01', 'E01'
-    ]
-    if year_match:
-        known_words.append(year_match.group())
-    if se:
-        known_words.append(se)
-
-    words = filename.split()
-    title = ' '.join(w for w in words if w not in known_words).strip()
-    title = re.sub(r'\s+', ' ', title).title()
-
-    # Emoji
-    emoji = "📺" if se else "🎞️"
-
-    # Build parts
-    parts = [emoji, f"[{get_size(filesize)}]"]
+    joined = ' '.join(tokens)
+    m = re.search(r'\b[Ss](\d{1,2})[Eex](\d{1,2})\b', joined)
+    if m:
+        se = f"S{int(m.group(1)):02d}E{int(m.group(2)):02d}"
+    
+    # 4) Extract YEAR
+    ym = re.search(r'\b(19|20)\d{2}\b', joined)
+    year = f"({ym.group()})" if ym else ''
+    
+    # 5) Priority detection lists
+    quality_list = ['4K','2160p','1080p','720p','480p']
+    codec_list   = ['x265','x264','HEVC']
+    audio_list   = ['5.1','7.1','2.0','AAC','AC3','Atmos']
+    lang_list    = ['Hindi','English','Tamil','Telugu','Malayalam','Kannada','Bengali','Dual Audio']
+    src_list     = ['NF','AMZN','DSNP','HMAX','BluRay','WEB-DL','WEBRip','HDR','HDRip']
+    
+    lower = joined.lower()
+    def find_first(lst):
+        for tag in lst:
+            if tag.lower() in lower:
+                return tag
+        return ''
+    
+    quality = find_first(quality_list)
+    codec   = find_first(codec_list)
+    audio   = find_first(audio_list)
+    lang    = find_first(lang_list)
+    
+    # 6) Other tags by priority
+    extras = []
+    for lst in (src_list,):
+        for tag in lst:
+            if tag.lower() in lower and tag not in extras:
+                extras.append(tag)
+    
+    # 7) Deduplicate implied
+    if 'x265' in extras and 'HEVC' in extras:
+        extras.remove('HEVC')
+    if audio and ('DDP' in extras or 'DD+' in extras):
+        # audio like "5.1" suffices
+        extras = [t for t in extras if t.upper() not in ('DDP','DD+')]
+    
+    # 8) Build clean title tokens
+    #    remove any token matching year, se, quality, codec, audio, lang, extras
+    remove_set = {se, ym.group() if ym else '', quality, codec, audio, lang}
+    remove_set |= set(extras)
+    title_tokens = [t for t in tokens if t and t not in remove_set]
+    title = ' '.join(title_tokens)
+    
+    # 9) Emoji for movie/series
+    emoji = '📺' if se else '🎞️'
+    
+    # 10) Assemble parts
+    parts = [emoji, f"[{size_str}]"]
     if se:
         parts.append(f"[{se}]")
     parts.append(title)
     if year:
         parts.append(year)
-
-    for tag in tags:
-        parts.append(tag)
-
-    # Compose and fit to max_len
+    for tag in (quality, lang, codec, audio, *extras):
+        if tag:
+            parts.append(tag)
+    
     result = ' '.join(parts)
+    
+    # 11) Truncate to max_len
     if len(result) > max_len:
+        # keep the first few parts, drop extras until fits
         base = ' '.join(parts[:4 if se else 3])
-        extras = parts[4 if se else 3:]
-        for i in range(len(extras), -1, -1):
-            result = f"{base} {' '.join(extras[:i])}".strip()
-            if len(result) <= max_len:
+        tail = parts[4 if se else 3:]
+        for i in range(len(tail), -1, -1):
+            cand = f"{base} {' '.join(tail[:i])}".strip()
+            if len(cand) <= max_len:
+                result = cand
                 break
-        if len(result) > max_len:
-            result = result[:max_len - 1] + "…"
-
+        else:
+            result = result[:max_len-1] + '…'
+    
     return result
 
 
