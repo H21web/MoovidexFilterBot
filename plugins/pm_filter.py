@@ -128,6 +128,8 @@ async def doo(bot, data, message):
     
     await auto_filter(bot, data, message, reply_msg, ai_search)
 
+
+
 def extract_shortdetails(filename: str, filesize: int, max_len: int = 64) -> str:
     # Remove file extension
     filename = re.sub(r'\.\w{2,4}$', '', filename)
@@ -135,7 +137,7 @@ def extract_shortdetails(filename: str, filesize: int, max_len: int = 64) -> str
     # Replace separators with space
     filename = re.sub(r'[_\.]', ' ', filename).strip()
 
-    # Detect SxxEyy
+    # Detect season/episode
     se = ''
     match = re.search(r'\b[Ss]eason\s?(\d{1,2})[\s_]*[Ee]pisode\s?(\d{1,2})\b', filename) or \
             re.search(r'\b[Ss](\d{1,2})[\s_\.]?[Ee](\d{1,2})\b', filename)
@@ -155,32 +157,45 @@ def extract_shortdetails(filename: str, filesize: int, max_len: int = 64) -> str
     year_match = re.search(r'\b(19|20)\d{2}\b', filename)
     year = f"({year_match.group()})" if year_match else ""
 
-    # Tag priority
-    quality = re.search(r'\b(2160p|1080p|720p|480p|4K|HDR)\b', filename, re.I)
+    # Detect tags
+    quality = re.search(r'\b(2160p|1080p|720p|480p|4K|HDRip|HDR|BluRay|WEBRip|WEB[- ]DL)\b', filename, re.I)
     codec = re.search(r'\b(x265|HEVC|x264)\b', filename, re.I)
-    audio = re.search(r'\b(5\.1|7\.1|2\.0|DDP\s?5\.1|AAC)\b', filename, re.I)
-    lang = re.search(r'\b(Hindi|English|Tamil|Telugu|Malayalam|Kannada|Dual Audio)\b', filename, re.I)
+    audio = re.search(r'\b(5\.1|7\.1|2\.0|DDP\s?5\.1|AAC|AC3|Atmos)\b', filename, re.I)
+    lang = re.search(r'\b(Hindi|English|Tamil|Telugu|Malayalam|Kannada|Bengali|Dual Audio)\b', filename, re.I)
 
-    quality = quality.group().upper() if quality else ""
+    quality = quality.group().upper().replace('WEB-DL', 'WEBDL').replace(' ', '') if quality else ""
     codec = "x265" if codec and '265' in codec.group().lower() else "x264" if codec else ""
-    audio = audio.group().replace("DDP ", "") if audio else ""
+    audio = audio.group().replace("DDP ", "").replace(" ", "") if audio else ""
     lang = lang.group().title() if lang else ""
 
-    # Remove known tags and SE/Year from title
-    known = ['480p', '720p', '1080p', '2160p', '4k', 'HDR',
-             'x264', 'x265', 'HEVC', 'AAC', '5.1', '7.1', '2.0', 'DDP',
-             'Dual Audio', 'Hindi', 'English', 'Tamil', 'Telugu',
-             'Malayalam', 'Kannada', 'Season', 'Episode']
-    known += [year_match.group()] if year_match else []
-    known += re.findall(r'[Ss]eason\s?\d+|[Ss]\d+|[Ee]pisode\s?\d+|[Ee]\d+', filename)
+    # Deduplicate implied tags
+    tags = []
+    if quality: tags.append(quality)
+    if codec == "x265": tags.append("x265")
+    elif codec: tags.append(codec)
+    if audio and audio not in ["DDP", "DD+"]: tags.append(audio)
+    if lang: tags.append(lang)
 
-    title = ' '.join(word for word in filename.split() if word not in known)
-    title = re.sub(r'\s+', ' ', title).strip().title()
+    # Remove known patterns from title
+    known_words = [
+        '480p', '720p', '1080p', '2160p', '4K', 'HDR', 'HDRip', 'WEBRip', 'WEBDL', 'BluRay',
+        'x264', 'x265', 'HEVC', 'AAC', 'AC3', '5.1', '7.1', '2.0', 'DDP', 'DD+', 'Dual Audio',
+        'Hindi', 'English', 'Tamil', 'Telugu', 'Malayalam', 'Kannada', 'Bengali', 'Atmos',
+        'Season', 'Episode', 'S01', 'E01'
+    ]
+    if year_match:
+        known_words.append(year_match.group())
+    if se:
+        known_words.append(se)
 
-    # Determine emoji
+    words = filename.split()
+    title = ' '.join(w for w in words if w not in known_words).strip()
+    title = re.sub(r'\s+', ' ', title).title()
+
+    # Emoji
     emoji = "📺" if se else "🎞️"
 
-    # Build initial components
+    # Build parts
     parts = [emoji, f"[{get_size(filesize)}]"]
     if se:
         parts.append(f"[{se}]")
@@ -188,15 +203,11 @@ def extract_shortdetails(filename: str, filesize: int, max_len: int = 64) -> str
     if year:
         parts.append(year)
 
-    # Add prioritized tags
-    for tag in [quality, codec, audio, lang]:
-        if tag:
-            parts.append(tag)
+    for tag in tags:
+        parts.append(tag)
 
-    # Compose result
+    # Compose and fit to max_len
     result = ' '.join(parts)
-
-    # Truncate if needed
     if len(result) > max_len:
         base = ' '.join(parts[:4 if se else 3])
         extras = parts[4 if se else 3:]
@@ -208,6 +219,7 @@ def extract_shortdetails(filename: str, filesize: int, max_len: int = 64) -> str
             result = result[:max_len - 1] + "…"
 
     return result
+
 
 
 @Client.on_callback_query(filters.regex(r"^next"))
