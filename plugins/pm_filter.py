@@ -130,7 +130,6 @@ async def doo(bot, data, message):
 
 
 def get_size(file_size):
-    # Simple file size formatter
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
         if file_size < 1024.0:
             return f"{file_size:.1f}{unit}"
@@ -143,13 +142,12 @@ def extract_shortdetails(filename, file_size, max_length=64):
         filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'),
                filename.split())
     )
-
     lower = cleaned.lower()
 
-    # Detect season & episode (very flexible)
+    # Detect season & episode
     se_match = re.search(
         r'(?:(?:s(?:eason)?[\s._-]*(?P<season>\d{1,2}))[\s._x-]*'
-        r'(?:e(?:p(?:isode)?)?[\s._-]*(?P<episode>\d{1,2})))|'  # S01E02, S1EP2, Season 1 Episode 2
+        r'(?:e(?:p(?:isode)?)?[\s._-]*(?P<episode>\d{1,2})))|'  # S01E02, Season 1 EP02
         r'(?:(?P<season_alt>\d{1,2})x(?P<episode_alt>\d{1,2}))|'  # 1x02
         r'(?:(?:season[\s._-]*(?P<season_only>\d{1,2})))|'       # Season 1
         r'(?:(?:e(?:p(?:isode)?)?[\s._-]*(?P<episode_only>\d{1,2})))',  # Episode 2
@@ -161,7 +159,6 @@ def extract_shortdetails(filename, file_size, max_length=64):
 
     if se_match:
         gd = se_match.groupdict()
-
         if gd['season'] and gd['episode']:
             season, episode = int(gd['season']), int(gd['episode'])
         elif gd['season_alt'] and gd['episode_alt']:
@@ -183,7 +180,7 @@ def extract_shortdetails(filename, file_size, max_length=64):
     year = year_match.group() if year_match else ''
 
     # Quality detection
-    quality_tags = ['480p', '520p', '720p', '1080p', '2160p', '4K', 'HDRip', 'BluRay', 'WEB-DL', 'WEBRip']
+    quality_tags = ['480p', '720p', '1080p', '2160p', '4K', 'HDRip', 'BluRay', 'WEB-DL', 'WEBRip']
     quality = next((q for q in quality_tags if q.lower() in lower), '')
 
     # Language detection
@@ -192,13 +189,12 @@ def extract_shortdetails(filename, file_size, max_length=64):
     language = [lang for lang in language_tags if lang.lower() in lower]
     language = ' '.join(language)
 
-    # Additional tags
+    # Tag detection
     all_tags_priority = [
         'NF', 'AMZN', 'DSNP', 'HMAX', 'WEBRip', 'WEB-DL', 'BluRay', 'HDRip', 'HDR', 'HQ',
         'HEVC', 'x265', 'x264', '10bit',
-        'AAC', 'AC3', 'DDP', 'DD+', '5.1', '7.1', 'Atmos', 'ESubs'
+        'AAC', 'AC3', 'DDP', 'DD+', '5.1', '7.1', 'Atmos', 'ESubs', 'Esub'
     ]
-
     found_tags = []
     tag_set = set()
     for tag in all_tags_priority:
@@ -212,17 +208,26 @@ def extract_shortdetails(filename, file_size, max_length=64):
     if ('5.1' in found_tags or '7.1' in found_tags) and ('DDP' in found_tags or 'DD+' in found_tags):
         found_tags = [t for t in found_tags if t not in ('DDP', 'DD+')]
 
-    # Title cleanup
-    title_no_ext = re.sub(r'\.(?=[^.]*$)', ' ', cleaned)
+    # Title cleanup: remove episode/season info before title parsing
+    title_cleaned = re.sub(
+        r'(s(?:eason)?[\s._-]*\d{1,2}[\s._x-]*e(?:p(?:isode)?)?[\s._-]*\d{1,2})|'
+        r'(\d{1,2}x\d{1,2})|'
+        r'(season[\s._-]*\d{1,2})|'
+        r'(e(?:p(?:isode)?)?[\s._-]*\d{1,2})',
+        '', cleaned, flags=re.IGNORECASE
+    )
+
+    # Remove extension delimiter
+    title_no_ext = re.sub(r'\.(?=[^.]*$)', ' ', title_cleaned)
     title_part = re.split(r'(19|20)\d{2}', title_no_ext)[0]
     title = re.sub(r'[\._\-]', ' ', title_part).strip().title()
 
-    # Build title (with year)
+    # Final title with year
     title_year = f"{title} ({year})" if year else title
     if len(title_year) > 30:
         title_year = title_year[:27].rstrip() + "..."
 
-    # Emoji: 📺 for series, 🎞️ for movies
+    # Emoji: 📺 for series, 🎞️ for movie
     is_series = bool(season or episode)
     emoji = '📺' if is_series else '🎞️'
 
@@ -245,6 +250,7 @@ def extract_shortdetails(filename, file_size, max_length=64):
         current = test
 
     return current.strip()
+    
 
 @Client.on_callback_query(filters.regex(r"^next"))
 async def next_page(bot, query):
