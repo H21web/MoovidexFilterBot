@@ -8,7 +8,6 @@ from info import *
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram import enums
 from urllib.parse import quote_plus
-#from imdb import Cinemagoer 
 from pyrogram.errors import *
 from typing import Union
 from Script import script
@@ -715,7 +714,7 @@ async def send_all(bot, userid, files, ident, chat_id, user_name, query):
     except Exception as e:
         await query.answer('Hᴇʏ, Sᴛᴀʀᴛ Bᴏᴛ Fɪʀsᴛ Aɴᴅ Cʟɪᴄᴋ Sᴇɴᴅ Aʟʟ', show_alert=True)
         
-async def get_cap(settings, remaining_seconds, files, query, total_results, text, search):
+async def get_cap(settings, remaining_seconds, files, query, total_results, btntext, search):
     if settings["imdb"]:
         IMDB_CAP = temp.IMDB_CAP.get(query.from_user.id)
         if IMDB_CAP:
