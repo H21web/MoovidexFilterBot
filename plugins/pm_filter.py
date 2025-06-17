@@ -2558,12 +2558,13 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     temp.GETALL[key] = files
     temp.SHORT[message.from_user.id] = message.chat.id
     total_results_str = str(total_results)
-    btntext = extract_shortdetails(file['file_name'], file['file_size'])
+    
     if settings["button"]:
         btn = [
             [
                 InlineKeyboardButton(
-                    text=btntext, callback_data=f"{pre}#{file['file_id']}"
+                    text=extract_shortdetails(file['file_name'], file['file_size']),
+                    callback_data=f"{pre}#{file['file_id']}"
                 ),
             ]
             for file in files
