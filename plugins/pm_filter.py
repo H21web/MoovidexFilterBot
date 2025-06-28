@@ -18,7 +18,7 @@ from database.connections_mdb import mydb, active_connection, all_connections, d
 from database.gfilters_mdb import find_gfilter, get_gfilters, del_allg
 from urllib.parse import quote_plus
 from TechVJ.util.file_properties import get_name, get_hash, get_media_file_size
-
+from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
@@ -130,34 +130,57 @@ async def doo(bot, data, message):
 
 
 def get_size(file_size):
-    if file_size < (1024 ** 3):  # Less than 1GB
-        size_in_mb = file_size / (1024 ** 2)
-        return f"{int(size_in_mb)}MB"
-    else:
-        size_in_gb = file_size / (1024 ** 3)
-        return f"{size_in_gb:.1f}GB"
+    if file_size < (1024 ** 3):
+        return f"{int(file_size / (1024 ** 2))}MB"
+    return f"{file_size / (1024 ** 3):.1f}GB"
+
+def extract_season_episode(filename):
+    lower = filename.lower()
+    match = re.search(
+        r'(?i)s(?P<season>\d{1,2})\s*e(?:p)?(?P<episode>\d{1,2})|'
+        r'season[\s._-]?(?P<season_text>\d{1,2})|'
+        r's(?P<season_only>\d{1,2})|'
+        r'ep(?P<episode_only>\d{1,2})',
+        lower
+    )
+    season = episode = 0
+    if match:
+        gd = match.groupdict()
+        if gd['season'] and gd['episode']:
+            season, episode = int(gd['season']), int(gd['episode'])
+        elif gd['season_text']:
+            season = int(gd['season_text'])
+        elif gd['season_only']:
+            season = int(gd['season_only'])
+        elif gd['episode_only']:
+            episode = int(gd['episode_only'])
+    return season, episode
+
+def extract_series_key(filename):
+    title = re.sub(r'[\._\-]', ' ', filename).strip().lower()
+    title = re.sub(r's\d{1,2}e(?:p)?\d{1,2}|season\s?\d+|ep\d+', '', title, flags=re.I)
+    title = re.split(r'(19|20)\d{2}', title)[0]
+    return title.strip()
 
 def extract_shortdetails(filename, file_size, max_length=64):
-    # Pre-cleaning
     cleaned = ' '.join(
         filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'),
                filename.split())
     )
     lower = cleaned.lower()
 
-    # Season and episode detection
-    se_match = re.search(
-        r'(?i)(?:(?:S(?P<season>\d{2}))\s?E(?:P)?(?P<episode>\d{1,2}))|'  # S01E01, S01 EP01, S01EP1
-        r'(?:S(?P<season_only>\d{2}))|'                                  # S01
-        r'(?:EP(?P<episode_only>\d{1,2}))|'                              # EP1
-        r'(?:SEASON[\s._-]?(?P<season_text>\d{1,2}))',                   # Season 1
-        lower
-    )
-
+    # Detect series info
+    is_series = False
     season_episode_str = ''
     season = episode = None
-    is_series = False
 
+    se_match = re.search(
+        r'(?i)(?:S(?P<season>\d{2}))\s?E(?:P)?(?P<episode>\d{1,2})|'
+        r'(?:S(?P<season_only>\d{2}))|'
+        r'(?:EP(?P<episode_only>\d{1,2}))|'
+        r'(?:SEASON[\s._-]?(?P<season_text>\d{1,2}))',
+        lower
+    )
     if se_match:
         gd = se_match.groupdict()
         is_series = True
@@ -177,88 +200,40 @@ def extract_shortdetails(filename, file_size, max_length=64):
         elif episode is not None:
             season_episode_str = f"[E{episode:02d}]"
 
-    # Year detection
     year_match = re.search(r'(19|20)\d{2}', cleaned)
     year = year_match.group() if year_match else ''
 
-    # Quality detection
     quality_tags = ['480p', '720p', '1080p', '2160p', '4K', 'HDRip', 'BluRay', 'WEB-DL', 'WEBRip']
     quality = next((q for q in quality_tags if q.lower() in lower), '')
 
-    # Language detection
     shorthand_lang_map = {
-        'hin': 'Hindi',
-        'eng': 'English',
-        'tam': 'Tamil',
-        'tel': 'Telugu',
-        'mal': 'Malayalam',
-        'kan': 'Kannada',
-        'ben': 'Bengali',
-        'kor': 'Korean',
-        'multi': 'Multi',
-        'dual': 'Dual Audio',
+        'hin': 'Hindi', 'eng': 'English', 'tam': 'Tamil', 'tel': 'Telugu',
+        'mal': 'Malayalam', 'kan': 'Kannada', 'ben': 'Bengali', 'kor': 'Korean',
+        'multi': 'Multi', 'dual': 'Dual Audio',
     }
 
-    full_lang_set = set([
+    full_lang_set = {
         'Hindi', 'English', 'Tamil', 'Telugu', 'Malayalam', 'Kannada',
         'Bengali', 'Dual Audio', 'Multi', 'Korean', 'Multi Audio'
-    ])
+    }
 
     language = []
-
     for word in lower.split():
         if word in shorthand_lang_map:
             language.append(shorthand_lang_map[word])
         elif word.capitalize() in full_lang_set:
             language.append(word.capitalize())
-
     language = ' '.join(sorted(set(language)))
 
-    # Tag extraction
-    all_tags_priority = [
-        'NF', 'AMZN', 'DSNP', 'HMAX', 'WEBRip', 'WEB-DL', 'BluRay', 'HDRip', 'HDR', 'HQ', 'DVD', 'CAM',
-        'HEVC', 'x265', 'x264', '10bit',
-        'AAC', 'AC3', 'DDP', 'DD+', '5.1', '7.1', 'Atmos', 'ESubs'
-    ]
-
-    found_tags = []
-    tag_set = set()
-    for tag in all_tags_priority:
-        if tag.lower() in lower and tag.upper() not in tag_set:
-            tag_set.add(tag.upper())
-            found_tags.append(tag)
-
-    # Clean redundant tags
-    if 'x265' in found_tags and 'HEVC' in found_tags:
-        found_tags.remove('HEVC')
-    if ('5.1' in found_tags or '7.1' in found_tags) and ('DDP' in found_tags or 'DD+' in found_tags):
-        found_tags = [t for t in found_tags if t not in ('DDP', 'DD+')]
-
-    # Title cleanup
     title_no_ext = re.sub(r'\.(?=[^.]*$)', ' ', cleaned)
-
-    # Remove season/episode patterns from title
-    title_cleaned = re.sub(
-        r'(S\d{2}\s?E(?:P)?\d{1,2})|'     # S01E01, S01 EP01, S01EP1
-        r'(S\d{2})|'                      # S01
-        r'(EP\d{1,2})',                   # EP1, EP01
-        '',
-        title_no_ext,
-        flags=re.IGNORECASE
-    )
-
+    title_cleaned = re.sub(r'(S\d{2}\s?E(?:P)?\d{1,2})|(S\d{2})|(EP\d{1,2})', '', title_no_ext, flags=re.IGNORECASE)
     title_part = re.split(r'(19|20)\d{2}', title_cleaned)[0]
     title = re.sub(r'[\._\-]', ' ', title_part).strip().title()
-
-    # Build title (with year)
     title_year = f"{title} ({year})" if year else title
     if len(title_year) > 30:
         title_year = title_year[:27].rstrip() + "..."
 
-    # Emoji
     emoji = '📺' if is_series else '🎞️'
-
-    # Build parts with a space after the size
     parts = [emoji, f"[{get_size(file_size)}] "]
     if season_episode_str:
         parts.append(season_episode_str)
@@ -268,15 +243,36 @@ def extract_shortdetails(filename, file_size, max_length=64):
     if quality:
         parts.append(quality)
 
-    # Append tags within limit
-    current = ' '.join(parts)
-    for tag in found_tags:
-        test = current + f" {tag}"
-        if len(test) > max_length:
-            break
-        current = test
+    return ' '.join(parts).strip(), is_series, extract_series_key(filename), extract_season_episode(filename), file_size
 
-    return current.strip()
+def sort_by_recent_grouped(files):
+    movies = []
+    series_groups = defaultdict(list)
+
+    for f, size in files:
+        detail, is_series, group_key, (season, episode), fsize = extract_shortdetails(f, size)
+        if is_series:
+            series_groups[group_key].append(((season, episode), fsize, detail))
+        else:
+            movies.append((fsize, detail))
+
+    # Sort movies by file size
+    movies.sort(reverse=True)
+
+    # Sort series groups by largest episode size
+    series_block = []
+    for title, eps in series_groups.items():
+        eps_sorted = sorted(eps, key=lambda x: x[0])  # sort by (season, episode)
+        latest_size = max(ep[1] for ep in eps)
+        series_block.append((latest_size, [ep[2] for ep in eps_sorted]))
+
+    series_block.sort(reverse=True)
+
+    result = [detail for _, detail in movies]
+    for _, group in series_block:
+        result.extend(group)
+
+    return result
 
     
 
