@@ -3,7 +3,7 @@ import html
 from pyrogram import Client, filters
 from pyrogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
 
-# Clean text from HTML entities
+# Clean HTML entities and unicode characters
 def clean_text(text):
     if not text:
         return text
@@ -14,23 +14,23 @@ def clean_text(text):
     text = text.replace('\u2026', '...')
     return text
 
-# Fetch today's streaming movies
+# Fetch latest movies from mirror source
 def fetch_latest_movies():
-    url = "https://www.binged.com/wp-json/binged-api/v1/movies?mode=streaming-today"
+    url = "https://bingeddata.pages.dev/api/streaming-today.json"
     headers = {
         'User-Agent': 'Mozilla/5.0',
         'Referer': 'https://www.binged.com/'
     }
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            return data.get('data', [])
+            return data.get('data', []) or data  # Support multiple formats
     except Exception as e:
-        print("Error fetching movies:", e)
+        print("Error fetching latest movies:", e)
     return []
 
-# /latest command to show reply keyboard with movie titles
+# /latest command - show reply keyboard with latest movie titles
 @Client.on_message(filters.command("latest"))
 async def latest_movies_command(client, message):
     movies_data = fetch_latest_movies()
@@ -47,7 +47,7 @@ async def latest_movies_command(client, message):
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await message.reply_text("🎬 **Latest Streaming Movies:**", reply_markup=reply_markup)
 
-# Handle Close button
+# Close keyboard when "❌ Close" is clicked
 @Client.on_message(filters.text & filters.regex("^❌ Close$"))
 async def close_keyboard(client, message):
     await message.reply_text("✅ Closed.", reply_markup=ReplyKeyboardRemove())
