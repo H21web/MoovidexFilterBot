@@ -3,7 +3,7 @@ import html
 from pyrogram import Client, filters
 from pyrogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
 
-# Clean HTML/unicode characters
+# Function to clean HTML entities and smart quotes
 def clean_text(text):
     if not text:
         return text
@@ -14,11 +14,11 @@ def clean_text(text):
     text = text.replace('\u2026', '...')
     return text
 
-# Fetch latest movies from Binged API
-def fetch_latest_movies():
-    url = "https://www.binged.com/wp-json/binged-api/v1/movies?mode=streaming-today"
+# Fetch movies from Binged API
+def fetch_all_movies():
+    url = "https://www.binged.com/wp-json/binged-api/v1/movies"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "User-Agent": "Mozilla/5.0",
         "Accept": "application/json",
         "Referer": "https://www.binged.com/",
         "Origin": "https://www.binged.com"
@@ -29,27 +29,33 @@ def fetch_latest_movies():
             data = response.json()
             return data.get("data", [])
         else:
-            print("Status:", response.status_code)
+            print("Status code:", response.status_code)
     except Exception as e:
-        print("Error fetching latest movies:", e)
+        print("Error fetching movies:", e)
     return []
 
-# /latest command - show ReplyKeyboardMarkup with movie titles
+# /latest command - show movie titles in 2-column ReplyKeyboardMarkup
 @Client.on_message(filters.command("latest"))
 async def latest_movies_command(client, message):
-    movies_data = fetch_latest_movies()
+    movies_data = fetch_all_movies()
     if not movies_data:
-        await message.reply_text("⚠️ No latest movies found or failed to fetch.")
+        await message.reply_text("⚠️ No movies found or failed to fetch.")
         return
 
     keyboard = []
-    for movie in reversed(movies_data):  # Newest to oldest
+    row = []
+    for index, movie in enumerate(reversed(movies_data)):  # Newest to oldest
         title = clean_text(movie.get("title", "Untitled"))
-        keyboard.append([KeyboardButton(title)])
-
+        row.append(KeyboardButton(title))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+    
     keyboard.append([KeyboardButton("❌ Close")])
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await message.reply_text("🎬 **Latest Streaming Movies:**", reply_markup=reply_markup)
+    await message.reply_text("🎬 **All Movies (Latest First):**", reply_markup=reply_markup)
 
 # ❌ Close button handler
 @Client.on_message(filters.text & filters.regex("^❌ Close$"))
