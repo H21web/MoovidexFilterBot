@@ -3,7 +3,7 @@ import html
 from pyrogram import Client, filters
 from pyrogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
 
-# Clean HTML entities and unicode characters
+# Clean HTML/unicode characters
 def clean_text(text):
     if not text:
         return text
@@ -14,23 +14,27 @@ def clean_text(text):
     text = text.replace('\u2026', '...')
     return text
 
-# Fetch latest movies from mirror source
+# Fetch latest movies from Binged API
 def fetch_latest_movies():
-    url = "https://bingeddata.pages.dev/api/streaming-today.json"
+    url = "https://www.binged.com/wp-json/binged-api/v1/movies?mode=streaming-today"
     headers = {
-        'User-Agent': 'Mozilla/5.0',
-        'Referer': 'https://www.binged.com/'
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "application/json",
+        "Referer": "https://www.binged.com/",
+        "Origin": "https://www.binged.com"
     }
     try:
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            return data.get('data', []) or data  # Support multiple formats
+            return data.get("data", [])
+        else:
+            print("Status:", response.status_code)
     except Exception as e:
         print("Error fetching latest movies:", e)
     return []
 
-# /latest command - show reply keyboard with latest movie titles
+# /latest command - show ReplyKeyboardMarkup with movie titles
 @Client.on_message(filters.command("latest"))
 async def latest_movies_command(client, message):
     movies_data = fetch_latest_movies()
@@ -47,7 +51,7 @@ async def latest_movies_command(client, message):
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await message.reply_text("🎬 **Latest Streaming Movies:**", reply_markup=reply_markup)
 
-# Close keyboard when "❌ Close" is clicked
+# ❌ Close button handler
 @Client.on_message(filters.text & filters.regex("^❌ Close$"))
 async def close_keyboard(client, message):
     await message.reply_text("✅ Closed.", reply_markup=ReplyKeyboardRemove())
