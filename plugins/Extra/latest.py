@@ -1,11 +1,9 @@
 import requests
-import re
 import html
-from bs4 import BeautifulSoup
 from pyrogram import Client, filters
 from pyrogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
 
-# Clean HTML entities and special characters
+# Clean HTML/unicode characters
 def clean_text(text):
     if not text:
         return text
@@ -16,36 +14,38 @@ def clean_text(text):
     text = text.replace('\u2026', '...')
     return text.strip()
 
-# Scrape titles from https://www.binged.com/streaming-today/
-def fetch_movie_titles():
+# Fetch latest movies from Binged API
+def fetch_latest_movies():
+    url = "https://www.binged.com/wp-json/binged-api/v1/movies"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "application/json",
+        "Referer": "https://www.binged.com/",
+        "Origin": "https://www.binged.com"
+    }
     try:
-        url = "https://www.binged.com/streaming-today/"
-        headers = {
-            "User-Agent": "Mozilla/5.0"
-        }
         response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.content, "html.parser")
-        titles = []
-        for block in soup.select(".release-card-title"):
-            title = clean_text(block.text)
-            if title:
-                titles.append(title)
-        return titles
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("data", [])
+        else:
+            print("Status:", response.status_code)
     except Exception as e:
-        print("Error fetching movies:", e)
-        return []
+        print("Error fetching latest movies:", e)
+    return []
 
-# /latest command - show movie titles in 2-column ReplyKeyboardMarkup
+# /latest command - show ReplyKeyboardMarkup with movie titles in 2 columns
 @Client.on_message(filters.command("latest"))
 async def latest_movies_command(client, message):
-    titles = fetch_movie_titles()
-    if not titles:
-        await message.reply_text("⚠️ No movies found or failed to fetch.")
+    movies_data = fetch_latest_movies()
+    if not movies_data:
+        await message.reply_text("⚠️ No latest movies found or failed to fetch.")
         return
 
     keyboard = []
     row = []
-    for i, title in enumerate(titles):
+    for index, movie in enumerate(reversed(movies_data)):  # Newest to oldest
+        title = clean_text(movie.get("title", "Untitled"))
         row.append(KeyboardButton(title))
         if len(row) == 2:
             keyboard.append(row)
