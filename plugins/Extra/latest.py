@@ -16,7 +16,7 @@ def clean_text(text):
 
 # Fetch latest movies from Binged API
 def fetch_latest_movies():
-    url = "https://www.binged.com/wp-json/binged-api/v1/movies"
+    url = "https://www.binged.com/wp-json/binged-api/v1/movies?mode=streaming-today"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept": "application/json",
@@ -44,7 +44,7 @@ async def latest_movies_command(client, message):
 
     keyboard = []
     row = []
-    for index, movie in enumerate(reversed(movies_data)):  # Newest to oldest
+    for index, movie in enumerate(movies_data):  # Original order (no reverse)
         title = clean_text(movie.get("title", "Untitled"))
         row.append(KeyboardButton(title))
         if len(row) == 2:
@@ -58,6 +58,6 @@ async def latest_movies_command(client, message):
     await message.reply_text("🎬 **Latest Streaming Movies:**", reply_markup=reply_markup)
 
 # ❌ Close button handler
-@Client.on_message(filters.text & filters.regex("^❌ Close$"))
-async def close_keyboard(client, message):
-    await message.reply_text("✅ Closed.", reply_markup=ReplyKeyboardRemove())
+#@Client.on_message(filters.text & filters.regex("^❌ Close$"))
+#async def close_keyboard(client, message):
+  #  await message.reply_text("✅ Closed.", reply_markup=ReplyKeyboardRemove())
