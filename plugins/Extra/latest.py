@@ -16,7 +16,7 @@ def clean_text(text):
 
 # Fetch latest movies from Binged API
 def fetch_latest_movies():
-    url = "https://www.binged.com/wp-json/binged-api/v1/movies?mode=streaming-today"
+    url = "https://www.binged.com/wp-json/binged-api/v1/movies?mode=streaming-week"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept": "application/json",
