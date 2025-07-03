@@ -62,20 +62,19 @@ async def send_movie_buttons(client, message):
             return
 
         buttons = []
-        for movie in reversed(movies_data):
+        for movie in movies_data:  # No reverse here
             title = movie.get('title', 'No title available')
-            # Clean the title for display
             clean_title = clean_text(title)
-            callback_data = f"movie_detail_{title}"  # Keep original for matching
+            callback_data = f"movie_detail_{title}"
             buttons.append([InlineKeyboardButton(clean_title, callback_data=callback_data)])
 
-        # Add close button at the end
         buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
         reply_markup = InlineKeyboardMarkup(buttons)
 
         await message.reply_text("🎬 **Today's Streaming Movies:**", reply_markup=reply_markup)
     else:
         await message.reply_text("⚠️ Failed to fetch today's movies or no movies found. Please try again later.")
+
 
 # When a movie title button is clicked
 @Client.on_callback_query(filters.regex(r"movie_detail_"))
