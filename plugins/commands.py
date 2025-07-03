@@ -17,6 +17,7 @@ from database.connections_mdb import active_connection
 from urllib.parse import quote_plus
 from database.config_db import mdb
 from database.topdb import JsTopDB
+from plugins.Extra.latest import latest_movies_command
 from TechVJ.util.file_properties import get_name, get_hash, get_media_file_size
 logger = logging.getLogger(__name__)
 
@@ -645,7 +646,6 @@ async def most(client, callback_query: CallbackQuery):
 
     reply_markup = ReplyKeyboardMarkup(
         keyboard,
-        one_time_keyboard=True,
         resize_keyboard=True,
         placeholder="Most searches of the day"
     )
@@ -656,6 +656,12 @@ async def most(client, callback_query: CallbackQuery):
     )
     await callback_query.answer()
 
+
+
+@Client.on_callback_query(filters.regex("^latest$"))
+async def handle_latest_callback(client, callback_query: CallbackQuery):
+    await callback_query.answer()  # remove "loading..." icon
+    await latest_movies_command(client, callback_query.message)
 
 
 @Client.on_message(filters.command('logs') & filters.user(ADMINS))
