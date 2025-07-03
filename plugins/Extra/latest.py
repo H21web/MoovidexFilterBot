@@ -30,7 +30,6 @@ def fetch_latest_movies():
             url = f"{base_url}&page={current_page}" if current_page > 1 else base_url
             response = requests.get(url, headers=headers, timeout=10)
             if response.status_code != 200:
-                print(f"[DEBUG] Failed to fetch page {current_page}: Status {response.status_code}")
                 break
 
             data = response.json()
@@ -62,29 +61,32 @@ async def latest_movies_command(client, message):
         await message.reply_text("⚠️ No latest movies found or failed to fetch.")
         return
 
-    # Prepare serial-numbered titles (but don't display numbers)
+    # Prepare serial-numbered titles internally
     titles = [(i + 1, clean_text(movie.get("title", "Untitled"))) for i, movie in enumerate(movies_data)]
 
     user_id = message.from_user.id
-    user_pages[user_id] = {"titles": titles, "page": 0}
+    user_pages[user_id] = {
+        "titles": titles,
+        "page": 0,
+        "placeholder_message_id": None
+    }
 
-    await send_movies_page(client, message.chat.id, user_id, page=0)
+    # Send initial message with header and keyboard
+    reply_markup = build_movies_keyboard(titles, 0)
+    msg = await message.reply("🎬 **Latest Streaming Movies:**", reply_markup=reply_markup)
+    user_pages[user_id]["placeholder_message_id"] = msg.message_id
 
-# Send one paginated page of titles
-async def send_movies_page(client, chat_id, user_id, page):
-    page_size = 20  # 2-column layout = 10 rows
-    titles = user_pages[user_id]["titles"]
-
-    display_titles = titles  # Use list of (index, title)
-
+# Build keyboard layout for current page
+def build_movies_keyboard(titles, page):
+    page_size = 20
     start = page * page_size
     end = start + page_size
-    current_titles = display_titles[start:end]
+    current_titles = titles[start:end]
 
     keyboard = []
     row = []
     for idx, title in current_titles:
-        row.append(KeyboardButton(title))  # only display title, no index
+        row.append(KeyboardButton(title))
         if len(row) == 2:
             keyboard.append(row)
             row = []
@@ -94,17 +96,15 @@ async def send_movies_page(client, chat_id, user_id, page):
     nav_buttons = []
     if page > 0:
         nav_buttons.append(KeyboardButton("⬅️ Prev"))
-    if end < len(display_titles):
+    if end < len(titles):
         nav_buttons.append(KeyboardButton("➡️ Next"))
     if nav_buttons:
         keyboard.append(nav_buttons)
 
     keyboard.append([KeyboardButton("❌ Close")])
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-    await client.send_message(chat_id, "🎬 **Latest Streaming Movies:**", reply_markup=reply_markup)
-
-# Pagination navigation (clean - no reply)
+# Pagination navigation (clean - update keyboard only)
 @Client.on_message(filters.text & filters.regex("^(⬅️ Prev|➡️ Next)$"))
 async def paginate_movies(client, message):
     user_id = message.from_user.id
@@ -119,9 +119,24 @@ async def paginate_movies(client, message):
         user_pages[user_id]["page"] = current_page - 1
 
     await message.delete()
-    await send_movies_page(client, message.chat.id, user_id, user_pages[user_id]["page"])
 
-# Close the reply keyboard (cleaner)
+    titles = user_pages[user_id]["titles"]
+    new_markup = build_movies_keyboard(titles, user_pages[user_id]["page"])
+
+    # Edit the original message's keyboard (only if message still exists)
+    placeholder_msg_id = user_pages[user_id].get("placeholder_message_id")
+    if placeholder_msg_id:
+        try:
+            await client.edit_message_reply_markup(
+                chat_id=message.chat.id,
+                message_id=placeholder_msg_id,
+                reply_markup=new_markup
+            )
+        except:
+            # fallback: send a new message if editing fails
+            await client.send_message(message.chat.id, reply_markup=new_markup)
+
+# Close the reply keyboard
 @Client.on_message(filters.text & filters.regex("^❌ Close$"))
 async def close_keyboard(client, message):
     await message.delete()
