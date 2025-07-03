@@ -814,5 +814,11 @@ async def get_seconds(time_string):
         return value * 86400 * 365
     else:
         return 0
-
+        
+async def is_check_admin(bot, chat_id, user_id):
+    try:
+        member = await bot.get_chat_member(chat_id, user_id)
+        return member.status in [enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER]
+    except:
+        return False
 
