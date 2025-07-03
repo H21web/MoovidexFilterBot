@@ -62,11 +62,10 @@ async def admin_cmds(client, message):
     await sent_message.delete()
     await message.delete()
 
-
-@Client.on_message(filters.text("❌ Close") & filters.user(ADMINS))
+@Client.on_message(filters.regex("^❌ Close$") & filters.user(ADMINS))
 async def close_keyboard(client, message):
     await message.reply(
-        "✅ Keyboard closed.",
+        "✅ Admin Commands Closed.",
         reply_markup=ReplyKeyboardRemove()
     )
 
