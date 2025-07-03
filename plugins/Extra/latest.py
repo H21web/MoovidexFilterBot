@@ -54,7 +54,7 @@ def fetch_latest_movies():
 user_pages = {}
 
 # /latest command handler
-@Client.on_message(filters.command("latest"))
+@Client.on_message(filters.command("latest") & filters.regex("^latest$"))
 async def latest_movies_command(client, message):
     movies_data = fetch_latest_movies()
     if not movies_data:
