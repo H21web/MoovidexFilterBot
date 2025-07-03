@@ -98,7 +98,8 @@ async def send_movies_page(client, chat_id, user_id, page):
     keyboard.append([KeyboardButton("❌ Close")])
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-    return await client.send_message(chat_id, "🎬 **Latest Streaming Movies:**", reply_markup=reply_markup)
+    # Invisible character instead of visible message
+    return await client.send_message(chat_id, "‎", reply_markup=reply_markup)
 
 # Pagination navigation
 @Client.on_message(filters.text & filters.regex("^(⬅️ Prev|➡️ Next)$"))
@@ -131,4 +132,9 @@ async def paginate_movies(client, message):
 @Client.on_message(filters.text & filters.regex("^❌ Close$"))
 async def close_keyboard(client, message):
     await message.delete()
-    await client.send_message(message.chat.id, "❌ Closed", reply_markup=ReplyKeyboardRemove())
+    sent = await client.send_message(message.chat.id, "❌ Closed", reply_markup=ReplyKeyboardRemove())
+    await asyncio.sleep(10)
+    try:
+        await client.delete_messages(message.chat.id, sent.id)
+    except:
+        pass
