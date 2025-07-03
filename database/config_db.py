@@ -127,4 +127,4 @@ class Database:
         return configuration.get(key, False)
 
 
-mdb = Database(DATABASE_URI, "admin_database")
+mdb = Database(OTHER_DB_URI, "admin_database")
