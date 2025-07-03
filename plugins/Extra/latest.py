@@ -3,86 +3,83 @@ import html
 from pyrogram import Client, filters
 from pyrogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
 
-# Function to decode and clean text
+# Clean HTML/unicode characters
 def clean_text(text):
     if not text:
         return text
     text = html.unescape(text)
-    replacements = {
-        '\u2019': "'", '\u2018': "'",
-        '\u201c': '"', '\u201d': '"',
-        '\u2013': '-', '\u2014': '-',
-        '\u2026': '...'
-    }
-    for old, new in replacements.items():
-        text = text.replace(old, new)
+    text = text.replace('\u2019', "'").replace('\u2018', "'")
+    text = text.replace('\u201c', '"').replace('\u201d', '"')
+    text = text.replace('\u2013', '-').replace('\u2014', '-')
+    text = text.replace('\u2026', '...')
     return text.strip()
 
-# Fetch all latest movies (handles pagination)
+# Fetch all movies from all pages (no filtering)
 def fetch_latest_movies():
     base_url = "https://www.binged.com/wp-json/binged-api/v1/movies?mode=streaming-week"
     headers = {
-        'User-Agent': 'Mozilla/5.0',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36',
         'Referer': 'https://www.binged.com/'
     }
 
     all_movies = []
-    page = 1
+    current_page = 1
 
     while True:
         try:
-            url = f"{base_url}&page={page}" if page > 1 else base_url
+            url = f"{base_url}&page={current_page}" if current_page > 1 else base_url
             response = requests.get(url, headers=headers, timeout=10)
             if response.status_code != 200:
                 break
 
             data = response.json()
-            page_movies = data.get("data", [])
-            if not page_movies:
+            page_movies = data.get('data', [])
+            all_movies.extend(page_movies)
+
+            pagination = data.get("pagination", {})
+            total_pages = pagination.get("total_pages", 1)
+
+            if current_page >= total_pages:
                 break
 
-            all_movies.extend(page_movies)
-            total_pages = data.get("pagination", {}).get("total_pages", 1)
-            if page >= total_pages:
-                break
-            page += 1
+            current_page += 1
 
         except Exception as e:
-            print("Error fetching movies:", e)
+            print("Error while fetching movies:", e)
             break
 
     return all_movies
 
-# Global dictionary to track users' movie pages
+# Store paginated movie data and last message per user
 user_pages = {}
 
-# Handle /latest command
+# /latest command handler
 @Client.on_message(filters.command("latest"))
 async def latest_movies_command(client, message):
-    user_id = message.from_user.id
-    movies = fetch_latest_movies()
-
-    if not movies:
-        await message.reply_text("⚠️ Failed to fetch latest movies.")
+    movies_data = fetch_latest_movies()
+    if not movies_data:
+        await message.reply_text("⚠️ No latest movies found or failed to fetch.")
         return
 
-    # Clean and prepare titles with internal serial (not shown)
-    titles = [(i + 1, clean_text(movie.get("title", "Untitled"))) for i, movie in enumerate(movies)]
-    user_pages[user_id] = {"titles": titles, "page": 0}
+    titles = [clean_text(movie.get("title", "Untitled")) for movie in movies_data]
+    user_id = message.from_user.id
+    user_pages[user_id] = {"titles": titles, "page": 0, "message_id": None}
 
-    await send_movies_page(client, message.chat.id, user_id, 0)
+    sent = await send_movies_page(client, message.chat.id, user_id, page=0)
+    user_pages[user_id]["message_id"] = sent.id
 
-# Send one page of movies as keyboard
+# Send one paginated page of titles
 async def send_movies_page(client, chat_id, user_id, page):
+    page_size = 20  # 2-column layout = 10 rows
     titles = user_pages[user_id]["titles"]
-    page_size = 20  # 2 columns, 10 rows
+
     start = page * page_size
     end = start + page_size
     current_titles = titles[start:end]
 
     keyboard = []
     row = []
-    for _, title in current_titles:
+    for title in current_titles:
         row.append(KeyboardButton(title))
         if len(row) == 2:
             keyboard.append(row)
@@ -90,22 +87,20 @@ async def send_movies_page(client, chat_id, user_id, page):
     if row:
         keyboard.append(row)
 
-    nav_row = []
+    nav_buttons = []
     if page > 0:
-        nav_row.append(KeyboardButton("⬅️ Prev"))
+        nav_buttons.append(KeyboardButton("⬅️ Prev"))
     if end < len(titles):
-        nav_row.append(KeyboardButton("➡️ Next"))
-    if nav_row:
-        keyboard.append(nav_row)
+        nav_buttons.append(KeyboardButton("➡️ Next"))
+    if nav_buttons:
+        keyboard.append(nav_buttons)
 
     keyboard.append([KeyboardButton("❌ Close")])
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, placeholder="𝖧𝖾𝗋𝖾 𝖺𝗋𝖾 𝗍𝗁𝖾 𝗅𝖺𝗍𝖾𝗌𝗍 𝗎𝗉𝗅𝗈𝖺𝖽𝗌!")
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-    # Send and delete placeholder message
-    placeholder = await client.send_message(chat_id, "🎬 Latest Streaming Movies:", reply_markup=reply_markup)
-    await placeholder.delete()
+    return await client.send_message(chat_id, "🎬 **Latest Streaming Movies:**", reply_markup=reply_markup)
 
-# Handle next/prev pagination buttons
+# Pagination navigation
 @Client.on_message(filters.text & filters.regex("^(⬅️ Prev|➡️ Next)$"))
 async def paginate_movies(client, message):
     user_id = message.from_user.id
@@ -119,11 +114,21 @@ async def paginate_movies(client, message):
     elif message.text == "⬅️ Prev" and current_page > 0:
         user_pages[user_id]["page"] = current_page - 1
 
+    # Delete user tap and bot's previous message
     await message.delete()
-    await send_movies_page(client, message.chat.id, user_id, user_pages[user_id]["page"])
+    old_message_id = user_pages[user_id].get("message_id")
+    if old_message_id:
+        try:
+            await client.delete_messages(message.chat.id, old_message_id)
+        except:
+            pass
 
-# Handle Close button
+    # Send new paginated message
+    sent = await send_movies_page(client, message.chat.id, user_id, user_pages[user_id]["page"])
+    user_pages[user_id]["message_id"] = sent.id
+
+# Close the reply keyboard
 @Client.on_message(filters.text & filters.regex("^❌ Close$"))
 async def close_keyboard(client, message):
     await message.delete()
-    await client.send_message(message.chat.id, ".", reply_markup=ReplyKeyboardRemove())
+    await client.send_message(message.chat.id, "❌ CLosed", reply_markup=ReplyKeyboardRemove())
