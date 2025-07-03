@@ -16,7 +16,7 @@ def clean_text(text):
 
 # Fetch all movies, filter to latest streaming releases (max 30)
 def fetch_latest_movies():
-    url = "https://www.binged.com/wp-json/binged-api/v1/movies"
+    url = "https://www.binged.com/wp-json/binged-api/v1/movies?mode=streaming-week"
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json",
