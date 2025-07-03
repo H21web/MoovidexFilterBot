@@ -14,7 +14,7 @@ def clean_text(text):
     text = text.replace('\u2026', '...')
     return text.strip()
 
-# Fetch all movies, keep all streaming releases
+# Fetch all latest movies (no mode filter)
 def fetch_latest_movies():
     url = "https://www.binged.com/wp-json/binged-api/v1/movies?mode=streaming-week"
     headers = {
@@ -26,7 +26,7 @@ def fetch_latest_movies():
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            return [m for m in data.get('data', []) if m.get("mode") == "Streaming"]
+            return data.get('data', [])  # No filtering by mode
     except Exception as e:
         print("Error fetching latest movies:", e)
     return []
