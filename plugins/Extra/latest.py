@@ -99,7 +99,7 @@ async def send_movies_page(client, chat_id, user_id, page):
         keyboard.append(nav_row)
 
     keyboard.append([KeyboardButton("❌ Close")])
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, placeholder="𝖧𝖾𝗋𝖾 𝖺𝗋𝖾 𝗍𝗁𝖾 𝗅𝖺𝗍𝖾𝗌𝗍 𝗎𝗉𝗅𝗈𝖺𝖽𝗌!")
 
     # Send and delete placeholder message
     placeholder = await client.send_message(chat_id, "🎬 Latest Streaming Movies:", reply_markup=reply_markup)
