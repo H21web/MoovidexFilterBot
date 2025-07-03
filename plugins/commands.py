@@ -20,6 +20,7 @@ from database.topdb import JsTopDB
 from TechVJ.util.file_properties import get_name, get_hash, get_media_file_size
 logger = logging.getLogger(__name__)
 
+movie_series_db = JsTopDB(OTHER_DB_URI)
 BATCH_FILES = {}
 join_db = JoinReqs
 
