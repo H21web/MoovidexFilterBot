@@ -49,7 +49,7 @@ async def start(client, message):
             buttons = [[
                 InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
             ],[
-                InlineKeyboardButton('⚙️ Pʟᴜɢɪɴs', callback_data='help'),
+                InlineKeyboardButton('⚙️ Top Search', callback_data='mostsearch'),
                 InlineKeyboardButton('🎰 Sᴘɪɴ & Eᴀʀɴ', callback_data='spin')
             ],
               [
@@ -61,7 +61,7 @@ async def start(client, message):
             buttons = [[
                 InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
             ],[
-                InlineKeyboardButton('⚙️ Pʟᴜɢɪɴs', callback_data='help'),
+                InlineKeyboardButton('⚙️ Top Search', callback_data='mostsearch'),
                 InlineKeyboardButton('🎰 sᴘɪɴ & ᴇᴀʀɴ', callback_data='spin')
             ],
                 
@@ -132,7 +132,7 @@ async def start(client, message):
             buttons = [[
                 InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
             ],[
-                InlineKeyboardButton('⚙️ Pʟᴜɢɪɴs', callback_data='help'),
+                InlineKeyboardButton('⚙️ Top Search', callback_data='mostsearch'),
                 InlineKeyboardButton('🎰 Sᴘɪɴ & Eᴀʀɴ', callback_data='spin')
             ],
               [
@@ -183,14 +183,14 @@ async def start(client, message):
             if PREMIUM_AND_REFERAL_MODE == True:
                 buttons = [
                     [InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')],
-                    [InlineKeyboardButton('⚙️ Pʟᴜɢɪɴs', callback_data='help'), InlineKeyboardButton('🎰 Sᴘɪɴ & Eᴀʀɴ', callback_data='spin')],
+                    [InlineKeyboardButton('⚙️ Top Search', callback_data='mostsearch'), InlineKeyboardButton('🎰 Sᴘɪɴ & Eᴀʀɴ', callback_data='spin')],
                     [InlineKeyboardButton('💳 Gᴇᴛ Fʀᴇᴇ Oʀ Pᴀɪᴅ Sᴜʙsᴄʀɪᴘᴛɪᴏɴ 🛒', callback_data='subscription')],
                     [InlineKeyboardButton('🎀 Jᴏɪɴ Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ 🎀', url=CHNL_LNK)]
                 ]
             else:
                 buttons = [
                     [InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')],
-                    [InlineKeyboardButton('⚙️ Pʟᴜɢɪɴs', callback_data='help'), InlineKeyboardButton('🎰 Sᴘɪɴ & Eᴀʀɴ', callback_data='spin')],
+                    [InlineKeyboardButton('⚙️ Top Search', callback_data='mostsearch'), InlineKeyboardButton('🎰 Sᴘɪɴ & Eᴀʀɴ', callback_data='spin')],
                     [InlineKeyboardButton('🎀 Jᴏɪɴ Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ 🎀', url=CHNL_LNK)]
                 ]
            
@@ -611,6 +611,39 @@ async def channel_info(bot, message):
             f.write(text)
         await message.reply_document(file)
         os.remove(file)
+
+
+@Client.on_callback_query(filters.regex("mostsearch"))
+async def most(client, callback_query):
+    def is_alphanumeric(string):
+        return bool(re.match('^[a-zA-Z0-9 ]*$', string))
+    limit = 20  
+    top_messages = await mdb.get_top_messages(limit)
+    seen_messages = set()
+    truncated_messages = []
+    for msg in top_messages:
+        msg_lower = msg.lower()
+        if msg_lower not in seen_messages and is_alphanumeric(msg):
+            seen_messages.add(msg_lower)
+            
+            if len(msg) > 35:
+                truncated_messages.append(msg[:32] + "...")
+            else:
+                truncated_messages.append(msg)
+
+   
+    keyboard = [truncated_messages[i:i+2] for i in range(0, len(truncated_messages), 2)]
+    
+    reply_markup = ReplyKeyboardMarkup(
+        keyboard, 
+        one_time_keyboard=True, 
+        resize_keyboard=True, 
+        placeholder="Most searches of the day"
+    )
+    
+    await callback_query.message.reply_text("<b>Hᴇʀᴇ ɪꜱ ᴛʜᴇ ᴍᴏꜱᴛ ꜱᴇᴀʀᴄʜᴇꜱ ʟɪꜱᴛ 👇</b>", reply_markup=reply_markup)
+    await callback_query.answer()
+
 
 
 @Client.on_message(filters.command('logs') & filters.user(ADMINS))
