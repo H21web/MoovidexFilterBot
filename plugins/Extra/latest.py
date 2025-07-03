@@ -18,21 +18,17 @@ def clean_text(text):
 def fetch_latest_movies():
     url = "https://www.binged.com/wp-json/binged-api/v1/movies?mode=streaming-week"
     headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json",
-        "Referer": "https://www.binged.com/",
-        "Origin": "https://www.binged.com"
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36',
+        'Referer': 'https://www.binged.com/'
     }
+
     try:
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
-            all_data = response.json().get("data", [])
-            streaming_data = [m for m in all_data if m.get("mode") == "Streaming"]
-            return streaming_data  # Keep order, newest is first
-        else:
-            print("Status:", response.status_code)
+            data = response.json()
+            return [m for m in data.get('data', []) if m.get("mode") == "Streaming"]
     except Exception as e:
-        print("Error fetching movies:", e)
+        print("Error fetching latest movies:", e)
     return []
 
 # Store paginated movie data per user
