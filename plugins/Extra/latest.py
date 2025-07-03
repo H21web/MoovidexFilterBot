@@ -131,4 +131,4 @@ async def paginate_movies(client, message):
 @Client.on_message(filters.text & filters.regex("^❌ Close$"))
 async def close_keyboard(client, message):
     await message.delete()
-    await client.send_message(message.chat.id, "❌ CLosed", reply_markup=ReplyKeyboardRemove())
+    await client.send_message(message.chat.id, "❌ Closed", reply_markup=ReplyKeyboardRemove())
