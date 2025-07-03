@@ -1,7 +1,7 @@
 import requests
 import html
 from pyrogram import Client, filters
-from pyrogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
+from pyrogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, CallbackQuery
 
 # Clean HTML/unicode characters
 def clean_text(text):
