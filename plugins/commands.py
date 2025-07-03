@@ -52,8 +52,8 @@ async def start(client, message):
             buttons = [[
                 InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
             ],[
-                InlineKeyboardButton('⚙️ Top Search', callback_data='mostsearch'),
-                InlineKeyboardButton('🎰 Sᴘɪɴ & Eᴀʀɴ', callback_data='spin')
+                InlineKeyboardButton('🔍 Top Search', callback_data='mostsearch'),
+                InlineKeyboardButton('🎰 New Releases', callback_data='latest')
             ],
               [
                 InlineKeyboardButton('💳 Gᴇᴛ Fʀᴇᴇ Oʀ Pᴀɪᴅ Sᴜʙsᴄʀɪᴘᴛɪᴏɴ 🛒', callback_data='subscription')
@@ -65,7 +65,7 @@ async def start(client, message):
                 InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
             ],[
                 InlineKeyboardButton('⚙️ Top Search', callback_data='mostsearch'),
-                InlineKeyboardButton('🎰 sᴘɪɴ & ᴇᴀʀɴ', callback_data='spin')
+                InlineKeyboardButton('🎰 New Releases', callback_data='latest')
             ],
                 
                 
@@ -136,7 +136,7 @@ async def start(client, message):
                 InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
             ],[
                 InlineKeyboardButton('⚙️ Top Search', callback_data='mostsearch'),
-                InlineKeyboardButton('🎰 Sᴘɪɴ & Eᴀʀɴ', callback_data='spin')
+                InlineKeyboardButton('🎰 New Releases', callback_data='latest')
             ],
               [
                 InlineKeyboardButton('💳 Gᴇᴛ Fʀᴇᴇ Oʀ Pᴀɪᴅ Sᴜʙsᴄʀɪᴘᴛɪᴏɴ 🛒', callback_data='subscription')
@@ -148,7 +148,7 @@ async def start(client, message):
                 InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
             ],[
                 
-                InlineKeyboardButton('🎰 Sᴘɪɴ & Eᴀʀɴ', callback_data='spin')
+                InlineKeyboardButton('🎰 New Releases', callback_data='latest')
             ],
                 
             [
@@ -186,14 +186,14 @@ async def start(client, message):
             if PREMIUM_AND_REFERAL_MODE == True:
                 buttons = [
                     [InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')],
-                    [InlineKeyboardButton('⚙️ Top Search', callback_data='mostsearch'), InlineKeyboardButton('🎰 Sᴘɪɴ & Eᴀʀɴ', callback_data='spin')],
+                    [InlineKeyboardButton('⚙️ Top Search', callback_data='mostsearch'), InlineKeyboardButton('🎰 New Releases', callback_data='latest')],
                     [InlineKeyboardButton('💳 Gᴇᴛ Fʀᴇᴇ Oʀ Pᴀɪᴅ Sᴜʙsᴄʀɪᴘᴛɪᴏɴ 🛒', callback_data='subscription')],
                     [InlineKeyboardButton('🎀 Jᴏɪɴ Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ 🎀', url=CHNL_LNK)]
                 ]
             else:
                 buttons = [
                     [InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')],
-                    [InlineKeyboardButton('⚙️ Top Search', callback_data='mostsearch'), InlineKeyboardButton('🎰 Sᴘɪɴ & Eᴀʀɴ', callback_data='spin')],
+                    [InlineKeyboardButton('⚙️ Top Search', callback_data='mostsearch'), InlineKeyboardButton('🎰 New Releases', callback_data='latest')],
                     [InlineKeyboardButton('🎀 Jᴏɪɴ Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ 🎀', url=CHNL_LNK)]
                 ]
            
