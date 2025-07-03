@@ -69,6 +69,21 @@ async def latest_movies_command(client, message):
     user_pages[user_id]["message_id"] = sent.id
     
 
+@Client.on_message(filters.command("latest"))
+async def latest_movies_command(client, message):
+    movies_data = fetch_latest_movies()
+    if not movies_data:
+        await message.reply_text("⚠️ No latest movies found or failed to fetch.")
+        return
+
+    titles = [clean_text(movie.get("title", "Untitled")) for movie in movies_data]
+    user_id = message.from_user.id
+    user_pages[user_id] = {"titles": titles, "page": 0, "message_id": None}
+
+    sent = await send_movies_page(client, message.chat.id, user_id, page=0)
+    user_pages[user_id]["message_id"] = sent.id
+
+# Send one paginated page of titles
 async def send_movies_page(client, chat_id, user_id, page):
     page_size = 20  # 2-column layout = 10 rows
     titles = user_pages[user_id]["titles"]
@@ -98,7 +113,7 @@ async def send_movies_page(client, chat_id, user_id, page):
     keyboard.append([KeyboardButton("❌ Close")])
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-    return await client.send_message(chat_id, "🎬 **Latest Streaming Movies:**", reply_markup=reply_m
+    return await client.send_message(chat_id, "🎬 **Latest Streaming Movies:**", reply_markup=reply_markup)
                                      
 # Pagination navigation
 @Client.on_message(filters.text & filters.regex("^(⬅️ Prev|➡️ Next)$"))
