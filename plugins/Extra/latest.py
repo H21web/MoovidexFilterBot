@@ -98,7 +98,7 @@ async def send_movies_page(client, chat_id, user_id, page):
     keyboard.append([KeyboardButton("❌ Close")])
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-    #return await client.send_message(chat_id, "🎬 **Latest Streaming Movies:**", reply_markup=reply_m
+    return #await client.send_message(chat_id, "🎬 **Latest Streaming Movies:**", reply_markup=reply_m
                                      
 # Pagination navigation
 @Client.on_message(filters.text & filters.regex("^(⬅️ Prev|➡️ Next)$"))
