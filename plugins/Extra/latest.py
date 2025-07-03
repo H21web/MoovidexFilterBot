@@ -14,11 +14,11 @@ def clean_text(text):
     text = text.replace('\u2026', '...')
     return text.strip()
 
-# Fetch latest movies from Binged API
+# Fetch all movies, filter to latest streaming releases (max 30)
 def fetch_latest_movies():
     url = "https://www.binged.com/wp-json/binged-api/v1/movies"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "User-Agent": "Mozilla/5.0",
         "Accept": "application/json",
         "Referer": "https://www.binged.com/",
         "Origin": "https://www.binged.com"
@@ -26,12 +26,14 @@ def fetch_latest_movies():
     try:
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
-            data = response.json()
-            return data.get("data", [])
+            all_data = response.json().get("data", [])
+            # Filter only streaming releases
+            streaming_data = [m for m in all_data if m.get("mode") == "Streaming"]
+            return list(reversed(streaming_data))[:30]  # Newest first, max 30
         else:
             print("Status:", response.status_code)
     except Exception as e:
-        print("Error fetching latest movies:", e)
+        print("Error fetching movies:", e)
     return []
 
 # Store paginated movies per user
@@ -45,16 +47,16 @@ async def latest_movies_command(client, message):
         await message.reply_text("⚠️ No latest movies found or failed to fetch.")
         return
 
-    titles = [clean_text(movie.get("title", "Untitled")) for movie in reversed(movies_data)]
+    titles = [clean_text(movie.get("title", "Untitled")) for movie in movies_data]
     user_id = message.from_user.id
-    user_pages[user_id] = {"titles": titles[:30], "page": 0}  # Only max 30 titles
+    user_pages[user_id] = {"titles": titles, "page": 0}
 
     await send_movies_page(client, message.chat.id, user_id, page=0)
 
+# Send paginated page
 async def send_movies_page(client, chat_id, user_id, page):
-    page_size = 20  # 20 buttons max (10 rows of 2)
+    page_size = 20  # 2-column layout = max 10 rows per page
     titles = user_pages[user_id]["titles"]
-    total_pages = (len(titles) + page_size - 1) // page_size
 
     start = page * page_size
     end = start + page_size
@@ -83,7 +85,7 @@ async def send_movies_page(client, chat_id, user_id, page):
 
     await client.send_message(chat_id, "🎬 **Latest Streaming Movies:**", reply_markup=reply_markup)
 
-# Pagination navigation
+# Pagination buttons
 @Client.on_message(filters.text & filters.regex("^(⬅️ Prev|➡️ Next)$"))
 async def paginate_movies(client, message):
     user_id = message.from_user.id
@@ -99,7 +101,7 @@ async def paginate_movies(client, message):
 
     await send_movies_page(client, message.chat.id, user_id, user_pages[user_id]["page"])
 
-# ❌ Close button - silent close
+# ❌ Close button - reply and remove keyboard
 @Client.on_message(filters.text & filters.regex("^❌ Close$"))
 async def close_keyboard(client, message):
-    await message.reply(reply_markup=ReplyKeyboardRemove())
+    await message.reply_text("✅ Closed.", reply_markup=ReplyKeyboardRemove())
