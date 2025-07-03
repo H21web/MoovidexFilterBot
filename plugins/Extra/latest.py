@@ -99,7 +99,7 @@ async def send_movies_page(client, chat_id, user_id, page):
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
     # Invisible character instead of visible message
-    return await client.send_message(chat_id, "‎", reply_markup=reply_markup)
+    #return await client.send_message(chat_id, "‎", reply_markup=reply_markup)
 
 # Pagination navigation
 @Client.on_message(filters.text & filters.regex("^(⬅️ Prev|➡️ Next)$"))
