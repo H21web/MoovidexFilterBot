@@ -50,7 +50,7 @@ async def admin_cmds(client, message):
         [KeyboardButton("/del_file"), KeyboardButton("/delete")],
         [KeyboardButton("/deletefiles"), KeyboardButton("/deleteall")],
         [KeyboardButton("All These Commands Can Be Used Only By Admins.")],
-        [KeyboardButton("❌ Close")]  # Close button added
+        [KeyboardButton("❌ Close Panel")]  # Close button added
     ]
     reply_markup = ReplyKeyboardMarkup(buttons, resize_keyboard=True)
 
@@ -62,10 +62,10 @@ async def admin_cmds(client, message):
     await sent_message.delete()
     await message.delete()
 
-@Client.on_message(filters.regex("^❌ Close$") & filters.user(ADMINS))
+@Client.on_message(filters.regex("^❌ Closepanel$") & filters.user(ADMINS))
 async def close_keyboard(client, message):
     await message.reply(
-        "✅ Admin Commands Closed.",
+        "✅ closed.",
         reply_markup=ReplyKeyboardRemove()
     )
 
