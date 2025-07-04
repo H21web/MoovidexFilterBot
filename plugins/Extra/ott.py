@@ -12,7 +12,7 @@ PLATFORM_IMAGES = {
     "amazon": "https://envs.sh/FI0.jpg",
     "netflix": "https://envs.sh/FIS.jpg",
     "zee5": "https://envs.sh/FIW.jpg",
-    "Aha Video": "https://envs.sh/FIB.jpg",
+    "aha video": "https://envs.sh/FIB.jpg",
     "hoichoi": "https://envs.sh/FII.jpg",
     "jio cinema": "https://envs.sh/FIn.jpg",
     "sun nxt": "https://envs.sh/FIT.jpg",
@@ -75,8 +75,13 @@ async def ott_command_handler(client, message):
     buttons.append([InlineKeyboardButton("🔙 Close", callback_data="ott_close")])
     markup = InlineKeyboardMarkup(buttons)
 
-    await message.reply_text("📺 **Select a Platform to Browse:**", reply_markup=markup)
+    sample_image = "https://envs.sh/FI0.jpg"  # Example image (e.g., Amazon)
+    caption = "📺 **Select a Platform to Browse:**\nChoose a streaming platform to explore available movies."
 
+    try:
+        await message.reply_photo(photo=sample_image, caption=caption, reply_markup=markup)
+    except:
+        await message.reply_text(caption, reply_markup=markup)
 # Show movies for selected platform
 @Client.on_callback_query(filters.regex("ott_platform_"))
 async def platform_selected(client, callback_query):
