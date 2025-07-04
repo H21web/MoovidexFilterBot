@@ -8,6 +8,16 @@ from utils import temp
 OTT_URL = "https://www.binged.com/wp-json/binged-api/v1/whats-streaming"
 OTT_USER_CACHE = {}  # user_id: {platforms, selected_platform, page}
 
+PLATFORM_IMAGES = {
+    "amazon": "https://envs.sh/FI0.jpg",
+    "netflix": "https://envs.sh/FIS.jpg",
+    "zee 5": "https://envs.sh/FIW.jpg",
+    "aha": "https://envs.sh/FIB.jpg",
+    "hoichoi": "https://envs.sh/FII.jpg",
+    "jio cinema": "https://envs.sh/FIn.jpg",
+    "sun nxt": "https://envs.sh/FIT.jpg",
+}
+
 # Utility to clean up titles
 def clean_text(text):
     if not text:
@@ -62,7 +72,7 @@ async def ott_command_handler(client, message):
         [InlineKeyboardButton(clean_text(p['title']), callback_data=f"ott_platform_{i}")]
         for i, p in enumerate(platforms)
     ]
-    buttons.append([InlineKeyboardButton("❌ Close", callback_data="ott_close")])
+    buttons.append([InlineKeyboardButton("🔙 Close", callback_data="ott_close")])
     markup = InlineKeyboardMarkup(buttons)
 
     await message.reply_text("📺 **Select a Platform to Browse:**", reply_markup=markup)
@@ -87,7 +97,9 @@ async def show_platform_page(client, message, user_id):
     cache = OTT_USER_CACHE[user_id]
     platform = cache['selected_platform']
     movies = platform.get("movies", [])
-    logo = platform.get("platform_logo")
+    title = platform.get("title", "Unknown Platform")
+    platform_key = title.lower().strip()
+    logo = PLATFORM_IMAGES.get(platform_key, "")
     page = cache.get('page', 0)
     page_size = 8
 
@@ -109,16 +121,19 @@ async def show_platform_page(client, message, user_id):
         buttons.append(nav_buttons)
 
     buttons.append([InlineKeyboardButton("🔙 Back to Menu", callback_data="ott_back")])
-    buttons.append([InlineKeyboardButton("❌ Close", callback_data="ott_close")])
 
     markup = InlineKeyboardMarkup(buttons)
 
-    caption = f"🎬 **{platform['title']} Movies**\n\n🖼️ [Platform Logo]({logo})\n\nPage {page + 1} of {(len(movies)-1)//page_size + 1}"
+    caption = f"🎬 **{platform['title']} Movies**\n\nPage {page + 1} of {(len(movies)-1)//page_size + 1}"
 
     try:
-        await message.edit_text(caption, reply_markup=markup, disable_web_page_preview=False)
+        await message.edit_text(caption, reply_markup=markup, disable_web_page_preview=True)
+        if logo:
+            await message.reply_photo(logo)
     except:
-        await message.reply_text(caption, reply_markup=markup, disable_web_page_preview=False)
+        await message.reply_text(caption, reply_markup=markup, disable_web_page_preview=True)
+        if logo:
+            await message.reply_photo(logo)
 
 @Client.on_callback_query(filters.regex("ott_next"))
 async def ott_next_page(client, callback_query):
@@ -145,7 +160,7 @@ async def ott_back_to_main(client, callback_query):
         [InlineKeyboardButton(clean_text(p['title']), callback_data=f"ott_platform_{i}")]
         for i, p in enumerate(cache['platforms'])
     ]
-    buttons.append([InlineKeyboardButton("❌ Close", callback_data="ott_close")])
+    buttons.append([InlineKeyboardButton("🔙 Close", callback_data="ott_close")])
     markup = InlineKeyboardMarkup(buttons)
     await callback_query.message.edit_text("📺 **Select a Platform to Browse:**", reply_markup=markup)
 
@@ -155,3 +170,4 @@ async def ott_close_handler(client, callback_query):
         await callback_query.message.delete()
     except:
         await callback_query.answer("⚠️ Unable to close.")
+        
