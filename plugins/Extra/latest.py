@@ -1,5 +1,6 @@
 import requests
 import html
+import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, CallbackQuery
 
