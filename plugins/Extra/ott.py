@@ -1,5 +1,6 @@
 import requests
 import html
+import time
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
@@ -18,33 +19,53 @@ def clean_text(text):
     text = text.replace('\u2026', '...')
     return text
 
+# Helper to fetch OTT data with retry
+def fetch_ott_data():
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://www.binged.com/",
+        "Origin": "https://www.binged.com"
+    }
+    try:
+        response = requests.get(OTT_URL, headers=headers, timeout=10)
+        if response.status_code == 520:
+            time.sleep(2)
+            response = requests.get(OTT_URL, headers=headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        return {"error": str(e)}
+
 # /ott command handler
 @Client.on_message(filters.command("ott"))
 async def ott_command_handler(client, message):
     user_id = message.from_user.id
-    try:
-        response = requests.get(OTT_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        if not isinstance(data, dict):
-            raise ValueError("Invalid response format")
+    data = fetch_ott_data()
 
-        platforms = list(data.values())
-        if not platforms:
-            raise ValueError("No platforms available")
+    if "error" in data:
+        await message.reply_text(f"⚠️ Failed to fetch OTT platforms.\nError: {data['error']}")
+        return
 
-        OTT_USER_CACHE[user_id] = {"platforms": platforms}
+    if not isinstance(data, dict):
+        await message.reply_text("⚠️ Invalid response received from OTT source.")
+        return
 
-        buttons = [
-            [InlineKeyboardButton(clean_text(p['title']), callback_data=f"ott_platform_{i}")]
-            for i, p in enumerate(platforms)
-        ]
-        buttons.append([InlineKeyboardButton("❌ Close", callback_data="ott_close")])
-        markup = InlineKeyboardMarkup(buttons)
+    platforms = list(data.values())
+    if not platforms:
+        await message.reply_text("🚫 No platforms found.")
+        return
 
-        await message.reply_text("📺 **Select a Platform to Browse:**", reply_markup=markup)
-    except Exception as e:
-        await message.reply_text(f"⚠️ Failed to fetch OTT platforms.\nError: {str(e)}")
+    OTT_USER_CACHE[user_id] = {"platforms": platforms}
+
+    buttons = [
+        [InlineKeyboardButton(clean_text(p['title']), callback_data=f"ott_platform_{i}")]
+        for i, p in enumerate(platforms)
+    ]
+    buttons.append([InlineKeyboardButton("❌ Close", callback_data="ott_close")])
+    markup = InlineKeyboardMarkup(buttons)
+
+    await message.reply_text("📺 **Select a Platform to Browse:**", reply_markup=markup)
 
 # Show movies for selected platform
 @Client.on_callback_query(filters.regex("ott_platform_"))
@@ -92,7 +113,7 @@ async def show_platform_page(client, message, user_id):
 
     markup = InlineKeyboardMarkup(buttons)
 
-    caption = f"🎬 **{platform['title']} Movies**\n🖼️ [Platform Logo]({logo})\n\nPage {page + 1} of {(len(movies)-1)//page_size + 1}"
+    caption = f"🎬 **{platform['title']} Movies**\n\n🖼️ [Platform Logo]({logo})\n\nPage {page + 1} of {(len(movies)-1)//page_size + 1}"
 
     try:
         await message.edit_text(caption, reply_markup=markup, disable_web_page_preview=False)
