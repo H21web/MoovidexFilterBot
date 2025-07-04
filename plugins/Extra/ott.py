@@ -11,8 +11,8 @@ OTT_USER_CACHE = {}  # user_id: {platforms, selected_platform, page}
 PLATFORM_IMAGES = {
     "amazon": "https://envs.sh/FI0.jpg",
     "netflix": "https://envs.sh/FIS.jpg",
-    "zee5": "https://envs.sh/FIW.jpg",
-    "aha video": "https://envs.sh/FIB.jpg",
+    "zee 5": "https://envs.sh/FIW.jpg",
+    "aha": "https://envs.sh/FIB.jpg",
     "hoichoi": "https://envs.sh/FII.jpg",
     "jio cinema": "https://envs.sh/FIn.jpg",
     "sun nxt": "https://envs.sh/FIT.jpg",
@@ -75,13 +75,8 @@ async def ott_command_handler(client, message):
     buttons.append([InlineKeyboardButton("🔙 Close", callback_data="ott_close")])
     markup = InlineKeyboardMarkup(buttons)
 
-    sample_image = "https://envs.sh/FI0.jpg"  # Example image (e.g., Amazon)
-    caption = "📺 **Select a Platform to Browse:**\nChoose a streaming platform to explore available movies."
+    await message.reply_text("📺 **Select a Platform to Browse:**", reply_markup=markup)
 
-    try:
-        await message.reply_photo(photo=sample_image, caption=caption, reply_markup=markup)
-    except:
-        await message.reply_text(caption, reply_markup=markup)
 # Show movies for selected platform
 @Client.on_callback_query(filters.regex("ott_platform_"))
 async def platform_selected(client, callback_query):
@@ -95,10 +90,12 @@ async def platform_selected(client, callback_query):
     platform = cache['platforms'][index]
     cache['selected_platform'] = platform
     cache['page'] = 0
-    await show_platform_page(client, callback_query.message, user_id)
+
+    await callback_query.message.delete()
+    await show_platform_page(client, callback_query.message, user_id, send_as_new=True)
 
 # Pagination - show a page of movies
-async def show_platform_page(client, message, user_id):
+async def show_platform_page(client, message, user_id, send_as_new=False):
     cache = OTT_USER_CACHE[user_id]
     platform = cache['selected_platform']
     movies = platform.get("movies", [])
@@ -128,30 +125,32 @@ async def show_platform_page(client, message, user_id):
     buttons.append([InlineKeyboardButton("🔙 Back to Menu", callback_data="ott_back")])
 
     markup = InlineKeyboardMarkup(buttons)
-
     caption = f"🎬 **{platform['title']} Movies**\n\nPage {page + 1} of {(len(movies)-1)//page_size + 1}"
 
-    try:
-        await message.edit_text(caption, reply_markup=markup, disable_web_page_preview=True)
-        if logo:
-            await message.reply_photo(logo)
-    except:
-        await message.reply_text(caption, reply_markup=markup, disable_web_page_preview=True)
-        if logo:
-            await message.reply_photo(logo)
+    if logo:
+        await client.send_photo(
+            message.chat.id,
+            photo=logo,
+            caption=caption,
+            reply_markup=markup
+        )
+    else:
+        await client.send_message(message.chat.id, text=caption, reply_markup=markup)
 
 @Client.on_callback_query(filters.regex("ott_next"))
 async def ott_next_page(client, callback_query):
     user_id = callback_query.from_user.id
     OTT_USER_CACHE[user_id]['page'] += 1
-    await show_platform_page(client, callback_query.message, user_id)
+    await callback_query.message.delete()
+    await show_platform_page(client, callback_query.message, user_id, send_as_new=True)
     await callback_query.answer()
 
 @Client.on_callback_query(filters.regex("ott_prev"))
 async def ott_prev_page(client, callback_query):
     user_id = callback_query.from_user.id
     OTT_USER_CACHE[user_id]['page'] -= 1
-    await show_platform_page(client, callback_query.message, user_id)
+    await callback_query.message.delete()
+    await show_platform_page(client, callback_query.message, user_id, send_as_new=True)
     await callback_query.answer()
 
 @Client.on_callback_query(filters.regex("ott_back"))
