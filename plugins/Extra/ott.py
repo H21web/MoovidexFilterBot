@@ -6,7 +6,7 @@ from pyrogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton, Message
 )
 
-# Clean HTML/unicode characters
+# Clean text from HTML
 def clean_text(text):
     if not text:
         return text
@@ -15,158 +15,146 @@ def clean_text(text):
     text = text.replace('\u201c', '"').replace('\u201d', '"')
     return text.strip()
 
-# Fetch OTT platform and movie data
+# Fetch data from Binged API
 def fetch_ott_data():
     url = "https://www.binged.com/wp-json/binged-api/v1/whats-streaming"
     headers = {
         'User-Agent': 'Mozilla/5.0',
-        'Referer': 'https://www.binged.com/'
+        'Referer': 'https://www.binged.com/',
+        'Accept': 'application/json'
     }
     try:
         response = requests.get(url, headers=headers, timeout=10)
         return response.json() if response.status_code == 200 else {}
     except Exception as e:
-        print("Error fetching OTT data:", e)
+        print("[OTT] Fetch Error:", e)
         return {}
 
-# Store user session data
-user_ott_data = {}
+# Per-user state
+ott_sessions = {}
 
-# /ott command
-@Client.on_message(filters.command("ott"))
-async def show_platforms(client, message):
+# OTT command trigger
+@Client.on_message(filters.command("ott") & filters.private)
+async def ott_command_handler(client, message):
     user_id = message.from_user.id
     data = fetch_ott_data()
+
     if not data:
-        await message.reply("⚠️ Failed to fetch OTT data.")
+        await message.reply("⚠️ Could not fetch OTT data. Try again later.")
         return
 
-    user_ott_data[user_id] = {
+    ott_sessions[user_id] = {
         "data": data,
-        "platform": None,
+        "platform_key": None,
         "page": 0,
         "message_id": None
     }
 
-    keyboard = [[KeyboardButton(clean_text(data[str(k)]["title"]))] for k in data]
-    keyboard.append([KeyboardButton("❌ Close")])
+    keyboard = [[KeyboardButton(clean_text(data[k]["title"]))] for k in data]
+    keyboard.append([KeyboardButton("❌ Close OTT")])
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-    sent = await message.reply("📺 **Select a Platform:**", reply_markup=markup)
-    user_ott_data[user_id]["message_id"] = sent.id
+    sent = await message.reply("📺 *Select a Platform:*", reply_markup=markup)
+    ott_sessions[user_id]["message_id"] = sent.id
 
-# Handle platform name as text message (keyboard)
-@Client.on_message(filters.text & ~filters.command("ott"))
-async def handle_platform_choice(client, message: Message):
+# Handle platform button clicks
+@Client.on_message(filters.text & filters.private)
+async def ott_platform_choice_handler(client, message):
     user_id = message.from_user.id
-    text = message.text.strip()
+    session = ott_sessions.get(user_id)
 
-    if text == "❌ Close":
-        await message.reply("❌ Closed", reply_markup=ReplyKeyboardRemove())
+    if not session:
         return
 
-    if user_id not in user_ott_data:
+    if message.text == "❌ Close OTT":
+        await message.reply("❌ OTT browsing closed.", reply_markup=ReplyKeyboardRemove())
+        del ott_sessions[user_id]
         return
 
-    session = user_ott_data[user_id]
-    data = session["data"]
-
-    # Match platform name
-    for k, v in data.items():
-        if clean_text(v["title"]) == text:
-            session["platform"] = k
+    for k, v in session["data"].items():
+        if clean_text(v["title"]) == message.text:
+            session["platform_key"] = k
             session["page"] = 0
-            await send_movie_page(client, message, user_id)
+            await send_ott_movies(client, message, user_id)
             return
 
-# Send inline movie buttons (paginated) with platform image
-async def send_movie_page(client, message, user_id):
-    session = user_ott_data[user_id]
-    platform_key = session["platform"]
+# Send a paginated list of movies with inline buttons
+async def send_ott_movies(client, message, user_id):
+    session = ott_sessions[user_id]
+    platform = session["data"][session["platform_key"]]
+    movies = platform["movies"]
     page = session["page"]
-    data = session["data"]
+    start = page * 20
+    end = start + 20
+    buttons = [
+        [InlineKeyboardButton(clean_text(m["title"]), callback_data="noop")]
+        for m in movies[start:end]
+    ]
 
-    platform_data = data[platform_key]
-    movies = platform_data["movies"]
-    platform_name = platform_data["title"]
-    platform_logo = platform_data["movies"][0].get("platform_logo", "")
-    
-    per_page = 20
-    start = page * per_page
-    end = start + per_page
-    current_movies = movies[start:end]
-
-    # Inline buttons
-    buttons = []
-    for movie in current_movies:
-        title = clean_text(movie["title"])
-        buttons.append([InlineKeyboardButton(title, callback_data=f"ignore")])
-
-    # Navigation
     nav = []
     if start > 0:
-        nav.append(InlineKeyboardButton("⬅️ Prev", callback_data="prev_ott"))
+        nav.append(InlineKeyboardButton("⬅️ Prev", callback_data="ott_prev"))
     if end < len(movies):
-        nav.append(InlineKeyboardButton("➡️ Next", callback_data="next_ott"))
+        nav.append(InlineKeyboardButton("➡️ Next", callback_data="ott_next"))
     if nav:
         buttons.append(nav)
-    
-    buttons.append([InlineKeyboardButton("🔙 Back to Menu", callback_data="back_ott")])
+
+    buttons.append([InlineKeyboardButton("🔙 Back to Platforms", callback_data="ott_back")])
 
     markup = InlineKeyboardMarkup(buttons)
+    logo = movies[0].get("platform_logo", "")
+    caption = f"🎬 *{platform['title']} Movies*
+Select from the list below:"
 
-    # Delete previous
-    old_msg_id = session.get("message_id")
     try:
-        if old_msg_id:
-            await client.delete_messages(message.chat.id, old_msg_id)
+        if session["message_id"]:
+            await client.delete_messages(message.chat.id, session["message_id"])
         await message.delete()
     except:
         pass
 
-    # Send new message with platform image
     sent = await client.send_photo(
-        chat_id=message.chat.id,
-        photo=platform_logo,
-        caption=f"🎬 **{platform_name} Movies**\nSelect from the titles below:",
-        reply_markup=markup
+        message.chat.id, photo=logo, caption=caption, reply_markup=markup
     )
     session["message_id"] = sent.id
 
-# Handle callback navigation
-@Client.on_callback_query(filters.regex("^(next_ott|prev_ott|back_ott)$"))
-async def navigate_ott_pages(client, callback_query):
-    user_id = callback_query.from_user.id
-    session = user_ott_data.get(user_id)
+# Handle callback queries for pagination
+@Client.on_callback_query(filters.regex("^ott_(prev|next|back)$"))
+async def handle_ott_navigation(client, cb):
+    user_id = cb.from_user.id
+    session = ott_sessions.get(user_id)
 
     if not session:
-        await callback_query.answer("Session expired", show_alert=True)
+        await cb.answer("❌ Session expired.", show_alert=True)
         return
 
-    if callback_query.data == "next_ott":
-        session["page"] += 1
-        await send_movie_page(client, callback_query.message, user_id)
-    elif callback_query.data == "prev_ott" and session["page"] > 0:
+    action = cb.data.split("_")[1]
+    if action == "prev" and session["page"] > 0:
         session["page"] -= 1
-        await send_movie_page(client, callback_query.message, user_id)
-    elif callback_query.data == "back_ott":
-        session["platform"] = None
+    elif action == "next":
+        session["page"] += 1
+    elif action == "back":
+        session["platform_key"] = None
         session["page"] = 0
+
         keyboard = [[KeyboardButton(clean_text(session["data"][k]["title"]))] for k in session["data"]]
-        keyboard.append([KeyboardButton("❌ Close")])
+        keyboard.append([KeyboardButton("❌ Close OTT")])
         markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
         try:
-            if session["message_id"]:
-                await client.delete_messages(callback_query.message.chat.id, session["message_id"])
+            await cb.message.delete()
         except:
             pass
 
-        sent = await client.send_message(
-            chat_id=callback_query.message.chat.id,
-            text="📺 **Select a Platform:**",
-            reply_markup=markup
-        )
+        sent = await client.send_message(cb.message.chat.id, "📺 *Select a Platform:*", reply_markup=markup)
         session["message_id"] = sent.id
+        await cb.answer()
+        return
 
-    await callback_query.answer()
+    await send_ott_movies(client, cb.message, user_id)
+    await cb.answer()
+
+# No-op button handler to avoid invalid callback error
+@Client.on_callback_query(filters.regex("^noop$"))
+async def noop_cb(client, cb):
+    await cb.answer("🎥 Movie button clicked", show_alert=False)
