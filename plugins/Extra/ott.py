@@ -51,6 +51,9 @@ async def show_ott_platforms(client, message):
 # Show movie titles on platform selection
 @Client.on_message(filters.text & ~filters.command(["ott"]))
 async def handle_platform_selection(client, message):
+    if not message.from_user:
+        return  # Handles anonymous admins or system messages
+
     user_id = message.from_user.id
     if user_id not in user_ott_data:
         return
