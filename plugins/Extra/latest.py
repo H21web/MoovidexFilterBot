@@ -1,14 +1,10 @@
 import requests
 import html
-import time
+import asyncio
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from utils import temp
+from pyrogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, CallbackQuery
 
-OTT_URL = "https://www.binged.com/wp-json/binged-api/v1/whats-streaming"
-OTT_USER_CACHE = {}  # user_id: {platforms, selected_platform, page}
-
-# Utility to clean up titles
+# Clean HTML/unicode characters
 def clean_text(text):
     if not text:
         return text
@@ -17,141 +13,143 @@ def clean_text(text):
     text = text.replace('\u201c', '"').replace('\u201d', '"')
     text = text.replace('\u2013', '-').replace('\u2014', '-')
     text = text.replace('\u2026', '...')
-    return text
+    return text.strip()
 
-# Helper to fetch OTT data with retry
-def fetch_ott_data():
+# Fetch all movies from all pages (no filtering)
+def fetch_latest_movies():
+    base_url = "https://www.binged.com/wp-json/binged-api/v1/movies?mode=streaming-week"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Referer": "https://www.binged.com/",
-        "Origin": "https://www.binged.com"
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36',
+        'Referer': 'https://www.binged.com/'
     }
-    try:
-        response = requests.get(OTT_URL, headers=headers, timeout=10)
-        if response.status_code == 520:
-            time.sleep(2)
-            response = requests.get(OTT_URL, headers=headers, timeout=10)
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        return {"error": str(e)}
 
-# /ott command handler
-@Client.on_message(filters.command("ott"))
-async def ott_command_handler(client, message):
+    all_movies = []
+    current_page = 1
+
+    while True:
+        try:
+            url = f"{base_url}&page={current_page}" if current_page > 1 else base_url
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code != 200:
+                break
+
+            data = response.json()
+            page_movies = data.get('data', [])
+            all_movies.extend(page_movies)
+
+            pagination = data.get("pagination", {})
+            total_pages = pagination.get("total_pages", 1)
+
+            if current_page >= total_pages:
+                break
+
+            current_page += 1
+
+        except Exception as e:
+            print("Error while fetching movies:", e)
+            break
+
+    return all_movies
+
+# Store paginated movie data and last message per user
+user_pages = {}
+
+# /latest command handler
+@Client.on_message(filters.command("latest"))
+async def latest_movies_command(client, message):
+    movies_data = fetch_latest_movies()
+    if not movies_data:
+        await message.reply_text("⚠️ No latest movies found or failed to fetch.")
+        return
+
+    titles = [clean_text(movie.get("title", "Untitled")) for movie in movies_data]
     user_id = message.from_user.id
-    data = fetch_ott_data()
+    user_pages[user_id] = {"titles": titles, "page": 0, "message_id": None}
 
-    if "error" in data:
-        await message.reply_text(f"⚠️ Failed to fetch OTT platforms.\nError: {data['error']}")
+    sent = await send_movies_page(client, message.chat.id, user_id, page=0)
+    user_pages[user_id]["message_id"] = sent.id
+    
+
+@Client.on_message(filters.command("latest"))
+async def latest_movies_command(client, message):
+    movies_data = fetch_latest_movies()
+    if not movies_data:
+        await message.reply_text("⚠️ No latest movies found or failed to fetch.")
         return
 
-    if not isinstance(data, dict):
-        await message.reply_text("⚠️ Invalid response received from OTT source.")
-        return
+    titles = [clean_text(movie.get("title", "Untitled")) for movie in movies_data]
+    user_id = message.from_user.id
+    user_pages[user_id] = {"titles": titles, "page": 0, "message_id": None}
 
-    platforms = list(data.values())
-    if not platforms:
-        await message.reply_text("🚫 No platforms found.")
-        return
+    sent = await send_movies_page(client, message.chat.id, user_id, page=0)
+    user_pages[user_id]["message_id"] = sent.id
 
-    OTT_USER_CACHE[user_id] = {"platforms": platforms}
-
-    buttons = [
-        [InlineKeyboardButton(clean_text(p['title']), callback_data=f"ott_platform_{i}")]
-        for i, p in enumerate(platforms)
-    ]
-    buttons.append([InlineKeyboardButton("❌ Close", callback_data="ott_close")])
-    markup = InlineKeyboardMarkup(buttons)
-
-    await message.reply_text("📺 **Select a Platform to Browse:**", reply_markup=markup)
-
-# Show movies for selected platform
-@Client.on_callback_query(filters.regex("ott_platform_"))
-async def platform_selected(client, callback_query):
-    user_id = callback_query.from_user.id
-    index = int(callback_query.data.split("ott_platform_")[1])
-    cache = OTT_USER_CACHE.get(user_id)
-
-    if not cache:
-        return await callback_query.answer("⚠️ Session expired. Send /ott again.", show_alert=True)
-
-    platform = cache['platforms'][index]
-    cache['selected_platform'] = platform
-    cache['page'] = 0
-    await show_platform_page(client, callback_query.message, user_id)
-
-# Pagination - show a page of movies
-async def show_platform_page(client, message, user_id):
-    cache = OTT_USER_CACHE[user_id]
-    platform = cache['selected_platform']
-    movies = platform.get("movies", [])
-    logo = platform.get("platform_logo")
-    page = cache.get('page', 0)
-    page_size = 8
+# Send one paginated page of titles
+async def send_movies_page(client, chat_id, user_id, page):
+    page_size = 20  # 2-column layout = 10 rows
+    titles = user_pages[user_id]["titles"]
 
     start = page * page_size
     end = start + page_size
-    current_movies = movies[start:end]
+    current_titles = titles[start:end]
 
-    buttons = []
-    for movie in current_movies:
-        title = clean_text(movie.get("title", "Untitled"))
-        buttons.append([InlineKeyboardButton(title, url=f"https://www.binged.com/movie/{movie['ID']}")])
+    keyboard = []
+    row = []
+    for title in current_titles:
+        row.append(KeyboardButton(title))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
 
     nav_buttons = []
-    if start > 0:
-        nav_buttons.append(InlineKeyboardButton("⬅️ Prev", callback_data="ott_prev"))
-    if end < len(movies):
-        nav_buttons.append(InlineKeyboardButton("Next ➡️", callback_data="ott_next"))
+    if page > 0:
+        nav_buttons.append(KeyboardButton("⬅️ Prev"))
+    if end < len(titles):
+        nav_buttons.append(KeyboardButton("➡️ Next"))
     if nav_buttons:
-        buttons.append(nav_buttons)
+        keyboard.append(nav_buttons)
 
-    buttons.append([InlineKeyboardButton("🔙 Back to Menu", callback_data="ott_back")])
-    buttons.append([InlineKeyboardButton("❌ Close", callback_data="ott_close")])
+    keyboard.append([KeyboardButton("❌ Close")])
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-    markup = InlineKeyboardMarkup(buttons)
+    return await client.send_message(chat_id, "🎬 **Latest Streaming Movies:**", reply_markup=reply_markup)
+                                     
+# Pagination navigation
+@Client.on_message(filters.text & filters.regex("^(⬅️ Prev|➡️ Next)$"))
+async def paginate_movies(client, message):
+    user_id = message.from_user.id
+    if user_id not in user_pages:
+        await message.delete()
+        return
 
-    caption = f"🎬 **{platform['title']} Movies**\n\n🖼️ [Platform Logo]({logo})\n\nPage {page + 1} of {(len(movies)-1)//page_size + 1}"
+    current_page = user_pages[user_id]["page"]
+    if message.text == "➡️ Next":
+        user_pages[user_id]["page"] = current_page + 1
+    elif message.text == "⬅️ Prev" and current_page > 0:
+        user_pages[user_id]["page"] = current_page - 1
 
+    # Delete user tap and bot's previous message
+    await message.delete()
+    old_message_id = user_pages[user_id].get("message_id")
+    if old_message_id:
+        try:
+            await client.delete_messages(message.chat.id, old_message_id)
+        except:
+            pass
+
+    # Send new paginated message
+    sent = await send_movies_page(client, message.chat.id, user_id, user_pages[user_id]["page"])
+    user_pages[user_id]["message_id"] = sent.id
+
+# Close the reply keyboard
+@Client.on_message(filters.text & filters.regex("^❌ Close$"))
+async def close_keyboard(client, message):
+    await message.delete()
+    sent = await client.send_message(message.chat.id, "❌ Closed", reply_markup=ReplyKeyboardRemove())
+    await asyncio.sleep(10)
     try:
-        await message.edit_text(caption, reply_markup=markup, disable_web_page_preview=False)
+        await client.delete_messages(message.chat.id, sent.id)
     except:
-        await message.reply_text(caption, reply_markup=markup, disable_web_page_preview=False)
-
-@Client.on_callback_query(filters.regex("ott_next"))
-async def ott_next_page(client, callback_query):
-    user_id = callback_query.from_user.id
-    OTT_USER_CACHE[user_id]['page'] += 1
-    await show_platform_page(client, callback_query.message, user_id)
-    await callback_query.answer()
-
-@Client.on_callback_query(filters.regex("ott_prev"))
-async def ott_prev_page(client, callback_query):
-    user_id = callback_query.from_user.id
-    OTT_USER_CACHE[user_id]['page'] -= 1
-    await show_platform_page(client, callback_query.message, user_id)
-    await callback_query.answer()
-
-@Client.on_callback_query(filters.regex("ott_back"))
-async def ott_back_to_main(client, callback_query):
-    user_id = callback_query.from_user.id
-    cache = OTT_USER_CACHE.get(user_id)
-    if not cache:
-        return await callback_query.answer("⚠️ Session expired.", show_alert=True)
-
-    buttons = [
-        [InlineKeyboardButton(clean_text(p['title']), callback_data=f"ott_platform_{i}")]
-        for i, p in enumerate(cache['platforms'])
-    ]
-    buttons.append([InlineKeyboardButton("❌ Close", callback_data="ott_close")])
-    markup = InlineKeyboardMarkup(buttons)
-    await callback_query.message.edit_text("📺 **Select a Platform to Browse:**", reply_markup=markup)
-
-@Client.on_callback_query(filters.regex("ott_close"))
-async def ott_close_handler(client, callback_query):
-    try:
-        await callback_query.message.delete()
-    except:
-        await callback_query.answer("⚠️ Unable to close.")
+        pass
