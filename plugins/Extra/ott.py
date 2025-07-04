@@ -23,9 +23,16 @@ def clean_text(text):
 async def ott_command_handler(client, message):
     user_id = message.from_user.id
     try:
-        response = requests.get(OTT_URL)
+        response = requests.get(OTT_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        response.raise_for_status()
         data = response.json()
+        if not isinstance(data, dict):
+            raise ValueError("Invalid response format")
+
         platforms = list(data.values())
+        if not platforms:
+            raise ValueError("No platforms available")
+
         OTT_USER_CACHE[user_id] = {"platforms": platforms}
 
         buttons = [
@@ -37,7 +44,7 @@ async def ott_command_handler(client, message):
 
         await message.reply_text("📺 **Select a Platform to Browse:**", reply_markup=markup)
     except Exception as e:
-        await message.reply_text("⚠️ Failed to fetch OTT platforms.")
+        await message.reply_text(f"⚠️ Failed to fetch OTT platforms.\nError: {str(e)}")
 
 # Show movies for selected platform
 @Client.on_callback_query(filters.regex("ott_platform_"))
