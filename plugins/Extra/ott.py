@@ -103,8 +103,7 @@ async def send_ott_movies(client, message, user_id):
 
     markup = InlineKeyboardMarkup(buttons)
     logo = movies[0].get("platform_logo", "")
-    caption = f"🎬 *{platform['title']} Movies*
-Select from the list below:"
+    caption = f"🎬 *{platform['title']} Movies*\nSelect from the list below:"
 
     try:
         if session["message_id"]:
