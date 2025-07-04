@@ -12,7 +12,7 @@ PLATFORM_IMAGES = {
     "amazon": "https://envs.sh/FI0.jpg",
     "netflix": "https://envs.sh/FIS.jpg",
     "zee 5": "https://envs.sh/FIW.jpg",
-    "aha": "https://envs.sh/FIB.jpg",
+    "Aha Video": "https://envs.sh/FIB.jpg",
     "hoichoi": "https://envs.sh/FII.jpg",
     "jio cinema": "https://envs.sh/FIn.jpg",
     "sun nxt": "https://envs.sh/FIT.jpg",
@@ -170,4 +170,3 @@ async def ott_close_handler(client, callback_query):
         await callback_query.message.delete()
     except:
         await callback_query.answer("⚠️ Unable to close.")
-        
