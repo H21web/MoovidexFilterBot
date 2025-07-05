@@ -53,19 +53,20 @@ async def start(client, message):
             buttons = [[
                 InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
             ],[
-                InlineKeyboardButton('🔍 Top Search', callback_data='mostsearch'),
+                InlineKeyboardButton('📈 Top Search', callback_data='mostsearch'),
                 InlineKeyboardButton('🎰 New Releases', callback_data='latest')
-            ],
-              [
-                InlineKeyboardButton('💳 Gᴇᴛ Fʀᴇᴇ Oʀ Pᴀɪᴅ Sᴜʙsᴄʀɪᴘᴛɪᴏɴ 🛒', callback_data='subscription')
             ],[
+                InlineKeyboardButton('🔍 Search', callback_data='mostsearch'),
+                InlineKeyboardButton('🎰 Ott Updates', callback_data='latest')
+            ],
+             [
                 InlineKeyboardButton('🎀 Jᴏɪɴ Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ 🎀', url=CHNL_LNK)
             ]]
         else:
             buttons = [[
                 InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
             ],[
-                InlineKeyboardButton('⚙️ Top Search', callback_data='mostsearch'),
+                InlineKeyboardButton('📈 Top Search', callback_data='mostsearch'),
                 InlineKeyboardButton('🎰 New Releases', callback_data='latest')
             ],
                 
