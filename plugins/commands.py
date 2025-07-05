@@ -51,28 +51,28 @@ async def start(client, message):
     if len(message.command) != 2:
         if PREMIUM_AND_REFERAL_MODE == True:
             buttons = [[
-                InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
+                InlineKeyboardButton('Add To Your Group ', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
             ],[
-                InlineKeyboardButton('📈 Top Search', callback_data='mostsearch'),
-                InlineKeyboardButton('🎰 New Releases', callback_data='latest')
+                InlineKeyboardButton('Top Search', callback_data='mostsearch'),
+                InlineKeyboardButton('New Releases', callback_data='latest')
             ],[
-                InlineKeyboardButton('🔍 Search', callback_data='mostsearch'),
-                InlineKeyboardButton('🎰 Ott Updates', callback_data='latest')
+                InlineKeyboardButton('Search', switch_inline_query_current_chat=''),
+                InlineKeyboardButton('Ott Updates', callback_data='latest')
             ],
              [
-                InlineKeyboardButton('🎀 Jᴏɪɴ Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ 🎀', url=CHNL_LNK)
+                InlineKeyboardButton('Join Update Channel', url=CHNL_LNK)
             ]]
         else:
             buttons = [[
-                InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
+                InlineKeyboardButton('Add To Your Group', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
             ],[
-                InlineKeyboardButton('📈 Top Search', callback_data='mostsearch'),
-                InlineKeyboardButton('🎰 New Releases', callback_data='latest')
+                InlineKeyboardButton('Top Search', callback_data='mostsearch'),
+                InlineKeyboardButton('New Releases', callback_data='latest')
             ],
                 
                 
             [
-                InlineKeyboardButton('🎀 Jᴏɪɴ Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ 🎀', url=CHNL_LNK)
+                InlineKeyboardButton('Join Update Channel', url=CHNL_LNK)
             ]]
 
         reply_markup = InlineKeyboardMarkup(buttons)
@@ -98,7 +98,7 @@ async def start(client, message):
             await message.reply_text("Make sure Bot is admin in Forcesub channel")
             return
         try:
-            btn = [[InlineKeyboardButton("🔮 Jᴏɪɴ Uᴘᴅᴀᴛᴇ Cʜᴀɴɴᴇʟ 🔮", url=invite_link.invite_link)]]
+            btn = [[InlineKeyboardButton("Join Update Channel", url=invite_link.invite_link)]]
             if message.command[1] != "subscribe":
                 if REQUEST_TO_JOIN_MODE == True:
                     if TRY_AGAIN_BTN == True:
@@ -135,7 +135,7 @@ async def start(client, message):
     if len(message.command) == 2 and message.command[1] in ["subscribe", "error", "okay", "help"]:
         if PREMIUM_AND_REFERAL_MODE == True:
             buttons = [[
-                InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
+                InlineKeyboardButton('Add To Your Group', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
             ],[
                 InlineKeyboardButton('⚙️ Top Search', callback_data='mostsearch'),
                 InlineKeyboardButton('🎰 New Releases', callback_data='latest')
@@ -143,18 +143,18 @@ async def start(client, message):
               [
                 InlineKeyboardButton('💳 Gᴇᴛ Fʀᴇᴇ Oʀ Pᴀɪᴅ Sᴜʙsᴄʀɪᴘᴛɪᴏɴ 🛒', callback_data='subscription')
             ],[
-                InlineKeyboardButton('🎀 Jᴏɪɴ Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ 🎀', url=CHNL_LNK)
+                InlineKeyboardButton('Join Update Channel', url=CHNL_LNK)
             ]]
         else:
             buttons = [[
-                InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
+                InlineKeyboardButton('Add To Your Group', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
             ],[
                 
                 InlineKeyboardButton('🎰 New Releases', callback_data='latest')
             ],
                 
             [
-              InlineKeyboardButton('🎀 Jᴏɪɴ Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ 🎀', url=CHNL_LNK)
+              InlineKeyboardButton('Join Update Channel', url=CHNL_LNK)
             ]]
 
 
@@ -187,16 +187,16 @@ async def start(client, message):
         else:
             if PREMIUM_AND_REFERAL_MODE == True:
                 buttons = [
-                    [InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')],
+                    [InlineKeyboardButton('Add To Your Group', url=f'http://t.me/{temp.U_NAME}?startgroup=true')],
                     [InlineKeyboardButton('⚙️ Top Search', callback_data='mostsearch'), InlineKeyboardButton('🎰 New Releases', callback_data='latest')],
                     [InlineKeyboardButton('💳 Gᴇᴛ Fʀᴇᴇ Oʀ Pᴀɪᴅ Sᴜʙsᴄʀɪᴘᴛɪᴏɴ 🛒', callback_data='subscription')],
-                    [InlineKeyboardButton('🎀 Jᴏɪɴ Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ 🎀', url=CHNL_LNK)]
+                    [InlineKeyboardButton('Join Update Channel', url=CHNL_LNK)]
                 ]
             else:
                 buttons = [
-                    [InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')],
+                    [InlineKeyboardButton('Add To Your Group', url=f'http://t.me/{temp.U_NAME}?startgroup=true')],
                     [InlineKeyboardButton('⚙️ Top Search', callback_data='mostsearch'), InlineKeyboardButton('🎰 New Releases', callback_data='latest')],
-                    [InlineKeyboardButton('🎀 Jᴏɪɴ Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ 🎀', url=CHNL_LNK)]
+                    [InlineKeyboardButton('Join Update Channel', url=CHNL_LNK)]
                 ]
            
             reply_markup = InlineKeyboardMarkup(buttons)
