@@ -11,8 +11,8 @@ OTT_USER_CACHE = {}  # user_id: {platforms, selected_platform, page}
 PLATFORM_IMAGES = {
     "amazon": "https://envs.sh/FI0.jpg",
     "netflix": "https://envs.sh/FIS.jpg",
-    "zee 5": "https://envs.sh/FIW.jpg",
-    "aha": "https://envs.sh/FIB.jpg",
+    "zee5": "https://envs.sh/FIW.jpg",
+    "aha video": "https://envs.sh/FIB.jpg",
     "hoichoi": "https://envs.sh/FII.jpg",
     "jio cinema": "https://envs.sh/FIn.jpg",
     "sun nxt": "https://envs.sh/FIT.jpg",
