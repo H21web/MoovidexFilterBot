@@ -241,7 +241,7 @@ Series Format:
 Please check the spelling or try searching on Google or IMDb for the correct title.
 """
 
-    MVE_NT_FND = """🚫 <b>Movie not found in the database.</b>\n\n
+    MVE_NT_FND = """🚫 <b>Movie not found in the database.</b>\n
     <blockquote>🔍 Please check the spelling or verify if it's been released on OTT platforms.\n
     📡 You can also use the <b>/ott</b> command to check streaming availability.</blockquote>"""
 
