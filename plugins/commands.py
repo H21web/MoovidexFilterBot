@@ -18,6 +18,7 @@ from urllib.parse import quote_plus
 from database.config_db import mdb
 from database.topdb import JsTopDB
 from plugins.Extra.latest import latest_movies_command
+from plugins.Extras.ott import handle_ott_selection
 from TechVJ.util.file_properties import get_name, get_hash, get_media_file_size
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ async def start(client, message):
                 InlineKeyboardButton('🎬 New Releases', callback_data='latest')
             ],[
                 InlineKeyboardButton('🔎 Search', switch_inline_query_current_chat=''),
-                InlineKeyboardButton('🍿 Ott Updates', callback_data='latest')
+                InlineKeyboardButton('🍿 Ott Updates', callback_data='ott_platform')
             ],
              [
                 InlineKeyboardButton('⚠ Disclaimer', callback_data='disclaimer')
@@ -660,6 +661,12 @@ async def most(client, callback_query: CallbackQuery):
 async def handle_latest_callback(client, callback_query: CallbackQuery):
     await callback_query.answer()  # remove "loading..." icon
     await latest_movies_command(client, callback_query.message)
+
+
+@Client.on_callback_query(filters.regex("^ott_platform"))
+async def handle_ott_platform_callback(client, callback_query: CallbackQuery):
+    await callback_query.answer()  # removes "loading..." icon
+    await handle_ott_selection(client, callback_query)
 
 
 @Client.on_message(filters.command('logs') & filters.user(ADMINS))
