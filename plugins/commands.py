@@ -33,9 +33,9 @@ async def start(client, message):
      #   pass
     if message.chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
         buttons = [[
-            InlineKeyboardButton('🧿 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🧿 ', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
+            InlineKeyboardButton('Add To Your Group ', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
         ],[
-            InlineKeyboardButton('🔮 Jᴏɪɴ Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ 🔮', url=CHNL_LNK)
+            InlineKeyboardButton('Join Update Channel', url=CHNL_LNK)
         ]]
         reply_markup = InlineKeyboardMarkup(buttons)
         await message.reply(script.START_TXT.format(message.from_user.mention if message.from_user else message.chat.title, get_wish()), reply_markup=reply_markup, disable_web_page_preview=True)
