@@ -1450,3 +1450,55 @@ async def delete_url(client, message):
         await message.delete()
         await message.reply("❌ Sorry! Messages containing website URLs are not allowed in this group.")
         
+@Client.on_message(filters.command("help"))
+async def help_command(client: Client, message: Message):
+    help_text = """
+<b>🚨 Need help finding your favorite Movie or TV Show? 🎥</b>
+
+<b>🔍 How to Search:</b>
+
+👉 <b>For Movies:</b>  
+Type the movie name followed by the release year.  
+<b>Example:</b> <code>Avengers 2012</code>
+
+👉 <b>For Series:</b>  
+Type the series name followed by season and episode.  
+<b>Example:</b> <code>Game of Thrones S01E01</code>
+
+<b>💡 Tips to Get Better Results:</b>
+• Use the correct and full name  
+• Add release year for movies  
+• Use format like S01E01 for episodes  
+• Avoid special characters or emojis
+
+<b>✅ That’s it!</b> Just send the name here and the bot will try to find it for you. If not found, use the request option!
+
+<b>📌 Commands You Can Use:</b>
+/start – Restart the bot  
+/help – Show this help message  
+/latest – View newly added titles  
+/upcoming – See what's coming soon
+/ott - Know what's streaming now
+/request - Request movie/series 
+/settings - Configure this bot for group
+
+<b>🎬 Enjoy watching!</b>
+"""
+
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("💬 Support Group", url="https://t.me/YourSupportGroupLink"),
+                InlineKeyboardButton("🎞 Watch Tutorials", url="https://t.me/YourTutorialVideoLink")
+            ],
+            [
+                InlineKeyboardButton("❌ Close", callback_data="close_help")
+            ]
+        ]
+    )
+
+    await message.reply(help_text, reply_markup=keyboard, quote=True, disable_web_page_preview=True)
+    
+@Client.on_callback_query(filters.regex("close_help"))
+async def close_help_callback(client, callback_query):
+    await callback_query.message.delete()
