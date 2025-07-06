@@ -2287,6 +2287,23 @@ async def cb_handler(client: Client, query: CallbackQuery):
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML
         )
+
+    elif query.data == "disclaimer":
+        btn = [[
+            InlineKeyboardButton("⨞ Back", callback_data="help"),
+            InlineKeyboardButton("T&C", url="https://t.me/moovidex/19")
+        ]]
+        await client.edit_message_media(
+            query.message.chat.id, 
+            query.message.id, 
+            InputMediaPhoto(random.choice(PICS))
+        )
+        reply_markup = InlineKeyboardMarkup(btn)
+        await query.message.edit_text(
+            text=(script.DISCLAIMER_TXT),
+            reply_markup=reply_markup,
+            parse_mode=enums.ParseMode.HTML
+        )
     elif query.data == "share":
         btn = [[
             InlineKeyboardButton("⨞ Bᴀᴄᴋ", callback_data="help"),
