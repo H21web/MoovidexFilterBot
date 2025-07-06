@@ -248,10 +248,10 @@ async def start(client, message):
 
                 if STREAM_MODE == True:
                     button = [[
-                        InlineKeyboardButton("Watch & Download", url=download),
-                        InlineKeyboardButton('Share', url='https://t.me/share/url?url={stream}')
+                        InlineKeyboardButton("📥 Download ", url=download),
+                        InlineKeyboardButton('📤 Share', url='https://t.me/share/url?url={stream}')
                     ],[
-                        InlineKeyboardButton("Open in Telegram", web_app=WebAppInfo(url=stream))
+                        InlineKeyboardButton("📱 Open in Telegram", web_app=WebAppInfo(url=stream))
                     ]]
                     reply_markup = InlineKeyboardMarkup(button)
                 else:
@@ -330,10 +330,10 @@ async def start(client, message):
  
                 if STREAM_MODE == True:
                     button = [[
-                        InlineKeyboardButton("Watch & Download", url=download),
-                        InlineKeyboardButton('Share', url='https://t.me/share/url?url={stream}')
+                        InlineKeyboardButton("📥 Download ", url=download),
+                        InlineKeyboardButton('📤 Share', url='https://t.me/share/url?url={stream}')
                     ],[
-                        InlineKeyboardButton("Open in Telegram", web_app=WebAppInfo(url=stream))
+                        InlineKeyboardButton("📱 Open in Telegram", web_app=WebAppInfo(url=stream))
                     ]]
                     reply_markup = InlineKeyboardMarkup(button)
                 else:
@@ -454,7 +454,7 @@ async def start(client, message):
                     )
                     return
             if STREAM_MODE == True:
-                button = [[InlineKeyboardButton('Watch & Download', callback_data=f'generate_stream_link:{file_id}')]]
+                button = [[InlineKeyboardButton('📊 Watch & Download', callback_data=f'generate_stream_link:{file_id}')]]
                 reply_markup=InlineKeyboardMarkup(button)
             else:
                 reply_markup = None
@@ -517,7 +517,7 @@ async def start(client, message):
                     )
                     return
             if STREAM_MODE == True:
-                button = [[InlineKeyboardButton('Watch & Download', callback_data=f'generate_stream_link:{file_id}')]]
+                button = [[InlineKeyboardButton('📊 Watch & Download', callback_data=f'generate_stream_link:{file_id}')]]
                 reply_markup=InlineKeyboardMarkup(button)
             else:
                 reply_markup = None
@@ -575,7 +575,7 @@ async def start(client, message):
             )
             return
     if STREAM_MODE == True:
-        button = [[InlineKeyboardButton('Watch & Download', callback_data=f'generate_stream_link:{file_id}')]]
+        button = [[InlineKeyboardButton('📊 Watch & Download', callback_data=f'generate_stream_link:{file_id}')]]
         reply_markup=InlineKeyboardMarkup(button)
     else:
         reply_markup = None
