@@ -49,8 +49,15 @@ def fetch_ott_data():
 
 # /ott command handler
 @Client.on_message(filters.command("ott"))
-async def ott_command_handler(client, message):
-    user_id = message.from_user.id
+async def ott_command_handler(client, event):
+    # Handle both /ott command and button clicks
+    if isinstance(event, CallbackQuery):
+        user_id = event.from_user.id
+        message = event.message
+    else:  # It's a Message (from command)
+        user_id = event.from_user.id
+        message = event
+
     data = fetch_ott_data()
 
     if "error" in data:
