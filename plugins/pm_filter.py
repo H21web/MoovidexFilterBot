@@ -333,7 +333,7 @@ async def next_page(bot, query):
                 InlineKeyboardButton('', callback_data=f"qualities#{key}"),
                 InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
                # InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
-                InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
+                InlineKeyboardButton("⧉ SEASONS",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
@@ -350,7 +350,7 @@ async def next_page(bot, query):
                 InlineKeyboardButton('֎ QUALITY', callback_data=f"qualities#{key}"),
                 InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
               #  InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
-                InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
+                InlineKeyboardButton("⧉ SEASONS",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
@@ -601,7 +601,7 @@ async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
             InlineKeyboardButton("֎ QUALITY", callback_data=f"qualities#{key}"),
             InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
            # InlineKeyboardButton("📺 ᴇᴘɪꜱᴏᴅᴇꜱ", callback_data=f"episodes#{key}"),
-            InlineKeyboardButton("⑇ SEASOND", callback_data=f"seasons#{key}")
+            InlineKeyboardButton("⧉ SEASONS", callback_data=f"seasons#{key}")
         ]
     ]
 
@@ -792,7 +792,7 @@ async def filter_seasons_cb_handler(client: Client, query: CallbackQuery):
                 InlineKeyboardButton(f'֎ QUALITY', callback_data=f"qualities#{key}"),
                 InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
                # InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
-                InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
+                InlineKeyboardButton("⧉ SEASONS",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
@@ -808,7 +808,7 @@ async def filter_seasons_cb_handler(client: Client, query: CallbackQuery):
                 InlineKeyboardButton(f'֎ QUALITY', callback_data=f"qualities#{key}"),
                 InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
              #   InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
-                InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
+                InlineKeyboardButton("⧉ SEASONS",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
@@ -942,7 +942,7 @@ async def filter_qualities_cb_handler(client: Client, query: CallbackQuery):
                 InlineKeyboardButton(f'֎ QUALITY', callback_data=f"qualities#{key}"),
                 InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
                # InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
-                InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
+                InlineKeyboardButton("⧉ SEASONS",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
@@ -958,7 +958,7 @@ async def filter_qualities_cb_handler(client: Client, query: CallbackQuery):
                 InlineKeyboardButton(f'֎ QUALITY', callback_data=f"qualities#{key}"),
                 InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
               #  InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
-                InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
+                InlineKeyboardButton("⧉ SEASONS",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
@@ -2659,7 +2659,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
                 InlineKeyboardButton(f'֎ QUALITY', callback_data=f"qualities#{key}"),
                 InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
               #  InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
-                InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
+                InlineKeyboardButton("⧉ SEASONS",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
@@ -2675,7 +2675,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
                 InlineKeyboardButton(f'֎ QUALITY', callback_data=f"qualities#{key}"),
                 InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
                # InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
-                InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
+                InlineKeyboardButton("⧉ SEASONS",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
