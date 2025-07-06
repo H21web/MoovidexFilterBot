@@ -109,10 +109,10 @@ async def pm_text(bot, message):
             await auto_filter(bot, content, message, reply_msg, ai_search=True)
 
     # After processing, send the nicely formatted PM search log:
-    await bot.send_message(
-        chat_id=LOG_CHANNEL,
-        text=f"<b><u>🔎 BOT SEARCH</u>\n<blockquote>👤 {user} ({user_id})</blockquote>\n\n📜<code> {content}</code></b>"
-    )
+   # await bot.send_message(
+    #    chat_id=LOG_CHANNEL,
+     #   text=f"<b><u>🔎 BOT SEARCH</u>\n<blockquote>👤 {user} ({user_id})</blockquote>\n\n📜<code> {content}</code></b>"
+   # )
 
 async def doo(bot, data, message):
     user = message.from_user.first_name
@@ -2610,7 +2610,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         #if re.findall("((^\/|^,|^!|^\.|^[\U0001F600-\U000E007F]).*)", message.text):
             #return
         text = message.caption or message.text or ""
-        if len(text) < 100:
+        if len(text) < 50:
             search = name
             search = search.lower()
             find = search.split(" ")
