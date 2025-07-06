@@ -3,12 +3,10 @@
 # Ask Doubt on telegram @KingVJ01
 
 class script(object):
-    START_TXT = """🎬 Welcome to Moovidex Bot! 🤖
-<b>Hello{}, {}</b> 
+    START_TXT = """<b>Hello{}, {}</b> 
 <i>I'm here to help you find movies, series, anime instantly. 🎬</i>
     
-<b>
-Just send the movie name and I’ll try to find it for you! 🍿🔍</b>
+<b>Just send the movie name and I’ll try to find it for you! 🍿🔍</b>
 <b>📘 Use /help to explore more.
 
 Powered by @MooviDex</b>
