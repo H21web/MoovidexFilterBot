@@ -3,6 +3,7 @@ import html
 import time
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from pyrogram.types import CallbackQuery
 from utils import temp
 
 OTT_URL = "https://www.binged.com/wp-json/binged-api/v1/whats-streaming"
