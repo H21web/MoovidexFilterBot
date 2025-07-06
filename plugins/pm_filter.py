@@ -1724,10 +1724,10 @@ async def cb_handler(client: Client, query: CallbackQuery):
             stream = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
             download = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
             button = [[
-                InlineKeyboardButton("🚀 ғᴀsᴛ ᴅᴏᴡɴʟᴏᴀᴅ ", url=download),
-                InlineKeyboardButton('🖥️ ᴡᴀᴛᴄʜ ᴏɴʟɪɴᴇ ', url=stream)
+                InlineKeyboardButton("📥 Download ", url=download),
+                InlineKeyboardButton('📤 Share', url='https://t.me/share/url?url={stream}')
             ],[
-                InlineKeyboardButton("🌐 ᴡᴀᴛᴄʜ ɪɴ ᴡᴇʙ ᴀᴘᴘ 🌐", web_app=WebAppInfo(url=stream))
+                InlineKeyboardButton("📱 Open in Telegram", web_app=WebAppInfo(url=stream))
             ]]
             await query.message.edit_reply_markup(InlineKeyboardMarkup(button))
         except Exception as e:
@@ -1747,25 +1747,28 @@ async def cb_handler(client: Client, query: CallbackQuery):
     elif query.data == "start":
         if PREMIUM_AND_REFERAL_MODE == True:
             buttons = [[
-                InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
+                InlineKeyboardButton('🔗 Add To Your Group', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
             ],[
-                InlineKeyboardButton('⚙️ Pʟᴜɢɪɴs', callback_data='help'),
-                InlineKeyboardButton('🎰 Sᴘɪɴ & ᴇᴀʀɴ', callback_data='spin')
+                InlineKeyboardButton('📈 Top Search', callback_data='mostsearch'),
+                InlineKeyboardButton('🎬 New Releases', callback_data='latest')
+            ],[
+                InlineKeyboardButton('🔎 Search', switch_inline_query_current_chat=''),
+                InlineKeyboardButton('🍿 Ott Updates', callback_data='latest')
             ],
-              [
-                InlineKeyboardButton('💳 Gᴇᴛ Fʀᴇᴇ Oʀ Pᴀɪᴅ Sᴜʙsᴄʀɪᴘᴛɪᴏɴ 🛒', callback_data='subscription')
-            ],[
-                InlineKeyboardButton('🎀 Jᴏɪɴ Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ 🎀', url=CHNL_LNK)
+             [
+                InlineKeyboardButton('⚠ Disclaimer', callback_data='disclaimer')
             ]]
         else:
             buttons = [[
-                InlineKeyboardButton('🔮 Aᴅᴅ Mᴇ Tᴏ Yᴏᴜʀ Gʀᴏᴜᴘ 🔮', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
+                InlineKeyboardButton('🔗 Add To Your Group', url=f'http://t.me/{temp.U_NAME}?startgroup=true')
             ],[
-                InlineKeyboardButton('⚙️ Pʟᴜɢɪɴs', callback_data='help'),
-                InlineKeyboardButton('🎰 Sᴘɪɴ & Eᴀʀɴ', callback_data='spin')
+                InlineKeyboardButton('📈 Top Search', callback_data='mostsearch'),
+                InlineKeyboardButton('🎬 New Releases', callback_data='latest')
             ],
+                
+                
             [
-                InlineKeyboardButton('🎀 Jᴏɪɴ Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ 🎀', url=CHNL_LNK)
+                InlineKeyboardButton('⚠ Disclaimer', callback_data='disclaimer')
             ]]
 
 
