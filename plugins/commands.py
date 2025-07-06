@@ -249,7 +249,7 @@ async def start(client, message):
                 if STREAM_MODE == True:
                     button = [[
                         InlineKeyboardButton("📥 Download ", url=download),
-                        InlineKeyboardButton('📤 Share', url='https://t.me/share/url?url={stream}')
+                        InlineKeyboardButton('📤 Share', url=f'https://t.me/share/url?url={stream}')
                     ],[
                         InlineKeyboardButton("📱 Open in Telegram", web_app=WebAppInfo(url=stream))
                     ]]
@@ -331,7 +331,7 @@ async def start(client, message):
                 if STREAM_MODE == True:
                     button = [[
                         InlineKeyboardButton("📥 Download ", url=download),
-                        InlineKeyboardButton('📤 Share', url='https://t.me/share/url?url={stream}')
+                        InlineKeyboardButton('📤 Share', url=f'https://t.me/share/url?url={stream}')
                     ],[
                         InlineKeyboardButton("📱 Open in Telegram", web_app=WebAppInfo(url=stream))
                     ]]
@@ -649,7 +649,7 @@ async def most(client, callback_query: CallbackQuery):
     )
 
     await callback_query.message.reply_text(
-        "<b>Hᴇʀᴇ ɪꜱ ᴛʜᴇ ᴍᴏꜱᴛ ꜱᴇᴀʀᴄʜᴇꜱ ʟɪꜱᴛ 👇</b>",
+        "<b>Here is the most searchd list 👇</b>",
         reply_markup=reply_markup
     )
     await callback_query.answer()
