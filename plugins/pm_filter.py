@@ -500,7 +500,7 @@ async def advantage_spoll_choker(bot, query):
                 if api_answer:
                     final_text += f"\n\n<blockquote expandable><b>{api_answer}</b></blockquote>\n"
 
-                msg = await query.message.edit(final_text, reply_markup=InlineKeyboardMarkup(request_btn))
+                msg = await query.message.edit(final_text,reply_markup=InlineKeyboardMarkup(request_btn),disable_web_page_preview=True)
                 await asyncio.sleep(120)
                 await msg.delete()
 
