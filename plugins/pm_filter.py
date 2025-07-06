@@ -499,8 +499,9 @@ async def advantage_spoll_choker(bot, query):
                 final_text = script.MVE_NT_FND
                 if api_answer:
                     final_text += f"\n\n<blockquote expandable><b>{api_answer}</b></blockquote>\n"
-
+          
                 msg = await query.message.edit(final_text,reply_markup=InlineKeyboardMarkup(request_btn),disable_web_page_preview=True)
+                await client.send_message(chat_id=LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, movie)))
                 await asyncio.sleep(120)
                 await msg.delete()
 
@@ -2819,7 +2820,7 @@ async def handle_no_results(client, reply_msg, mv_rqst, reqstr):
             InlineKeyboardButton("Gᴏᴏɢʟᴇ", url=f"https://www.google.com/search?q={reqst_gle}")
         ]]
         if NO_RESULTS_MSG:
-            await client.send_message(chat_id=LOG_CHANNEL, text=script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst))
+            await client.send_message(chat_id=LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst)))
         if reply_msg and hasattr(reply_msg, 'edit_text'):
             k = await reply_msg.edit_text(text=script.I_CUDNT.format(mv_rqst), reply_markup=InlineKeyboardMarkup(button))
             await asyncio.sleep(30)
