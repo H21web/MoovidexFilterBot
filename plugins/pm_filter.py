@@ -1725,7 +1725,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             download = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
             button = [[
                 InlineKeyboardButton("📥 Download ", url=download),
-                InlineKeyboardButton('📤 Share', url='https://t.me/share/url?url={stream}')
+                InlineKeyboardButton('📤 Share', url=f'https://t.me/share/url?url={stream}')
             ],[
                 InlineKeyboardButton("📱 Open in Telegram", web_app=WebAppInfo(url=stream))
             ]]
@@ -1753,7 +1753,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 InlineKeyboardButton('🎬 New Releases', callback_data='latest')
             ],[
                 InlineKeyboardButton('🔎 Search', switch_inline_query_current_chat=''),
-                InlineKeyboardButton('🍿 Ott Updates', callback_data='latest')
+                InlineKeyboardButton('🍿 Ott Updates', callback_data='ott_platform')
             ],
              [
                 InlineKeyboardButton('⚠ Disclaimer', callback_data='disclaimer')
