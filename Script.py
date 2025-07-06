@@ -343,19 +343,18 @@ Aᴠᴀɪʟᴀʙʟᴇ ᴄᴏᴍᴍᴀɴᴅs:
 
     DISCLAIMER_TXT = """<b>📢 Disclaimer</b>
     
-    ⚠️ This bot does <b>not host</b> or store any files on its servers. All content shared here is collected from <b>publicly available sources</b> and third-party websites.
+<blockquote>⚠️ This bot does <b>not host</b> or store any files on its servers. All content shared here is collected from <b>publicly available sources</b> and third-party websites.
     
-    <b>📌 We do not own, upload, or claim</b> any rights to the media content provided.
+<b>📌 We do not own, upload, or claim</b> any rights to the media content provided.
     
-    <ul>
-      <li>This bot is for <b>informational and educational purposes only</b>.</li>
-      <li>Users are solely responsible for how they use the content.</li>
-      <li>We encourage users to <b>support original creators</b> by watching content via <b>official platforms</b>.</li>
-    </ul>
+This bot is for <b>informational and educational purposes only</b>.
+      - Users are solely responsible for how they use the content.
+      - We encourage users to <b>support original creators</b> by watching content via <b>official platforms</b>.
     
-    📥 If you are a <b>copyright owner</b> and believe that your rights are being violated, please <b>contact us</b>. Appropriate action will be taken promptly.
     
-    🙏 Thank you for understanding.
+📥 If you are a <b>copyright owner</b> and believe that your rights are being violated, please <b>contact us</b>. Appropriate action will be taken promptly.
+    
+🙏 Thank you for understanding.</blockquote>
      """
       
     GTRANS_TXT = """<b>ʜᴇʟᴩ:ɢᴏᴏɢʟᴇ ᴛʀᴀɴꜱʟᴀᴛᴇʀ 
