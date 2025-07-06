@@ -80,7 +80,7 @@ async def boovo(bot, title, message):
     data = title
     reply_msg = await bot.send_message(
         message.chat.id,
-        f"<b><i>Searching For {data} 🔍</i></b>",
+        f"<b><i>Searching for {data} 🔍</i></b>",
         reply_to_message_id=message.id
     )
     
@@ -103,7 +103,7 @@ async def pm_text(bot, message):
             ai_search = True
             reply_msg = await bot.send_message(
                 chat_id=message.chat.id,
-                text=f"<b><i>Searching For {content} 🔍</i></b>",
+                text=f"<b><i>Searching for {content} 🔍</i></b>",
                 reply_to_message_id=message.id
             )
             await auto_filter(bot, content, message, reply_msg, ai_search=True)
@@ -125,7 +125,7 @@ async def doo(bot, data, message):
     # Send the initial search message
     reply_msg = await bot.send_message(
         message.from_user.id, 
-        f"<b><i>🔍 sᴇᴀʀᴄʜɪɴɢ ғᴏʀ {data} </i></b>", 
+        f"<b><i>🔍 Searching for {data} </i></b>", 
         reply_to_message_id=message.id
     )
     
@@ -330,34 +330,34 @@ async def next_page(bot, query):
 
         btn.insert(0, 
             [
-                InlineKeyboardButton('🎚️ ǫᴜᴀʟɪᴛʏ', callback_data=f"qualities#{key}"),
-                InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
+                InlineKeyboardButton('', callback_data=f"qualities#{key}"),
+                InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
                # InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
                 InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
-            InlineKeyboardButton(f"🗂 ꜰɪʟᴇꜱ: {total_results_str}", 'total'),
-           # InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
+            InlineKeyboardButton(f"፨ FILES: {total_results_str}", 'total'),
+           # InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
            # InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
-            InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}")
+            InlineKeyboardButton("⻄ LANGUAGES", callback_data=f"languages#{key}")
            # InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
         ])
     else:
         btn = []
         btn.insert(0, 
             [
-                InlineKeyboardButton('🎚️ ǫᴜᴀʟɪᴛʏ', callback_data=f"qualities#{key}"),
-                InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
+                InlineKeyboardButton('֎ QUALITY', callback_data=f"qualities#{key}"),
+                InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
               #  InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
                 InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
-            InlineKeyboardButton(f"🗂 ꜰɪʟᴇꜱ: {total_results_str}", 'total'),
-           # InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
+            InlineKeyboardButton(f"፨ FILES: {total_results_str}", 'total'),
+           # InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
           #  InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
-            InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}")
+            InlineKeyboardButton("⻄ LANGUAGES", callback_data=f"languages#{key}")
           #  InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
         ])
     try:
@@ -370,16 +370,16 @@ async def next_page(bot, query):
                 off_set = offset - 10
             if n_offset == 0:
                 btn.append(
-                    [InlineKeyboardButton("⌫ 𝖡𝖠𝖢𝖪", callback_data=f"next_{req}_{key}_{off_set}"), InlineKeyboardButton(f"{math.ceil(int(offset)/10)+1} / {math.ceil(total/10)}", callback_data="pages")]
+                    [InlineKeyboardButton("⎗ 𝖡𝖠𝖢𝖪", callback_data=f"next_{req}_{key}_{off_set}"), InlineKeyboardButton(f"{math.ceil(int(offset)/10)+1} / {math.ceil(total/10)}", callback_data="pages")]
                 )
             elif off_set is None:
-                btn.append([InlineKeyboardButton("📑 𝖯𝖠𝖦𝖤", callback_data="pages"), InlineKeyboardButton(f"{math.ceil(int(offset)/10)+1} / {math.ceil(total/10)}", callback_data="pages"), InlineKeyboardButton("𝖭𝖤𝖷𝖳 ⌦", callback_data=f"next_{req}_{key}_{n_offset}")])
+                btn.append([InlineKeyboardButton("🗐 PAGE", callback_data="pages"), InlineKeyboardButton(f"{math.ceil(int(offset)/10)+1} / {math.ceil(total/10)}", callback_data="pages"), InlineKeyboardButton("NEXT ⎘", callback_data=f"next_{req}_{key}_{n_offset}")])
             else:
                 btn.append(
                     [
-                        InlineKeyboardButton("⌫ 𝖡𝖠𝖢𝖪", callback_data=f"next_{req}_{key}_{off_set}"),
+                        InlineKeyboardButton("⎗ 𝖡𝖠𝖢𝖪", callback_data=f"next_{req}_{key}_{off_set}"),
                         InlineKeyboardButton(f"{math.ceil(int(offset)/10)+1} / {math.ceil(total/10)}", callback_data="pages"),
-                        InlineKeyboardButton("𝖭𝖤𝖷𝖳 ⌦", callback_data=f"next_{req}_{key}_{n_offset}")
+                        InlineKeyboardButton("NEXT ⎘", callback_data=f"next_{req}_{key}_{n_offset}")
                     ],
                 )
         else:
@@ -391,16 +391,16 @@ async def next_page(bot, query):
                 off_set = offset - int(MAX_B_TN)
             if n_offset == 0:
                 btn.append(
-                    [InlineKeyboardButton("⌫ 𝖡𝖠𝖢𝖪", callback_data=f"next_{req}_{key}_{off_set}"), InlineKeyboardButton(f"{math.ceil(int(offset)/int(MAX_B_TN))+1} / {math.ceil(total/int(MAX_B_TN))}", callback_data="pages")]
+                    [InlineKeyboardButton("⎗ 𝖡𝖠𝖢𝖪", callback_data=f"next_{req}_{key}_{off_set}"), InlineKeyboardButton(f"{math.ceil(int(offset)/int(MAX_B_TN))+1} / {math.ceil(total/int(MAX_B_TN))}", callback_data="pages")]
                 )
             elif off_set is None:
-                btn.append([InlineKeyboardButton("📑 𝖯𝖠𝖦𝖤", callback_data="pages"), InlineKeyboardButton(f"{math.ceil(int(offset)/int(MAX_B_TN))+1} / {math.ceil(total/int(MAX_B_TN))}", callback_data="pages"), InlineKeyboardButton("𝖭𝖤𝖷𝖳 ⌦", callback_data=f"next_{req}_{key}_{n_offset}")])
+                btn.append([InlineKeyboardButton("🗐 PAGE", callback_data="pages"), InlineKeyboardButton(f"{math.ceil(int(offset)/int(MAX_B_TN))+1} / {math.ceil(total/int(MAX_B_TN))}", callback_data="pages"), InlineKeyboardButton("NEXT ⎘", callback_data=f"next_{req}_{key}_{n_offset}")])
             else:
                 btn.append(
                     [
-                        InlineKeyboardButton("⌫ 𝖡𝖠𝖢𝖪", callback_data=f"next_{req}_{key}_{off_set}"),
+                        InlineKeyboardButton("⎗ 𝖡𝖠𝖢𝖪", callback_data=f"next_{req}_{key}_{off_set}"),
                         InlineKeyboardButton(f"{math.ceil(int(offset)/int(MAX_B_TN))+1} / {math.ceil(total/int(MAX_B_TN))}", callback_data="pages"),
-                        InlineKeyboardButton("𝖭𝖤𝖷𝖳 ⌦", callback_data=f"next_{req}_{key}_{n_offset}")
+                        InlineKeyboardButton("NEXT ⎘", callback_data=f"next_{req}_{key}_{n_offset}")
                     ],
                 )
     except KeyError:
@@ -413,16 +413,16 @@ async def next_page(bot, query):
             off_set = offset - 10
         if n_offset == 0:
             btn.append(
-                [InlineKeyboardButton("⌫ 𝖡𝖠𝖢𝖪", callback_data=f"next_{req}_{key}_{off_set}"), InlineKeyboardButton(f"{math.ceil(int(offset)/10)+1} / {math.ceil(total/10)}", callback_data="pages")]
+                [InlineKeyboardButton("⎗ 𝖡𝖠𝖢𝖪", callback_data=f"next_{req}_{key}_{off_set}"), InlineKeyboardButton(f"{math.ceil(int(offset)/10)+1} / {math.ceil(total/10)}", callback_data="pages")]
             )
         elif off_set is None:
-            btn.append([InlineKeyboardButton("📑 𝖯𝖠𝖦𝖤", callback_data="pages"), InlineKeyboardButton(f"{math.ceil(int(offset)/10)+1} / {math.ceil(total/10)}", callback_data="pages"), InlineKeyboardButton("𝖭𝖤𝖷𝖳 ⌦", callback_data=f"next_{req}_{key}_{n_offset}")])
+            btn.append([InlineKeyboardButton("🗐 PAGE", callback_data="pages"), InlineKeyboardButton(f"{math.ceil(int(offset)/10)+1} / {math.ceil(total/10)}", callback_data="pages"), InlineKeyboardButton("NEXT ⎘", callback_data=f"next_{req}_{key}_{n_offset}")])
         else:
             btn.append(
                 [
-                    InlineKeyboardButton("⌫ 𝖡𝖠𝖢𝖪", callback_data=f"next_{req}_{key}_{off_set}"),
+                    InlineKeyboardButton("⎗ 𝖡𝖠𝖢𝖪", callback_data=f"next_{req}_{key}_{off_set}"),
                     InlineKeyboardButton(f"{math.ceil(int(offset)/10)+1} / {math.ceil(total/10)}", callback_data="pages"),
-                    InlineKeyboardButton("𝖭𝖤𝖷𝖳 ⌦", callback_data=f"next_{req}_{key}_{n_offset}")
+                    InlineKeyboardButton("NEXT ⎘", callback_data=f"next_{req}_{key}_{n_offset}")
                 ],
             )
     if not settings["button"]:
@@ -591,17 +591,17 @@ async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
 
     btn = [
         [
-            InlineKeyboardButton(f"🗂 ꜰɪʟᴇꜱ: {total_results_str}", 'total'),
+            InlineKeyboardButton(f"፨ FILES: {total_results_str}", 'total'),
             
            # InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
-            InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}")
+            InlineKeyboardButton("⻄ LANGUAGES", callback_data=f"languages#{key}")
           #  InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
         ],
         [
-            InlineKeyboardButton("🎚️ ǫᴜᴀʟɪᴛʏ", callback_data=f"qualities#{key}"),
-            InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
+            InlineKeyboardButton("֎ QUALITY", callback_data=f"qualities#{key}"),
+            InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
            # InlineKeyboardButton("📺 ᴇᴘɪꜱᴏᴅᴇꜱ", callback_data=f"episodes#{key}"),
-            InlineKeyboardButton("🗃️ ꜱᴇᴀꜱᴏɴꜱ", callback_data=f"seasons#{key}")
+            InlineKeyboardButton("⑇ SEASOND", callback_data=f"seasons#{key}")
         ]
     ]
 
@@ -616,9 +616,9 @@ async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
     total_pages = math.ceil(total_results / (int(MAX_B_TN) if not settings.get('max_btn') else 10))
     if total_pages > 1:
         btn.append([
-            InlineKeyboardButton("📑 𝖯𝖠𝖦𝖤", callback_data="pages"),
+            InlineKeyboardButton("🗐 PAGE", callback_data="pages"),
             InlineKeyboardButton(f"1/{total_pages}", callback_data="pages"),
-            InlineKeyboardButton("𝖭𝖤𝖷𝖳 ⌦", callback_data=f"next_{req}_{key}_{offset}")
+            InlineKeyboardButton("NEXT ⎘", callback_data=f"next_{req}_{key}_{offset}")
         ])
     else:
         btn.append([
@@ -789,33 +789,33 @@ async def filter_seasons_cb_handler(client: Client, query: CallbackQuery):
         ]
         btn.insert(0, 
             [
-                InlineKeyboardButton(f'🎚️ ǫᴜᴀʟɪᴛʏ', callback_data=f"qualities#{key}"),
-                InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
+                InlineKeyboardButton(f'֎ QUALITY', callback_data=f"qualities#{key}"),
+                InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
                # InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
                 InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
-            InlineKeyboardButton(f"🗂 ꜰɪʟᴇꜱ: {total_results_str}", 'total'),
+            InlineKeyboardButton(f"፨ FILES: {total_results_str}", 'total'),
            # InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
-            InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}")
+            InlineKeyboardButton("⻄ LANGUAGES", callback_data=f"languages#{key}")
            # InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
         ])
     else:
         btn = []
         btn.insert(0, 
             [
-                InlineKeyboardButton(f'🎚️ ǫᴜᴀʟɪᴛʏ', callback_data=f"qualities#{key}"),
-                InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
+                InlineKeyboardButton(f'֎ QUALITY', callback_data=f"qualities#{key}"),
+                InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
              #   InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
                 InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
-            InlineKeyboardButton(f"🗂 ꜰɪʟᴇꜱ: {total_results_str}", 'total'),
+            InlineKeyboardButton(f"፨ FILES: {total_results_str}", 'total'),
             
           #  InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
-            InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}")
+            InlineKeyboardButton("⻄ LANGUAGES", callback_data=f"languages#{key}")
            # InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
         ])
     offset = 0
@@ -939,32 +939,32 @@ async def filter_qualities_cb_handler(client: Client, query: CallbackQuery):
         ]
         btn.insert(0, 
             [
-                InlineKeyboardButton(f'🎚️ ǫᴜᴀʟɪᴛʏ', callback_data=f"qualities#{key}"),
-                InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
+                InlineKeyboardButton(f'֎ QUALITY', callback_data=f"qualities#{key}"),
+                InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
                # InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
                 InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
-            InlineKeyboardButton(f"🗂 ꜰɪʟᴇꜱ: {total_results_str}", 'total'),
+            InlineKeyboardButton(f"፨ FILES: {total_results_str}", 'total'),
            # InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
-            InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}")
+            InlineKeyboardButton("⻄ LANGUAGES", callback_data=f"languages#{key}")
            # InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
         ])
     else:
         btn = []
         btn.insert(0, 
             [
-                InlineKeyboardButton(f'🎚️ ǫᴜᴀʟɪᴛʏ', callback_data=f"qualities#{key}"),
-                InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
+                InlineKeyboardButton(f'֎ QUALITY', callback_data=f"qualities#{key}"),
+                InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
               #  InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
                 InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
-            InlineKeyboardButton(f"🗂 ꜰɪʟᴇꜱ: {total_results_str}", 'total'),
+            InlineKeyboardButton(f"፨ FILES: {total_results_str}", 'total'),
            # InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
-            InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}")
+            InlineKeyboardButton("⻄ LANGUAGES", callback_data=f"languages#{key}")
           #  InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
         ])
 
@@ -2656,48 +2656,48 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         ]
         btn.insert(0, 
             [
-                InlineKeyboardButton(f'🎚️ ǫᴜᴀʟɪᴛʏ', callback_data=f"qualities#{key}"),
-                InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
+                InlineKeyboardButton(f'֎ QUALITY', callback_data=f"qualities#{key}"),
+                InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
               #  InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
                 InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
-            InlineKeyboardButton(f"🗂 ꜰɪʟᴇꜱ: {total_results_str}", 'total'),            
+            InlineKeyboardButton(f"፨ FILES: {total_results_str}", 'total'),            
            # InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
-            InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}")
+            InlineKeyboardButton("⻄ LANGUAGES", callback_data=f"languages#{key}")
            # InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
         ])
     else:
         btn = []
         btn.insert(0, 
             [
-                InlineKeyboardButton(f'🎚️ ǫᴜᴀʟɪᴛʏ', callback_data=f"qualities#{key}"),
-                InlineKeyboardButton('ℹ️ ɪɴꜰᴏ', url='https://t.me/moovidex/11'),
+                InlineKeyboardButton(f'֎ QUALITY', callback_data=f"qualities#{key}"),
+                InlineKeyboardButton('🛈 INFO', url='https://t.me/moovidex/11'),
                # InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
                 InlineKeyboardButton("🗃️ sᴇᴀsᴏɴs",  callback_data=f"seasons#{key}")
             ]
         )
         btn.insert(0, [
-            InlineKeyboardButton(f"🗂 ꜰɪʟᴇꜱ: {total_results_str}", 'total'),
+            InlineKeyboardButton(f"፨ FILES: {total_results_str}", 'total'),
           #  InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
-            InlineKeyboardButton("🎧 ʟᴀɴɢᴜᴀɢᴇs", callback_data=f"languages#{key}")
+            InlineKeyboardButton("⻄ LANGUAGES", callback_data=f"languages#{key}")
          #   InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
         ])
     if offset != "":
         try:
             if settings['max_btn']:
                 btn.append(
-                    [InlineKeyboardButton("📑 𝖯𝖠𝖦𝖤", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/10)}",callback_data="pages"), InlineKeyboardButton(text="𝖭𝖤𝖷𝖳 ⌦",callback_data=f"next_{req}_{key}_{offset}")]
+                    [InlineKeyboardButton("🗐 PAGE", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/10)}",callback_data="pages"), InlineKeyboardButton(text="NEXT ⎘",callback_data=f"next_{req}_{key}_{offset}")]
                 )
             else:
                 btn.append(
-                    [InlineKeyboardButton("📑 𝖯𝖠𝖦𝖤", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/int(MAX_B_TN))}",callback_data="pages"), InlineKeyboardButton(text="𝖭𝖤𝖷𝖳 ⌦",callback_data=f"next_{req}_{key}_{offset}")]
+                    [InlineKeyboardButton("🗐 PAGE", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/int(MAX_B_TN))}",callback_data="pages"), InlineKeyboardButton(text="NEXT ⎘",callback_data=f"next_{req}_{key}_{offset}")]
                 )
         except KeyError:
             await save_group_settings(message.chat.id, 'max_btn', True)
             btn.append(
-                [InlineKeyboardButton("📑 𝖯𝖠𝖦𝖤", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/10)}",callback_data="pages"), InlineKeyboardButton(text="𝖭𝖤𝖷𝖳 ⌦",callback_data=f"next_{req}_{key}_{offset}")]
+                [InlineKeyboardButton("🗐 PAGE", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/10)}",callback_data="pages"), InlineKeyboardButton(text="NEXT ⎘",callback_data=f"next_{req}_{key}_{offset}")]
             )
     else:
         btn.append(
