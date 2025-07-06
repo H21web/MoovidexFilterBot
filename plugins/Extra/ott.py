@@ -112,7 +112,7 @@ async def show_platform_page(client, message, user_id, send_as_new=False):
     buttons = []
     for movie in current_movies:
         title = clean_text(movie.get("title", "Untitled"))
-        buttons.append([InlineKeyboardButton(title, url=f"https://www.binged.com/movie/{movie['ID']}")])
+        buttons.append([InlineKeyboardButton(title, url=f"https://t.me/{temp.U_NAME}?start=Search_{title}")])
 
     nav_buttons = []
     if start > 0:
