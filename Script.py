@@ -244,7 +244,7 @@ Please check the spelling or try searching on Google or IMDb for the correct tit
     <blockquote>🔍 Please check the spelling or verify if it's been released on OTT platforms.\n
     📡 You can also use the <b>/ott</b> command to check streaming availability.</blockquote>"""
 
-    TOP_ALRT_MSG = """Cʜᴇᴄᴋɪɴɢ Fᴏʀ Mᴏᴠɪᴇ Iɴ Dᴀᴛᴀʙᴀsᴇ..."""
+    TOP_ALRT_MSG = """🔎 Checking database..."""
 
     MELCOW_ENG = """<b>Hᴇʟʟᴏ {} 😍, Aɴᴅ Wᴇʟᴄᴏᴍᴇ Tᴏ {} Gʀᴏᴜᴘ ❤️</b>"""
 
@@ -265,10 +265,9 @@ Please check the spelling or try searching on Google or IMDb for the correct tit
 🫣 For Movie Join First Then Click On Try Again Button 😅"""
 
     NORSLTS = """ 
-<b>𝙽𝙾 𝚁𝙴𝚂𝚄𝙻𝚃𝚂  </b>                                       🚧
-<blockquote>📟 𝙸𝙳 : <code>{}</code> 
-🏷️ 𝙽𝙰𝙼𝙴 : <code>{}</code> 
-📜 𝙼𝙴𝚂𝚂𝙰𝙶𝙴 : <code>{}</code></blockquote> """
+<b>❌ No Results Found</b>                                       🚧
+<blockquote>📟 By : <code>{}</code> 💌 {}</blockquote>
+📜 𝙼𝙴𝚂𝚂𝙰𝙶𝙴 : <code>{}</code>"""
     
     PM_SEARCH_TEMPLATE= """ 
 <b>𝙿𝙼 𝚂𝙴𝙰𝚁𝙲𝙷   </b>                                        🕵  
@@ -277,26 +276,26 @@ Please check the spelling or try searching on Google or IMDb for the correct tit
 📜 𝙼𝙴𝚂𝚂𝙰𝙶𝙴 : {content}</blockquote>
 """
 
-    CAPTION = """📁 **ғɪʟᴇ:** **{file_name}**
-📊 **sɪᴢᴇ:** **{file_size}**
+    CAPTION = """📁 **File:** **{file_name}**
+📊 **Size:** **{file_size}**
 
-🔗 **↤↤↤↤↤ ǫᴜɪᴄᴋ ʟɪɴᴋs ↦↦↦↦↦**
-├ 📢** ᴄʜᴀɴɴᴇʟ: @MooviDex**
-└ 👥** ɢʀᴏᴜᴘ: @MoovidexSphere**
+🔗 **↤↤↤↤↤ Quick Links ↦↦↦↦↦**
+├ 📢** Channel: @MooviDex**
+└ 👥** Group: @MoovidexSphere**
 
 """ 
 
     IMDB_TEMPLATE_TXT = """
 <b>🎪 {kind} : {title} ({year})</b>
 
-⭐<b> Rᴀᴛɪɴɢs: </b> <code>{rating}</code>
-🗓 <b>Rᴇʟᴇᴀsᴇ Iɴғᴏ: </b><code>{release_date}</code>
-🕰 <b>Dᴜʀᴀᴛɪᴏɴ: </b><code>{runtime}</code>
-🎧 <b>Lᴀɴɢᴜᴀɢᴇ: </b><code>{languages}</code>
-🎭 <b>Gᴇɴʀᴇs: </b><code>{genres}</code>
+⭐<b> Ratings: </b> <code>{rating}</code>
+🗓 <b>Release Date: </b><code>{release_date}</code>
+🕰 <b>Duration: </b><code>{runtime}</code>
+🎧 <b>Language: </b><code>{languages}</code>
+🎭 <b>Genre: </b><code>{genres}</code>
 
-<blockquote>⏱️ Rᴇsᴜʟᴛ sʜᴏᴡɴ ɪɴ: {remaining_seconds} <i>seconds</i> 
-🐱 Rᴇǫᴜᴇsᴛᴇᴅ ʙʏ : {message.from_user.mention}</b></blockquote>
+<blockquote>⏱️ Results shown in: {remaining_seconds} <i>seconds</i> 
+🐱 Requested by : {message.from_user.mention}</b></blockquote>
 
 """
     
