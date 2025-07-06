@@ -2862,7 +2862,7 @@ async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
         vj_search_new = False
         try:
             if reply_msg and hasattr(reply_msg, 'edit_text'):
-                await reply_msg.edit_text("<b><i>I Am Trying To Find Your Movie With Your Wrong Spelling.</i></b>")
+                await reply_msg.edit_text("<b>🕵️ Trying to guess the movie you meant...</b>")
         except Exception as e:
             logger.exception("Failed to edit spell-check message: %s", e)
 
