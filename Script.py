@@ -203,20 +203,20 @@ Cᴏᴍᴍᴀɴᴅs Aɴᴅ Usᴀɢᴇ:
 🛡️ 𝙽𝚊𝚖𝚎 : {}"""
 
 
-    ALRT_TXT = """ʜᴇʟʟᴏ {},
-ᴛʜɪꜱ ɪꜱ ɴᴏᴛ ʏᴏᴜʀ ᴍᴏᴠɪᴇ ʀᴇQᴜᴇꜱᴛ,
-ʀᴇQᴜᴇꜱᴛ ʏᴏᴜʀ'ꜱ..."""
+    ALRT_TXT = """Hello {},
+🚫 You're not allowed to access this movie request."""
 
-    OLD_ALRT_TXT = """ʜᴇʏ {},
-⛔ ᴛʜɪs ᴍᴇssᴀɢᴇ ᴡᴀs ᴇxᴘɪʀᴇᴅ ⛔, 
-ᴘʟᴇᴀꜱᴇ ꜱᴇɴᴅ ᴛʜᴇ ʀᴇǫᴜᴇꜱᴛ ᴀɢᴀɪɴ."""
+    OLD_ALRT_TXT = """Hey {},
+⚠️ This request is no longer valid.
+📨 Please send a new one to proceed.
+"""
 
 
-    CUDNT_FND = """ɪ ᴄᴏᴜʟᴅɴ'ᴛ ꜰɪɴᴅ ᴀɴʏᴛʜɪɴɢ ʀᴇʟᴀᴛᴇᴅ ᴛᴏ {}
-ᴘʟᴇᴀsᴇ sᴇʟᴇᴄᴛ ᴛʜᴇ ᴄᴏʀʀᴇᴄᴛ ɴᴀᴍᴇ ғʀᴏᴍ ᴛʜᴇ ʟɪsᴛ ʙᴇʟᴏᴡ 👇"""
+    CUDNT_FND = """<b>No results found for:</b> <code>{}</code> \n 
+Please select the correct title from the list below 👇"""
 
     I_CUDNT = """
-    <b>Sorry I couldn't find {} in my database 🤧
+<b>Sorry I couldn't find {} in my database 🤧
 ✅ Make sure it's OTT Released. 
 </b>
 <blockquote>
@@ -237,10 +237,13 @@ Series Format:
 🚫 ᴅᴏɴᴛ ᴜsᴇ ➪ 𝚑𝕖𝐥𝒍𝑜 ᴡℴ𝓻ᒪ𝗱 ᴛʜɪs ғᴏɴᴛs</b>
 """
 
-    I_CUD_NT = """ɪ ᴄᴏᴜʟᴅɴ'ᴛ ꜰɪɴᴅ ᴀɴʏ ᴍᴏᴠɪᴇ ʀᴇʟᴀᴛᴇᴅ ᴛᴏ {}.
-ᴘʟᴇᴀꜱᴇ ᴄʜᴇᴄᴋ ᴛʜᴇ ꜱᴘᴇʟʟɪɴɢ ᴏɴ ɢᴏᴏɢʟᴇ ᴏʀ ɪᴍᴅʙ..."""
+    I_CUD_NT = """I couldn't find any movie related to <b>{}</b>.  
+Please check the spelling or try searching on Google or IMDb for the correct title.
+"""
 
-    MVE_NT_FND = """ᴍᴏᴠɪᴇ ɴᴏᴛ ꜰᴏᴜɴᴅ ɪɴ ᴅᴀᴛᴀʙᴀꜱᴇ..."""
+    MVE_NT_FND = """🚫 <b>Movie not found in the database.</b>\n\n
+    <blockquote>🔍 Please check the spelling or verify if it's been released on OTT platforms.\n
+    📡 You can also use the <b>/ott</b> command to check streaming availability.</blockquote>"""
 
     TOP_ALRT_MSG = """Cʜᴇᴄᴋɪɴɢ Fᴏʀ Mᴏᴠɪᴇ Iɴ Dᴀᴛᴀʙᴀsᴇ..."""
 
