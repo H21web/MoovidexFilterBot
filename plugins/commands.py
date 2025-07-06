@@ -18,7 +18,7 @@ from urllib.parse import quote_plus
 from database.config_db import mdb
 from database.topdb import JsTopDB
 from plugins.Extra.latest import latest_movies_command
-from plugins.Extras.ott import handle_ott_selection
+from plugins.Extra.ott import handle_ott_selection
 from TechVJ.util.file_properties import get_name, get_hash, get_media_file_size
 logger = logging.getLogger(__name__)
 
