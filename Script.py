@@ -3,12 +3,10 @@
 # Ask Doubt on telegram @KingVJ01
 
 class script(object):
-    START_TXT = """<blockquote><b>Hᴇʟʟᴏ {}, {}</b></blockquote>
+    START_TXT = """<blockquote><b>Hello{}, {}</b></blockquote>
     
-<b>🎬 ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ ᴍᴏᴏᴠɪᴅᴇx ʙᴏᴛ! 🤖
-🎙️ ᴠᴏɪᴄᴇ sᴇᴀʀᴄʜ + sᴍᴀʀᴛ ғɪʟᴛᴇʀs – ғɪɴᴅ ᴀɴʏ ᴍᴏᴠɪᴇ ғᴀsᴛ!
-➕ ᴀᴅᴅ ᴍᴇ ᴛᴏ ʏᴏᴜʀ ɢʀᴏᴜᴘ ғᴏʀ ɪɴsᴛᴀɴᴛ ᴍᴏᴠɪᴇ sᴇᴀʀᴄʜᴇs.
-ᴊᴜsᴛ sᴀʏ ᴏʀ ᴛʏᴘᴇ ᴀ ᴛɪᴛʟᴇ ᴛᴏ ʙᴇɢɪɴ! 🍿 🔍</b>
+<b>🎬 Welcome to Moovidex Bot! 🤖
+Just send the movie name and I’ll try to find it for you! 🍿🔍</b>
 
 """
 
