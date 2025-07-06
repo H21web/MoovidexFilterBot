@@ -39,10 +39,8 @@ async def admin_cmds(client, message):
         [KeyboardButton("/add_premium"), KeyboardButton("/premium_users")],
         [KeyboardButton("/remove_premium"), KeyboardButton("/add_redeem")],
         [KeyboardButton("/refresh"), KeyboardButton("/set_muc")],
-        [KeyboardButton("/pm_search_on"), KeyboardButton("/pm_search_off")],
         [KeyboardButton("/set_ads"), KeyboardButton("/del_ads")],
         [KeyboardButton("/setlist"), KeyboardButton("/clearlist")],
-        [KeyboardButton("/verify_id"), KeyboardButton("/index")],
         [KeyboardButton("/send"), KeyboardButton("/leave")],
         [KeyboardButton("/ban"), KeyboardButton("/unban")],
         [KeyboardButton("/broadcast"), KeyboardButton("/grp_broadcast")],
@@ -82,20 +80,16 @@ async def close_inline_keyboard(client, callback_query):
 async def set_commands(client, message):
     commands = [
         BotCommand("start", "Start The Bot"),
-        BotCommand("most", "Get Most Searches Button List"),
-        BotCommand("trend", "Get Top Trending Button List"),
-        BotCommand("mostlist", "Show Most Searches List"),
-        BotCommand("trendlist", "𝖦𝖾𝗍 𝖳𝗈𝗉 𝖳𝗋𝖾𝗇𝖽𝗂𝗇𝗀 𝖡𝗎𝗍𝗍𝗈𝗇 𝖫𝗂𝗌t"),
-        BotCommand("plan", "Check Available Premium Membership Plans"),
-        BotCommand("myplan", "Check Your Currunt Plan"),
-        BotCommand("refer", "To Refer Your Friend And Get Premium"),
-        BotCommand("stats", "Check My Database"),
-        BotCommand("id", "Get Telegram Id"),
-        BotCommand("font", "To Generate Cool Fonts"),
-        BotCommand("details", "Check Group Details"),
-        BotCommand("settings", "Change Bot Setting"),
-        BotCommand("grp_cmds", "Check Group Commands"),
-        BotCommand("admin_cmds", "Bot Admin Commands")
+        BotCommand("help", "Get Help and Support"),
+        BotCommand("latest", "Get Latest Releases"),
+        BotCommand("today", "Show Today Releases"),
+        BotCommand("upcoming", "𝖦𝖾𝗍 Upcoming Releases 𝖫𝗂𝗌t"),
+        BotCommand("top", "Get Top Searches Button List"),
+        BotCommand("mostlist", "Get Most Searches List"),
+        BotCommand("ott", "Whats Streaming on OTT"),
+        BotCommand("request", "Request Unavailable Movies"),
+        BotCommand("admin_cmds", "Admin Commands (admins only)"),
+        BotCommand("settings", "Configure Your Bot")
     ]
     await client.set_bot_commands(commands)
     await message.reply("✅ Bot commands set successfully.")
