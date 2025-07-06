@@ -3,11 +3,15 @@
 # Ask Doubt on telegram @KingVJ01
 
 class script(object):
-    START_TXT = """<blockquote><b>Hello{}, {}</b></blockquote>
+    START_TXT = """🎬 Welcome to Moovidex Bot! 🤖
+<b>Hello{}, {}</b> 
+<i>I'm here to help you find movies, series, anime instantly. 🎬</i>
     
-<b>🎬 Welcome to Moovidex Bot! 🤖
+<b>
 Just send the movie name and I’ll try to find it for you! 🍿🔍</b>
+<b>📘 Use /help to explore more.
 
+Powered by @MooviDex</b>
 """
 
     CLONE_START_TXT = """<b><blockquote>ʜᴇʟʟᴏ {}, ᴍʏ ɴᴀᴍᴇ <a href=https://t.me/{}>{}</a></blockquote>
