@@ -31,22 +31,26 @@ def clean_text(text):
     text = text.replace('\u2026', '...')
     return text
 
-def fetch_ott_data():
+def fetch_ott_data(retries=2, delay=3):
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json",
         "Referer": "https://www.binged.com/",
         "Origin": "https://www.binged.com"
     }
-    try:
-        response = requests.get(OTT_URL, headers=headers, timeout=10)
-        if response.status_code == 520:
-            time.sleep(2)
+    for attempt in range(retries):
+        try:
             response = requests.get(OTT_URL, headers=headers, timeout=10)
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        return {"error": str(e)}
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 520 and attempt < retries - 1:
+                time.sleep(delay)
+                continue
+            return {"error": f"{response.status_code} Server Error: {e} for url: {response.url}"}
+        except Exception as e:
+            return {"error": str(e)}
+    return {"error": "Failed after multiple retries."}
 
 def clean_expired_cache(timeout_minutes=5):
     now = datetime.now()
