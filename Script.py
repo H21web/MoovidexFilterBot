@@ -266,8 +266,8 @@ Please check the spelling or try searching on Google or IMDb for the correct tit
 
     NORSLTS = """ 
 <b>❌ No Results Found</b>                                       🚧
-<blockquote>📟 By : <code>{}</code> 💌 {}</blockquote>
-📜 𝙼𝙴𝚂𝚂𝙰𝙶𝙴 : <code>{}</code>"""
+<blockquote>📟 <code>{}</code> 💌 {}</blockquote>
+📜 Query : <code>{}</code>"""
     
     PM_SEARCH_TEMPLATE= """ 
 <b>𝙿𝙼 𝚂𝙴𝙰𝚁𝙲𝙷   </b>                                        🕵  
@@ -288,11 +288,11 @@ Please check the spelling or try searching on Google or IMDb for the correct tit
     IMDB_TEMPLATE_TXT = """
 <b>🎪 {kind} : {title} ({year})</b>
 
-⭐<b> Ratings: </b> <code>{rating}</code>
-🗓 <b>Release Date: </b><code>{release_date}</code>
-🕰 <b>Duration: </b><code>{runtime}</code>
-🎧 <b>Language: </b><code>{languages}</code>
-🎭 <b>Genre: </b><code>{genres}</code>
+⭐<b> Ratings: </b> {rating}
+🗓 <b>Release Date: </b>{release_date}
+🕰 <b>Duration: </b>{runtime}
+🎧 <b>Language: </b>{languages}
+🎭 <b>Genre: </b>{genres}
 
 <blockquote>⏱️ Results shown in: {remaining_seconds} <i>seconds</i> 
 🐱 Requested by : {message.from_user.mention}</b></blockquote>
