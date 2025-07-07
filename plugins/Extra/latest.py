@@ -2,7 +2,7 @@ import requests
 import html
 import asyncio
 from pyrogram import Client, filters
-from pyrogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, CallbackQuery
+from pyrogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
 
 # Clean HTML/unicode characters
 def clean_text(text):
@@ -19,7 +19,7 @@ def clean_text(text):
 def fetch_latest_movies():
     base_url = "https://www.binged.com/wp-json/binged-api/v1/movies"
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0',
         'Referer': 'https://www.binged.com/'
     }
 
@@ -68,21 +68,6 @@ async def latest_movies_command(client, message):
 
     sent = await send_movies_page(client, message.chat.id, user_id, page=0)
     user_pages[user_id]["message_id"] = sent.id
-    
-
-@Client.on_message(filters.command("latest"))
-async def latest_movies_command(client, message):
-    movies_data = fetch_latest_movies()
-    if not movies_data:
-        await message.reply_text("⚠️ No latest movies found or failed to fetch.")
-        return
-
-    titles = [clean_text(movie.get("title", "Untitled")) for movie in movies_data]
-    user_id = message.from_user.id
-    user_pages[user_id] = {"titles": titles, "page": 0, "message_id": None}
-
-    sent = await send_movies_page(client, message.chat.id, user_id, page=0)
-    user_pages[user_id]["message_id"] = sent.id
 
 # Send one paginated page of titles
 async def send_movies_page(client, chat_id, user_id, page):
@@ -115,7 +100,7 @@ async def send_movies_page(client, chat_id, user_id, page):
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
     return await client.send_message(chat_id, "🎬 **Latest Streaming Movies:**", reply_markup=reply_markup)
-                                     
+
 # Pagination navigation
 @Client.on_message(filters.text & filters.regex("^(⬅️ Prev|➡️ Next)$"))
 async def paginate_movies(client, message):
