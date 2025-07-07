@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from utils import temp
+from urllib.parse import quote_plus
 
 OTT_URL = "https://www.binged.com/wp-json/binged-api/v1/whats-streaming"
 
@@ -138,7 +139,8 @@ async def show_platform_page(client, message, message_id, user_id):
     buttons = []
     for movie in current_movies:
         m_title = clean_text(movie.get("title", "Untitled"))
-        buttons.append([InlineKeyboardButton(m_title, url=f"https://t.me/{temp.U_NAME}?start=Search_{m_title}")])
+        encoded_title = quote_plus(m_title) 
+        buttons.append([InlineKeyboardButton(m_title, url=f"https://t.me/moovidexrobot?start=Search_{encoded_title}")])
 
     nav_buttons = []
     if start > 0:
