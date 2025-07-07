@@ -9,8 +9,7 @@ from urllib.parse import quote_plus
 
 OTT_URL = "https://www.binged.com/wp-json/binged-api/v1/whats-streaming"
 
-# Cache per message ID to support session tracking
-OTT_USER_CACHE = {}  # message_id: {user_id, platforms, selected_platform, page, timestamp}
+OTT_USER_CACHE = {}
 
 PLATFORM_IMAGES = {
     "amazon": "https://envs.sh/FI0.jpg",
@@ -22,6 +21,7 @@ PLATFORM_IMAGES = {
     "sun nxt": "https://envs.sh/FIT.jpg",
 }
 
+
 def clean_text(text):
     if not text:
         return text
@@ -32,10 +32,11 @@ def clean_text(text):
     text = text.replace('\u2026', '...')
     return text
 
+
 def fetch_ott_data():
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
         "Referer": "https://www.binged.com/",
         "Origin": "https://www.binged.com"
     }
@@ -49,36 +50,31 @@ def fetch_ott_data():
     except Exception as e:
         return {"error": str(e)}
 
-# 🧼 Session cleaner
+
 def clean_expired_cache(timeout_minutes=5):
     now = datetime.now()
-    expired = []
-
-    for msg_id, data in OTT_USER_CACHE.items():
-        if "timestamp" in data and now - data["timestamp"] > timedelta(minutes=timeout_minutes):
-            expired.append(msg_id)
-
+    expired = [msg_id for msg_id, data in OTT_USER_CACHE.items()
+               if "timestamp" in data and now - data["timestamp"] > timedelta(minutes=timeout_minutes)]
     for msg_id in expired:
         OTT_USER_CACHE.pop(msg_id, None)
 
-# /ott command handler
+
 @Client.on_message(filters.command("ott"))
 async def ott_command_handler(client, event):
     user_id = event.from_user.id
-    message = event
-
     data = fetch_ott_data()
+
     if "error" in data:
-        await message.reply_text(f"⚠️ Failed to fetch OTT platforms.\nError: {data['error']}")
+        await event.reply_text(f"⚠️ Failed to fetch OTT platforms.\nError: {data['error']}")
         return
 
     if not isinstance(data, dict):
-        await message.reply_text("⚠️ Invalid response received from OTT source.")
+        await event.reply_text("⚠️ Invalid response received from OTT source.")
         return
 
     platforms = list(data.values())
     if not platforms:
-        await message.reply_text("🚫 No platforms found.")
+        await event.reply_text("🚫 No platforms found.")
         return
 
     buttons = [
@@ -86,20 +82,20 @@ async def ott_command_handler(client, event):
         for i, p in enumerate(platforms)
     ]
     buttons.append([InlineKeyboardButton("🔙 Close", callback_data="ott_close")])
-    markup = InlineKeyboardMarkup(buttons)
 
-    sent = await message.reply_text("📺 **Select a Platform to Browse:**", reply_markup=markup)
-    
+    markup = InlineKeyboardMarkup(buttons)
+    sent = await event.reply_text("📺 **Select a Platform to Browse:**", reply_markup=markup)
+
     OTT_USER_CACHE[sent.id] = {
         "user_id": user_id,
         "platforms": platforms,
         "timestamp": datetime.now()
     }
 
+
 @Client.on_callback_query(filters.regex("ott_platform_"))
 async def platform_selected(client, callback_query):
     clean_expired_cache()
-
     user_id = callback_query.from_user.id
     message = callback_query.message
     message_id = message.id
@@ -115,10 +111,11 @@ async def platform_selected(client, callback_query):
     cache['page'] = 0
     cache['timestamp'] = datetime.now()
 
-    await callback_query.message.delete()
-    await show_platform_page(client, message, message_id, user_id)
+    await callback_query.answer()
+    await show_platform_page(client, message, message_id)
 
-async def show_platform_page(client, message, message_id, user_id):
+
+async def show_platform_page(client, message, message_id):
     cache = OTT_USER_CACHE.get(message_id)
     if not cache:
         return
@@ -139,7 +136,9 @@ async def show_platform_page(client, message, message_id, user_id):
     for movie in current_movies:
         m_title = clean_text(movie.get("title", "Untitled"))
         encoded_title = quote_plus(m_title).replace("+", "_")
-        buttons.append([InlineKeyboardButton(m_title, url=f"https://t.me/moovidexrobot?start=Search_{encoded_title}")])
+        buttons.append([
+            InlineKeyboardButton(m_title, url=f"https://t.me/moovidexrobot?start=Search_{encoded_title}")
+        ])
 
     nav_buttons = []
     if start > 0:
@@ -151,32 +150,28 @@ async def show_platform_page(client, message, message_id, user_id):
 
     buttons.append([InlineKeyboardButton("🔙 Back to Menu", callback_data="ott_back")])
     markup = InlineKeyboardMarkup(buttons)
+
     caption = f"🎬 **{platform['title']} Movies**\n\nPage {page + 1} of {(len(movies) - 1) // page_size + 1}"
 
-    if logo:
-        try:
-            await message.edit_media(
-                media=InputMediaPhoto(media=logo, caption=caption),
-                reply_markup=markup
-            )
-        except Exception:
-            new_msg = await client.send_photo(message.chat.id, photo=logo, caption=caption, reply_markup=markup)
-            OTT_USER_CACHE[new_msg.id] = OTT_USER_CACHE.pop(message.id)
-    else:
-        try:
+    try:
+        if message.photo and logo:
+            await message.edit_caption(caption, reply_markup=markup)
+        elif logo:
+            await message.edit_media(InputMediaPhoto(media=logo, caption=caption), reply_markup=markup)
+        else:
             await message.edit_text(caption, reply_markup=markup)
-        except Exception:
+    except:
+        if logo:
+            new_msg = await client.send_photo(message.chat.id, photo=logo, caption=caption, reply_markup=markup)
+        else:
             new_msg = await client.send_message(message.chat.id, text=caption, reply_markup=markup)
-            OTT_USER_CACHE[new_msg.id] = OTT_USER_CACHE.pop(message.id)
+        OTT_USER_CACHE[new_msg.id] = OTT_USER_CACHE.pop(message.id, {})
 
 
 @Client.on_callback_query(filters.regex("ott_next"))
 async def ott_next_page(client, callback_query):
     clean_expired_cache()
-
-    user_id = callback_query.from_user.id
-    message = callback_query.message
-    message_id = message.id
+    message_id = callback_query.message.id
 
     cache = OTT_USER_CACHE.get(message_id)
     if not cache:
@@ -185,17 +180,14 @@ async def ott_next_page(client, callback_query):
     cache['page'] += 1
     cache['timestamp'] = datetime.now()
 
-    await callback_query.message.delete()
-    await show_platform_page(client, message, message_id, user_id)
+    await show_platform_page(client, callback_query.message, message_id)
     await callback_query.answer()
+
 
 @Client.on_callback_query(filters.regex("ott_prev"))
 async def ott_prev_page(client, callback_query):
     clean_expired_cache()
-
-    user_id = callback_query.from_user.id
-    message = callback_query.message
-    message_id = message.id
+    message_id = callback_query.message.id
 
     cache = OTT_USER_CACHE.get(message_id)
     if not cache or cache['page'] <= 0:
@@ -204,14 +196,13 @@ async def ott_prev_page(client, callback_query):
     cache['page'] -= 1
     cache['timestamp'] = datetime.now()
 
-    await callback_query.message.delete()
-    await show_platform_page(client, message, message_id, user_id)
+    await show_platform_page(client, callback_query.message, message_id)
     await callback_query.answer()
+
 
 @Client.on_callback_query(filters.regex("ott_back"))
 async def ott_back_to_main(client, callback_query):
     clean_expired_cache()
-
     user_id = callback_query.from_user.id
     message = callback_query.message
     message_id = message.id
@@ -229,6 +220,8 @@ async def ott_back_to_main(client, callback_query):
 
     cache['timestamp'] = datetime.now()
     await callback_query.message.edit_text("📺 **Select a Platform to Browse:**", reply_markup=markup)
+    await callback_query.answer()
+
 
 @Client.on_callback_query(filters.regex("ott_close"))
 async def ott_close_handler(client, callback_query):
