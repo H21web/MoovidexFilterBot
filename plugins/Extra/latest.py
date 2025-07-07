@@ -17,7 +17,7 @@ def clean_text(text):
 
 # Fetch all movies from all pages (no filtering)
 def fetch_latest_movies():
-    base_url = "https://www.binged.com/wp-json/binged-api/v1/movies?mode=streaming-week"
+    base_url = "https://www.binged.com/wp-json/binged-api/v1/movies"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36',
         'Referer': 'https://www.binged.com/'
