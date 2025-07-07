@@ -5,6 +5,7 @@
 import os, logging, string, asyncio, time, re, ast, random, math, pytz, pyrogram, aiohttp
 from datetime import datetime, timedelta, date, time
 from Script import script
+import requests
 from info import *
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, InputMediaPhoto, ChatPermissions, WebAppInfo
 from pyrogram import Client, filters, enums
