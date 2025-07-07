@@ -20,21 +20,29 @@ def fetch_latest_movies():
     base_url = "https://www.binged.com/wp-json/binged-api/v1/movies"
     headers = {
         'User-Agent': 'Mozilla/5.0',
-        'Referer': 'https://www.binged.com/'
+        'Referer': 'https://www.binged.com/',
+        'Accept': 'application/json'
     }
 
     all_movies = []
     current_page = 1
+    max_pages = 10  # Limit to prevent infinite loops on API errors
 
-    while True:
+    while current_page <= max_pages:
         try:
             url = f"{base_url}?page={current_page}" if current_page > 1 else base_url
             response = requests.get(url, headers=headers, timeout=10)
+
             if response.status_code != 200:
+                print(f"[Error] HTTP {response.status_code} on page {current_page}")
                 break
 
             data = response.json()
-            page_movies = data.get('data', [])
+            page_movies = data.get('data')
+            if not isinstance(page_movies, list):
+                print(f"[Error] Unexpected response format on page {current_page}: {data}")
+                break
+
             all_movies.extend(page_movies)
 
             pagination = data.get("pagination", {})
@@ -45,8 +53,12 @@ def fetch_latest_movies():
 
             current_page += 1
 
-        except Exception as e:
-            print("Error while fetching movies:", e)
+        except requests.exceptions.RequestException as e:
+            print("[Exception]", e)
+            break
+
+        except ValueError:
+            print("[Error] Failed to decode JSON on page", current_page)
             break
 
     return all_movies
