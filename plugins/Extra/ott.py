@@ -44,11 +44,15 @@ def fetch_ott_data(retries=2, delay=3):
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError as e:
-            if response.status_code == 520 and attempt < retries - 1:
+            status_code = e.response.status_code if e.response else "Unknown"
+            if status_code == 520 and attempt < retries - 1:
                 time.sleep(delay)
                 continue
-            return {"error": f"{response.status_code} Server Error: {e} for url: {response.url}"}
+            return {"error": f"{status_code} Server Error: {e}"}
         except Exception as e:
+            if attempt < retries - 1:
+                time.sleep(delay)
+                continue
             return {"error": str(e)}
     return {"error": "Failed after multiple retries."}
 
