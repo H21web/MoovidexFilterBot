@@ -98,7 +98,8 @@ async def show_movie_detail(client, callback_query):
                     f"📺 {platform}"
                 )
 
-                formatted_title = format_title_for_url(title)
+                formatted_title = format_title_for_url(title) + f"_{year}"
+
 
                 buttons = [
                     [InlineKeyboardButton("🔍 Click to Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{formatted_title}")]
@@ -140,7 +141,8 @@ async def post_movie_to_channel(client, callback_query):
                     f"**@MooviDex**"
                 )
 
-                formatted_title = format_title_for_url(title)
+                formatted_title = format_title_for_url(title) + f"_{year}"
+
 
                 search_button = InlineKeyboardButton("🔍 Click To Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{formatted_title}")
                 reply_markup = InlineKeyboardMarkup([[search_button]])
