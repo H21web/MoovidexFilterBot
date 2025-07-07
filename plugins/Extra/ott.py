@@ -3,7 +3,7 @@ import html
 import time
 from datetime import datetime, timedelta
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, InputMediaPhoto
 from utils import temp
 from urllib.parse import quote_plus
 
@@ -89,8 +89,7 @@ async def ott_command_handler(client, event):
     markup = InlineKeyboardMarkup(buttons)
 
     sent = await message.reply_text("📺 **Select a Platform to Browse:**", reply_markup=markup)
-
-    # Save session
+    
     OTT_USER_CACHE[sent.id] = {
         "user_id": user_id,
         "platforms": platforms,
@@ -139,7 +138,7 @@ async def show_platform_page(client, message, message_id, user_id):
     buttons = []
     for movie in current_movies:
         m_title = clean_text(movie.get("title", "Untitled"))
-        encoded_title = quote_plus(m_title) 
+        encoded_title = quote_plus(m_title).replace("+", "_")
         buttons.append([InlineKeyboardButton(m_title, url=f"https://t.me/moovidexrobot?start=Search_{encoded_title}")])
 
     nav_buttons = []
@@ -155,9 +154,21 @@ async def show_platform_page(client, message, message_id, user_id):
     caption = f"🎬 **{platform['title']} Movies**\n\nPage {page + 1} of {(len(movies) - 1) // page_size + 1}"
 
     if logo:
-        await client.send_photo(message.chat.id, photo=logo, caption=caption, reply_markup=markup)
+        try:
+            await message.edit_media(
+                media=InputMediaPhoto(media=logo, caption=caption),
+                reply_markup=markup
+            )
+        except Exception:
+            new_msg = await client.send_photo(message.chat.id, photo=logo, caption=caption, reply_markup=markup)
+            OTT_USER_CACHE[new_msg.id] = OTT_USER_CACHE.pop(message.id)
     else:
-        await client.send_message(message.chat.id, text=caption, reply_markup=markup)
+        try:
+            await message.edit_text(caption, reply_markup=markup)
+        except Exception:
+            new_msg = await client.send_message(message.chat.id, text=caption, reply_markup=markup)
+            OTT_USER_CACHE[new_msg.id] = OTT_USER_CACHE.pop(message.id)
+
 
 @Client.on_callback_query(filters.regex("ott_next"))
 async def ott_next_page(client, callback_query):
