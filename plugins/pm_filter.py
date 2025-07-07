@@ -2827,16 +2827,26 @@ async def handle_no_results(client, reply_msg, mv_rqst, reqstr):
     try:
         reqst_gle = mv_rqst.replace(" ", "+")
         button = [[
-            InlineKeyboardButton("Gᴏᴏɢʟᴇ", url=f"https://www.google.com/search?q={reqst_gle}")
+            InlineKeyboardButton("🔍 Search on Google", url=f"https://www.google.com/search?q={reqst_gle}")
         ]]
-        if NO_RESULTS_MSG:
-            await client.send_message(chat_id=LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, mv_rqst)))
+
+        # Always log the no-result info to LOG_CHANNEL
+        log_text = f"🚫 <b>No results found</b>\n\n👤 User: {reqstr.mention} (`{reqstr.id}`)\n🔎 Query: <code>{mv_rqst}</code>"
+        await client.send_message(chat_id=LOG_CHANNEL, text=log_text)
+
+        # Show message to user
         if reply_msg and hasattr(reply_msg, 'edit_text'):
-            k = await reply_msg.edit_text(text=script.I_CUDNT.format(mv_rqst), reply_markup=InlineKeyboardMarkup(button))
+            k = await reply_msg.edit_text(
+                text=script.I_CUDNT.format(mv_rqst),
+                reply_markup=InlineKeyboardMarkup(button),
+                disable_web_page_preview=True
+            )
             await asyncio.sleep(30)
             await k.delete()
+
     except Exception as e:
         logger.exception("Error in handle_no_results: %s", e)
+
 
 
 async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
