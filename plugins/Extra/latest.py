@@ -19,7 +19,7 @@ def clean_text(text):
 def fetch_movies_page(page=1):
     url = f"https://www.binged.com/wp-json/binged-api/v1/movies?page={page}"
     headers = {
-        'User-Agent': 'Mozilla/5.0',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         'Referer': 'https://www.binged.com/',
         'Accept': 'application/json'
     }
@@ -47,12 +47,6 @@ async def latest_movies_command(client, message):
         await message.reply_text("⚠️ Failed to fetch movies.")
         return
 
-    # Delete command message
-    try:
-        await message.delete()
-    except:
-        pass
-
     user_pages[user_id] = {
         "page": page,
         "total_pages": total_pages,
@@ -63,7 +57,7 @@ async def latest_movies_command(client, message):
     sent = await send_movies_page(client, message.chat.id, user_id)
     user_pages[user_id]["message_id"] = sent.id
 
-# Send movies with updated format
+# Send movies
 async def send_movies_page(client, chat_id, user_id):
     movies = user_pages[user_id]["movies"]
     titles = [clean_text(movie.get("title", "Untitled")) for movie in movies]
@@ -92,19 +86,7 @@ async def send_movies_page(client, chat_id, user_id):
     keyboard.append([KeyboardButton("❌ Close")])
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-    # Delete old message
-    old_msg_id = user_pages[user_id]["message_id"]
-    if old_msg_id:
-        try:
-            await client.delete_messages(chat_id, old_msg_id)
-        except:
-            pass
-
-    return await client.send_message(
-        chat_id,
-        f"🎬 **Latest Streaming Movies**\n\n📄 Page {page}",
-        reply_markup=reply_markup
-    )
+    return await client.send_message(chat_id, f"🎬 **Latest Streaming Movies:**\n📄 Page {page}", reply_markup=reply_markup)
 
 # Pagination
 @Client.on_message(filters.text & filters.regex("^(⬅️ Prev|➡️ Next)$"))
@@ -131,10 +113,19 @@ async def paginate_movies(client, message):
     user_pages[user_id]["page"] = new_page
     user_pages[user_id]["movies"] = movies
 
+    # Delete user message (button press)
     try:
         await message.delete()
     except:
         pass
+
+    # Also delete old bot message
+    old_msg_id = user_pages[user_id]["message_id"]
+    if old_msg_id:
+        try:
+            await client.delete_messages(message.chat.id, old_msg_id)
+        except:
+            pass
 
     sent = await send_movies_page(client, message.chat.id, user_id)
     user_pages[user_id]["message_id"] = sent.id
@@ -142,22 +133,11 @@ async def paginate_movies(client, message):
 # Close keyboard
 @Client.on_message(filters.text & filters.regex("^❌ Close$"))
 async def close_keyboard(client, message):
-    user_id = message.from_user.id
+    await message.delete()
     try:
-        await message.delete()
+        sent = await client.send_message(
+            message.chat.id, "❌ Closed", reply_markup=ReplyKeyboardRemove())
+        await asyncio.sleep(10)
+        await client.delete_messages(message.chat.id, sent.id)
     except:
         pass
-
-    # Delete the current movie message
-    old_msg_id = user_pages.get(user_id, {}).get("message_id")
-    if old_msg_id:
-        try:
-            await client.delete_messages(message.chat.id, old_msg_id)
-        except:
-            pass
-
-    await client.send_message(
-        message.chat.id,
-        "❌ Closed",
-        reply_markup=ReplyKeyboardRemove()
-    )
