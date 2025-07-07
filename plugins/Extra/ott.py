@@ -65,7 +65,13 @@ def clean_expired_cache(timeout_minutes=5):
 @Client.on_message(filters.command("ott"))
 async def ott_command_handler(client, event):
     user_id = event.from_user.id
-    message = event
+        # Handle both /ott command and button clicks
+    if isinstance(event, CallbackQuery):
+        user_id = event.from_user.id
+        message = event.message
+    else:  # It's a Message (from command)
+        user_id = event.from_user.id
+        message = event
 
     data = fetch_ott_data()
     if "error" in data:
