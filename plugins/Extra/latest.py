@@ -15,11 +15,11 @@ def clean_text(text):
     text = text.replace('\u2026', '...')
     return text.strip()
 
-# Fetch movies for a specific page
+# Fetch movie list by page
 def fetch_movies_page(page=1):
     url = f"https://www.binged.com/wp-json/binged-api/v1/movies?page={page}"
     headers = {
-        'User-Agent': 'Mozilla/5.0',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         'Referer': 'https://www.binged.com/',
         'Accept': 'application/json'
     }
@@ -33,7 +33,7 @@ def fetch_movies_page(page=1):
         print("Error while fetching page:", e)
         return [], 1
 
-# Store user session
+# Session storage
 user_pages = {}  # user_id: {"page": 1, "total_pages": 1, "movies": [], "message_id": id}
 
 # /latest command
@@ -57,7 +57,7 @@ async def latest_movies_command(client, message):
     sent = await send_movies_page(client, message.chat.id, user_id)
     user_pages[user_id]["message_id"] = sent.id
 
-# Format and send movie titles as keyboard
+# Send movie titles as buttons
 async def send_movies_page(client, chat_id, user_id):
     movies = user_pages[user_id]["movies"]
     titles = []
@@ -86,12 +86,13 @@ async def send_movies_page(client, chat_id, user_id):
     if nav_buttons:
         keyboard.append(nav_buttons)
 
+    # Close
     keyboard.append([KeyboardButton("❌ Close")])
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
     return await client.send_message(chat_id, "🎬 **Latest Streaming Movies:**", reply_markup=reply_markup)
 
-# Pagination navigation
+# Pagination
 @Client.on_message(filters.text & filters.regex("^(⬅️ Prev|➡️ Next)$"))
 async def paginate_movies(client, message):
     user_id = message.from_user.id
@@ -129,7 +130,7 @@ async def paginate_movies(client, message):
     sent = await send_movies_page(client, message.chat.id, user_id)
     user_pages[user_id]["message_id"] = sent.id
 
-# Close keyboard
+# Close
 @Client.on_message(filters.text & filters.regex("^❌ Close$"))
 async def close_keyboard(client, message):
     await message.delete()
