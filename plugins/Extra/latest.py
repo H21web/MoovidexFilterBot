@@ -28,7 +28,7 @@ def fetch_latest_movies():
 
     while True:
         try:
-            url = f"{base_url}&page={current_page}" if current_page > 1 else base_url
+            url = f"{base_url}?page={current_page}" if current_page > 1 else base_url
             response = requests.get(url, headers=headers, timeout=10)
             if response.status_code != 200:
                 break
