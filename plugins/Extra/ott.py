@@ -2,13 +2,13 @@ import requests
 import html
 import time
 from datetime import datetime, timedelta
+from urllib.parse import quote_plus  # for safe URL generation
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
-from utils import temp
+from utils import temp  # Ensure temp.U_NAME is your bot username without "@"
 
 OTT_URL = "https://www.binged.com/wp-json/binged-api/v1/whats-streaming"
 
-# Cache per message ID to support session tracking
 OTT_USER_CACHE = {}  # message_id: {user_id, platforms, selected_platform, page, timestamp}
 
 PLATFORM_IMAGES = {
@@ -33,8 +33,8 @@ def clean_text(text):
 
 def fetch_ott_data():
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
         "Referer": "https://www.binged.com/",
         "Origin": "https://www.binged.com"
     }
@@ -48,19 +48,13 @@ def fetch_ott_data():
     except Exception as e:
         return {"error": str(e)}
 
-# 🧼 Session cleaner
 def clean_expired_cache(timeout_minutes=5):
     now = datetime.now()
-    expired = []
-
-    for msg_id, data in OTT_USER_CACHE.items():
-        if "timestamp" in data and now - data["timestamp"] > timedelta(minutes=timeout_minutes):
-            expired.append(msg_id)
-
+    expired = [msg_id for msg_id, data in OTT_USER_CACHE.items()
+               if "timestamp" in data and now - data["timestamp"] > timedelta(minutes=timeout_minutes)]
     for msg_id in expired:
         OTT_USER_CACHE.pop(msg_id, None)
 
-# /ott command handler
 @Client.on_message(filters.command("ott"))
 async def ott_command_handler(client, event):
     user_id = event.from_user.id
@@ -89,7 +83,6 @@ async def ott_command_handler(client, event):
 
     sent = await message.reply_text("📺 **Select a Platform to Browse:**", reply_markup=markup)
 
-    # Save session
     OTT_USER_CACHE[sent.id] = {
         "user_id": user_id,
         "platforms": platforms,
@@ -136,9 +129,16 @@ async def show_platform_page(client, message, message_id, user_id):
     current_movies = movies[start:end]
 
     buttons = []
+
     for movie in current_movies:
         m_title = clean_text(movie.get("title", "Untitled"))
-        buttons.append([InlineKeyboardButton(m_title, url=f"https://t.me/{temp.U_NAME}?start=Search_{m_title}")])
+        try:
+            encoded_title = quote_plus(m_title)
+            if temp.U_NAME:
+                movie_url = f"https://t.me/{temp.U_NAME}?start=Search_{encoded_title}"
+                buttons.append([InlineKeyboardButton(m_title, url=movie_url)])
+        except Exception as e:
+            continue  # Skip if encoding or URL fails
 
     nav_buttons = []
     if start > 0:
