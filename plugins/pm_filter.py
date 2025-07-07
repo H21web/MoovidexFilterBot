@@ -500,8 +500,18 @@ async def advantage_spoll_choker(bot, query):
                 if api_answer:
                     final_text += f"\n\n<blockquote expandable><b>{api_answer}</b></blockquote>\n"
           
-                msg = await query.message.edit(final_text,reply_markup=InlineKeyboardMarkup(request_btn),disable_web_page_preview=True)
-                await client.send_message(chat_id=LOG_CHANNEL, text=(script.NORSLTS.format(reqstr.id, reqstr.mention, movie)))
+                msg = await query.message.edit(
+                    final_text,
+                    reply_markup=InlineKeyboardMarkup(request_btn),
+                    disable_web_page_preview=True
+                )
+                
+                # Fix: use 'bot' instead of undefined 'client'
+                await bot.send_message(
+                    chat_id=LOG_CHANNEL,
+                    text=(script.NORSLTS.format(reqstr.id, reqstr.mention, movie))
+                )
+                
                 await asyncio.sleep(120)
                 await msg.delete()
 
