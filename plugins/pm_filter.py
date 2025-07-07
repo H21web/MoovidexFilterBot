@@ -2861,24 +2861,27 @@ async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
         r"\b(pl(i|e)*?(s|z+|ease|se|ese|(e+)s(e)?)|((send|snd|giv(e)?|gib)(\sme)?)|movie(s)?|new|latest|br((o|u)h?)*|^h(e|a)?(l)*(o)*|mal(ayalam)?|t(h)?amil|file|that|find|und(o)*|kit(t(i|y)?)?o(w)?|thar(u)?(o)*w?|kittum(o)*|aya(k)*(um(o)*)?|full\smovie|any(one)|with\ssubtitle(s)?)",
         "", msg_text,
         flags=re.IGNORECASE)
-    query = query.strip() + " movie"
+    query = query.strip()
+
+    if not query:
+        await handle_no_results(client, reply_msg, mv_rqst, reqstr)
+        return
 
     try:
-        movie = await get_poster(mv_rqst)  # Removed bulk=True
+        res = requests.get(f"https://imdb.iamidiotareyoutoo.com/search?q={query}")
+        data = res.json()
+        if not data.get("ok") or not data.get("description"):
+            raise ValueError("No movie suggestions found.")
     except Exception as e:
-        logger.exception(e)
+        logger.exception("Spell suggestion API failed: %s", e)
         await handle_no_results(client, reply_msg, mv_rqst, reqstr)
         return
 
-    if not movie:
-        await handle_no_results(client, reply_msg, mv_rqst, reqstr)
-        return
-
-    movielist = []
-    movielist.append(movie.get('title'))
-    movielist.append(f"{movie.get('title')} {movie.get('year')}")
+    suggestions = data["description"]
+    movielist = [f"{m.get('#TITLE', '')} {m.get('#YEAR', '')}" for m in suggestions[:5]]
     SPELL_CHECK[mv_id] = movielist
 
+    # Auto spell check shortcut
     if AI_SPELL_CHECK and vj_search:
         vj_search_new = False
         try:
@@ -2887,7 +2890,7 @@ async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
         except Exception as e:
             logger.exception("Failed to edit spell-check message: %s", e)
 
-        techvj = movie.get('title', '')
+        techvj = suggestions[0].get("#TITLE", '')
         try:
             mv_rqst = mv_rqst.capitalize()
         except Exception:
@@ -2899,17 +2902,17 @@ async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
         await handle_no_results(client, reply_msg, mv_rqst, reqstr)
         return
 
-    # Prepare suggestion buttons
+    # Inline keyboard for spell suggestions
     btn = [
         [
             InlineKeyboardButton(
-                text=movie_name.strip(),
+                text=title.strip(),
                 callback_data=f"spol#{reqstr1}#{k}",
             )
         ]
-        for k, movie_name in enumerate(movielist[:5])
+        for k, title in enumerate(movielist)
     ]
-    btn.append([InlineKeyboardButton(text="Close", callback_data=f'spol#{reqstr1}#close_spellcheck')])
+    btn.append([InlineKeyboardButton(text="Close", callback_data=f"spol#{reqstr1}#close_spellcheck")])
 
     try:
         if reply_msg and hasattr(reply_msg, 'edit_text'):
@@ -2934,6 +2937,7 @@ async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
                     await spell_check_del.delete()
             except Exception as e:
                 logger.exception("Failed to delete spell check message: %s", e)
+
 
 async def manual_filters(client, message, text=False):
     settings = await get_settings(message.chat.id)
