@@ -7,7 +7,7 @@ from utils import temp
 from info import *
 
 # List of Admin IDs
-ADMIN_IDS = [1011394081, 7191327005]  # Replace with actual admin user IDs
+ADMIN_IDS = [1011394081, 7191327005]  # Replace with your actual admin user IDs
 
 # Base URLs
 SEARCH_URL = "https://www.binged.com/wp-json/binged-api/v1/movies"
@@ -20,7 +20,7 @@ def clean_text(text):
     text = html.unescape(text)
     for orig, sub in [
         ("\u2019", "'"), ("\u2018", "'"),
-        ("\u201c", '"'), ("\u201d", '"'),
+        ("\u201c", '""), ("\u201d", '"'),
         ("\u2013", "-"), ("\u2014", "-"),
         ("\u2026", "...")
     ]:
@@ -31,24 +31,37 @@ def clean_text(text):
 @Client.on_message(filters.command("binged"))
 async def binged_search(client, message):
     if len(message.command) < 2:
-        return await message.reply_text("❗ Usage: `/binged <movie name>`", parse_mode="markdown")
+        return await message.reply_text(
+            "❗ Usage: `/binged <movie name>`",
+            parse_mode="markdown"
+        )
     query = " ".join(message.command[1:])
-    resp = requests.get(f"{SEARCH_URL}?search={query}")
-    if resp.status_code != 200:
-        return await message.reply_text("⚠️ Failed to reach search API. Try again later.")
+
+    # 🔧 Use mode=all to ensure full search coverage
+    try:
+        resp = requests.get(f"{SEARCH_URL}?mode=all&search={query}", timeout=10)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        return await message.reply_text(
+            f"⚠️ Failed to reach search API. Please try again later.\n`{e}`",
+            parse_mode="markdown"
+        )
+
     data = resp.json().get("data", [])
     if not data:
         return await message.reply_text("🔍 No results found.")
-    # Build buttons: title (year) → callback carrying movie ID
+
+    # Build buttons: Title (Year) → callback carrying movie ID
     buttons = []
     for movie in data:
-        title = clean_text(movie.get("title"))
+        title = clean_text(movie.get("title", "Untitled"))
         year  = movie.get("theatrical-year", "N/A")
         movie_id = movie.get("id")
         btn_text = f"{title} ({year})"
         buttons.append([
             InlineKeyboardButton(btn_text, callback_data=f"binged_detail_{movie_id}")
         ])
+
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
     await message.reply_text(
         f"🔍 Search results for **{clean_text(query)}**:",
@@ -60,11 +73,13 @@ async def binged_search(client, message):
 @Client.on_callback_query(filters.regex(r"^binged_detail_(\d+)$"))
 async def binged_detail(client, cq):
     movie_id = cq.data.split("_")[-1]
-    resp = requests.get(f"{DETAIL_URL}/{movie_id}")
-    if resp.status_code != 200:
+    try:
+        resp = requests.get(f"{DETAIL_URL}/{movie_id}", timeout=10)
+        resp.raise_for_status()
+    except requests.RequestException:
         return await cq.answer("⚠️ Could not fetch movie details.", show_alert=True)
+
     m = resp.json()
-    # Format details
     title = clean_text(m.get("title", "N/A"))
     year = m.get("theatrical-year", "N/A")
     typ  = clean_text(m.get("type", "N/A"))
@@ -79,6 +94,7 @@ async def binged_detail(client, cq):
         f"🉑 {langs} · 📺 {plat}\n"
         f"📅 Streaming from: {streaming}"
     )
+
     # Buttons: Search button always, plus Post-to-channel if admin
     search_btn = InlineKeyboardButton(
         "🔍 Search in Bot",
@@ -91,8 +107,11 @@ async def binged_detail(client, cq):
         ])
     markup.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
 
-    await cq.message.reply_text(details, parse_mode="markdown",
-                                reply_markup=InlineKeyboardMarkup(markup))
+    await cq.message.reply_text(
+        details,
+        parse_mode="markdown",
+        reply_markup=InlineKeyboardMarkup(markup)
+    )
     await cq.answer()
 
 # Post-to-channel callback – for admins only
@@ -100,10 +119,14 @@ async def binged_detail(client, cq):
 async def binged_post(client, cq):
     if cq.from_user.id not in ADMIN_IDS:
         return await cq.answer("🚫 You’re not authorized.", show_alert=True)
+
     movie_id = cq.data.split("_")[-1]
-    resp = requests.get(f"{DETAIL_URL}/{movie_id}")
-    if resp.status_code != 200:
+    try:
+        resp = requests.get(f"{DETAIL_URL}/{movie_id}", timeout=10)
+        resp.raise_for_status()
+    except requests.RequestException:
         return await cq.answer("⚠️ Could not fetch details.", show_alert=True)
+
     m = resp.json()
     title = clean_text(m.get("title", "N/A"))
     year = m.get("theatrical-year", "N/A")
@@ -126,7 +149,7 @@ async def binged_post(client, cq):
         url=f"https://t.me/{temp.U_NAME}?start=Search_{re.sub(r'[^a-zA-Z0-9]', '_', title)}_{year}"
     )
     try:
-        channel_id = "-1001680629032"  # your channel
+        channel_id = "-1001680629032"  # Replace with your channel ID
         await client.send_message(
             chat_id=channel_id,
             text=post_text,
@@ -137,7 +160,7 @@ async def binged_post(client, cq):
     except Exception as e:
         await cq.answer(f"⚠️ Post failed: {e}", show_alert=True)
 
-# Close-button handler (shared)
+# Close-button handler
 @Client.on_callback_query(filters.regex(r"^close_message$"))
 async def close_message_callback(client, cq):
     try:
