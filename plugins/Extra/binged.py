@@ -35,24 +35,22 @@ def clean_text(text):
 async def binged_search(client, message):
     if len(message.command) < 2:
         return await message.reply_text(
-            "❗ Usage: <code>/binged &lt;movie name&gt;</code>",
-            parse_mode="html"
+            "Usage: /binged <movie name>"
         )
     query = " ".join(message.command[1:])
 
-    # 🔧 Use mode=all to ensure full search coverage
+    # Use mode=all to ensure full search coverage
     try:
         resp = requests.get(f"{SEARCH_URL}?mode=all&search={query}", timeout=10)
         resp.raise_for_status()
     except requests.RequestException as e:
         return await message.reply_text(
-            f"⚠️ Failed to reach search API. Please try again later.\n<code>{e}</code>",
-            parse_mode="html"
+            f"Failed to reach search API. Please try again later.\nError: {e}"
         )
 
     data = resp.json().get("data", [])
     if not data:
-        return await message.reply_text("🔍 No results found.", parse_mode="html")
+        return await message.reply_text("No results found.")
 
     # Build buttons: Title (Year) → callback carrying movie ID
     buttons = []
@@ -65,10 +63,9 @@ async def binged_search(client, message):
             InlineKeyboardButton(btn_text, callback_data=f"binged_detail_{movie_id}")
         ])
 
-    buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
+    buttons.append([InlineKeyboardButton("Close ❌", callback_data="close_message")])
     await message.reply_text(
-        f"🔍 Search results for <b>{html.escape(query)}</b>:",
-        parse_mode="html",
+        f"Search results for '{query}':",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
@@ -80,7 +77,7 @@ async def binged_detail(client, cq):
         resp = requests.get(f"{DETAIL_URL}/{movie_id}", timeout=10)
         resp.raise_for_status()
     except requests.RequestException:
-        return await cq.answer("⚠️ Could not fetch movie details.", show_alert=True)
+        return await cq.answer("Could not fetch movie details.", show_alert=True)
 
     m = resp.json()
     title = clean_text(m.get("title", "N/A"))
@@ -92,27 +89,28 @@ async def binged_detail(client, cq):
     streaming = m.get("streaming-date", "Unknown")
 
     details = (
-        f"✅ <b>{html.escape(title)}</b> · ({year})\n"
-        f"🎥 {html.escape(typ)} · 🎭 {html.escape(genres)}\n"
-        f"🉑 {html.escape(langs)} · 📺 {html.escape(plat)}\n"
-        f"📅 Streaming from: {html.escape(streaming)}"
+        f"{title} ({year})\n"
+        f"Type: {typ}\n"
+        f"Genres: {genres}\n"
+        f"Languages: {langs}\n"
+        f"Platforms: {plat}\n"
+        f"Streaming from: {streaming}"
     )
 
     # Buttons: Search button always, plus Post-to-channel if admin
     search_btn = InlineKeyboardButton(
-        "🔍 Search in Bot",
+        "Search in Bot 🔍",
         url=f"https://t.me/{temp.U_NAME}?start=Search_{re.sub(r'[^a-zA-Z0-9]', '_', title)}_{year}"
     )
     markup = [[search_btn]]
     if cq.from_user.id in ADMIN_IDS:
         markup.append([
-            InlineKeyboardButton("📣 Post to Channel", callback_data=f"binged_post_{movie_id}")
+            InlineKeyboardButton("Post to Channel 📣", callback_data=f"binged_post_{movie_id}")
         ])
-    markup.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
+    markup.append([InlineKeyboardButton("Close ❌", callback_data="close_message")])
 
     await cq.message.reply_text(
         details,
-        parse_mode="html",
         reply_markup=InlineKeyboardMarkup(markup)
     )
     await cq.answer()
@@ -121,14 +119,14 @@ async def binged_detail(client, cq):
 @Client.on_callback_query(filters.regex(r"^binged_post_(\d+)$"))
 async def binged_post(client, cq):
     if cq.from_user.id not in ADMIN_IDS:
-        return await cq.answer("🚫 You’re not authorized.", show_alert=True)
+        return await cq.answer("You’re not authorized.", show_alert=True)
 
     movie_id = cq.data.split("_")[-1]
     try:
         resp = requests.get(f"{DETAIL_URL}/{movie_id}", timeout=10)
         resp.raise_for_status()
     except requests.RequestException:
-        return await cq.answer("⚠️ Could not fetch details.", show_alert=True)
+        return await cq.answer("Could not fetch details.", show_alert=True)
 
     m = resp.json()
     title = clean_text(m.get("title", "N/A"))
@@ -140,15 +138,16 @@ async def binged_post(client, cq):
     streaming = m.get("streaming-date", "Unknown")
 
     post_text = (
-        f"✅ <b>{html.escape(title)}</b> · ({year})\n"
-        f"🎥 {html.escape(typ)}\n"
-        f"🎭 {html.escape(genres)} · 🉑 {html.escape(langs)}\n"
-        f"📺 {html.escape(plat)}\n"
-        f"📅 Streaming from: {html.escape(streaming)}\n\n"
-        f"<b>@MooviDex</b>"
+        f"{title} ({year})\n"
+        f"Type: {typ}\n"
+        f"Genres: {genres}\n"
+        f"Languages: {langs}\n"
+        f"Platforms: {plat}\n"
+        f"Streaming from: {streaming}\n\n"
+        f"@MooviDex"
     )
     search_btn = InlineKeyboardButton(
-        "🔍 Search in Bot",
+        "Search in Bot 🔍",
         url=f"https://t.me/{temp.U_NAME}?start=Search_{re.sub(r'[^a-zA-Z0-9]', '_', title)}_{year}"
     )
     try:
@@ -156,12 +155,11 @@ async def binged_post(client, cq):
         await client.send_message(
             chat_id=channel_id,
             text=post_text,
-            parse_mode="html",
             reply_markup=InlineKeyboardMarkup([[search_btn]])
         )
-        await cq.answer("✅ Posted to channel.")
+        await cq.answer("Posted to channel.")
     except Exception as e:
-        await cq.answer(f"⚠️ Post failed: {e}", show_alert=True)
+        await cq.answer(f"Post failed: {e}", show_alert=True)
 
 # Close-button handler
 @Client.on_callback_query(filters.regex(r"^close_message$"))
