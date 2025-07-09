@@ -35,8 +35,8 @@ def clean_text(text):
 async def binged_search(client, message):
     if len(message.command) < 2:
         return await message.reply_text(
-            "❗ Usage: `/binged <movie name>`",
-            parse_mode="markdown"
+            "❗ Usage: <code>/binged &lt;movie name&gt;</code>",
+            parse_mode="html"
         )
     query = " ".join(message.command[1:])
 
@@ -46,13 +46,13 @@ async def binged_search(client, message):
         resp.raise_for_status()
     except requests.RequestException as e:
         return await message.reply_text(
-            f"⚠️ Failed to reach search API. Please try again later.\n`{e}`",
-            parse_mode="markdown"
+            f"⚠️ Failed to reach search API. Please try again later.\n<code>{e}</code>",
+            parse_mode="html"
         )
 
     data = resp.json().get("data", [])
     if not data:
-        return await message.reply_text("🔍 No results found.")
+        return await message.reply_text("🔍 No results found.", parse_mode="html")
 
     # Build buttons: Title (Year) → callback carrying movie ID
     buttons = []
@@ -67,8 +67,8 @@ async def binged_search(client, message):
 
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
     await message.reply_text(
-        f"🔍 Search results for **{clean_text(query)}**:",
-        parse_mode="markdown",
+        f"🔍 Search results for <b>{html.escape(query)}</b>:",
+        parse_mode="html",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
@@ -92,10 +92,10 @@ async def binged_detail(client, cq):
     streaming = m.get("streaming-date", "Unknown")
 
     details = (
-        f"✅ **{title}** · ({year})\n"
-        f"🎥 {typ} · 🎭 {genres}\n"
-        f"🉑 {langs} · 📺 {plat}\n"
-        f"📅 Streaming from: {streaming}"
+        f"✅ <b>{html.escape(title)}</b> · ({year})\n"
+        f"🎥 {html.escape(typ)} · 🎭 {html.escape(genres)}\n"
+        f"🉑 {html.escape(langs)} · 📺 {html.escape(plat)}\n"
+        f"📅 Streaming from: {html.escape(streaming)}"
     )
 
     # Buttons: Search button always, plus Post-to-channel if admin
@@ -112,7 +112,7 @@ async def binged_detail(client, cq):
 
     await cq.message.reply_text(
         details,
-        parse_mode="markdown",
+        parse_mode="html",
         reply_markup=InlineKeyboardMarkup(markup)
     )
     await cq.answer()
@@ -140,12 +140,12 @@ async def binged_post(client, cq):
     streaming = m.get("streaming-date", "Unknown")
 
     post_text = (
-        f"✅ **{title}** · ({year})\n"
-        f"🎥 {typ}\n"
-        f"🎭 {genres} · 🉑 {langs}\n"
-        f"📺 {plat}\n"
-        f"📅 Streaming from: {streaming}\n\n"
-        f"**@MooviDex**"
+        f"✅ <b>{html.escape(title)}</b> · ({year})\n"
+        f"🎥 {html.escape(typ)}\n"
+        f"🎭 {html.escape(genres)} · 🉑 {html.escape(langs)}\n"
+        f"📺 {html.escape(plat)}\n"
+        f"📅 Streaming from: {html.escape(streaming)}\n\n"
+        f"<b>@MooviDex</b>"
     )
     search_btn = InlineKeyboardButton(
         "🔍 Search in Bot",
@@ -156,7 +156,7 @@ async def binged_post(client, cq):
         await client.send_message(
             chat_id=channel_id,
             text=post_text,
-            parse_mode="markdown",
+            parse_mode="html",
             reply_markup=InlineKeyboardMarkup([[search_btn]])
         )
         await cq.answer("✅ Posted to channel.")
