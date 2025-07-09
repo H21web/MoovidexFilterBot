@@ -19,10 +19,13 @@ def clean_text(text):
         return text
     text = html.unescape(text)
     for orig, sub in [
-        ("\u2019", "'"), ("\u2018", "'"),
-        ("\u201c", '""), ("\u201d", '"'),
-        ("\u2013", "-"), ("\u2014", "-"),
-        ("\u2026", "...")
+        ("\u2019", "'"),  # right single quote
+        ("\u2018", "'"),  # left single quote
+        ("\u201c", '"'),  # left double quote
+        ("\u201d", '"'),  # right double quote
+        ("\u2013", "-"),  # en dash
+        ("\u2014", "-"),  # em dash
+        ("\u2026", "...") # ellipsis
     ]:
         text = text.replace(orig, sub)
     return text.strip()
