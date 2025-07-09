@@ -24,12 +24,12 @@ HEADERS = {
 # Helper: clean HTML entities & weird unicode
 def clean_text(text):
     if not text:
-        return text
+        return ""
     text = html.unescape(text)
     for orig, sub in [
         ("\u2019", "'"), ("\u2018", "'"),
-        ("\u201c", '"'), ("\u201d", '"'),
-        ("\u2013", "-"), ("\u2014", "-"),
+        ("\u201c", '"'),  ("\u201d", '"'),
+        ("\u2013", "-"),  ("\u2014", "-"),
         ("\u2026", "...")
     ]:
         text = text.replace(orig, sub)
@@ -40,7 +40,7 @@ def clean_text(text):
 async def binged_search(client, message):
     if len(message.command) < 2:
         return await message.reply_text("Usage: /binged <movie name>")
-    query = " ".join(message.command[1:])
+    query = " ".join(message.command[1:]).strip()
 
     try:
         resp = requests.get(
@@ -58,15 +58,16 @@ async def binged_search(client, message):
     if not data:
         return await message.reply_text("No results found.")
 
-    # Build buttons: Title (Year) → callback carrying movie ID
     buttons = []
     for movie in data:
-        title = clean_text(movie.get("title", "Untitled"))
-        year = movie.get("theatrical-year", "N/A")
+        # Fallbacks to avoid empty button text
+        raw_title = movie.get("title") or "Unknown"
+        title = clean_text(raw_title)
+        year = movie.get("theatrical-year") or "N/A"
+        btn_text = f"{title} ({year})"
         movie_id = movie.get("id")
         buttons.append([
-            InlineKeyboardButton(f"{title} ({year})",
-                                 callback_data=f"binged_detail_{movie_id}")
+            InlineKeyboardButton(btn_text, callback_data=f"binged_detail_{movie_id}")
         ])
 
     buttons.append([InlineKeyboardButton("Close ❌", callback_data="close_message")])
@@ -88,13 +89,13 @@ async def binged_detail(client, cq):
         return await cq.answer("Could not fetch movie details.", show_alert=True)
 
     m = resp.json()
-    title = clean_text(m.get("title", "N/A"))
-    year = m.get("theatrical-year", "N/A")
-    typ = clean_text(m.get("type", "N/A"))
+    title = clean_text(m.get("title") or "Unknown")
+    year = m.get("theatrical-year") or "N/A"
+    typ = clean_text(m.get("type") or "N/A")
     genres = ", ".join(clean_text(g) for g in m.get("genres", [])) or "N/A"
     langs = ", ".join(clean_text(l) for l in m.get("languages", [])) or "N/A"
-    plat = ", ".join(p.get("name", "") for p in m.get("platforms", [])) or "N/A"
-    streaming = m.get("streaming-date", "Unknown")
+    plat  = ", ".join(p.get("name","") for p in m.get("platforms", [])) or "N/A"
+    streaming = m.get("streaming-date") or "Unknown"
 
     details = (
         f"{title} ({year})\n"
@@ -124,7 +125,7 @@ async def binged_detail(client, cq):
                                 reply_markup=InlineKeyboardMarkup(markup))
     await cq.answer()
 
-# Post-to-channel callback – for admins only
+# Post‐to‐channel callback – for admins only
 @Client.on_callback_query(filters.regex(r"^binged_post_(\d+)$"))
 async def binged_post(client, cq):
     if cq.from_user.id not in ADMIN_IDS:
@@ -140,13 +141,13 @@ async def binged_post(client, cq):
         return await cq.answer("Could not fetch details.", show_alert=True)
 
     m = resp.json()
-    title = clean_text(m.get("title", "N/A"))
-    year = m.get("theatrical-year", "N/A")
-    typ = clean_text(m.get("type", "N/A"))
+    title = clean_text(m.get("title") or "Unknown")
+    year = m.get("theatrical-year") or "N/A"
+    typ = clean_text(m.get("type") or "N/A")
     genres = ", ".join(clean_text(g) for g in m.get("genres", [])) or "N/A"
     langs = ", ".join(clean_text(l) for l in m.get("languages", [])) or "N/A"
-    plat = ", ".join(p.get("name", "") for p in m.get("platforms", [])) or "N/A"
-    streaming = m.get("streaming-date", "Unknown")
+    plat  = ", ".join(p.get("name","") for p in m.get("platforms", [])) or "N/A"
+    streaming = m.get("streaming-date") or "Unknown"
 
     post_text = (
         f"{title} ({year})\n"
@@ -173,7 +174,7 @@ async def binged_post(client, cq):
     except Exception as e:
         await cq.answer(f"Post failed: {e}", show_alert=True)
 
-# Close-button handler
+# Close‐button handler
 @Client.on_callback_query(filters.regex(r"^close_message$"))
 async def close_message_callback(client, cq):
     try:
