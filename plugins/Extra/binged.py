@@ -53,7 +53,7 @@ def extract_list(data, key, nested_key=None):
 
 # Build message based on style
 def build_binged_message(title, year, movie_type, lang, genres, platform, style, safe_title, bot_username):
-    lang_tag = f"#{lang}" if lang else "#Unknown"
+    lang_tag = f"#{lang}" if lang else "#No Audio"
     genre_str = ", ".join(genres) or "N/A"
     movie_url = f"https://t.me/{bot_username}?start=Search_{safe_title}"
 
@@ -102,7 +102,7 @@ def build_binged_message(title, year, movie_type, lang, genres, platform, style,
     return f"✅ **[{title}]({movie_url})** · `({year})  · {movie_type}`\n\n🉑 {lang_tag}\n🎭 {genre_str} · 📺 {platform}\n**@MooviDex**"
 
 # Set style command
-@Client.on_message(filters.command("set_binged_style"))
+@Client.on_message(filters.command("setstyle"))
 async def set_style(client, message):
     if message.from_user.id not in ADMIN_IDS:
         return await message.reply_text("🚫 You are not authorized.")
@@ -176,7 +176,7 @@ async def binged_detail(client, cq):
     style = temp.BINGED_STYLE.get(user_id, 1)
     msg = build_binged_message(title, year, movie_type, langs[0] if langs else "Unknown", genres, platform_str, style, safe_title, temp.U_NAME)
 
-    buttons = [[InlineKeyboardButton("🔎 Click to Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]]
+    buttons = [[InlineKeyboardButton("🔍 Click to Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]]
     if user_id in ADMIN_IDS:
         buttons.append([InlineKeyboardButton("Post to Channel 📣", callback_data=f"binged_post_{movie_id}")])
     buttons.append([InlineKeyboardButton("Close ❌", callback_data="close_message")])
@@ -210,7 +210,7 @@ async def binged_post(client, cq):
             chat_id="-1001680629032",
             text=msg,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔎 Click to Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]
+                [InlineKeyboardButton("🔍 Click to Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]
             ]),
             disable_web_page_preview=True
         )
