@@ -53,13 +53,13 @@ def extract_list(data, key, nested_key=None):
 
 # Build message based on style
 def build_binged_message(title, year, movie_type, lang, genres, platform, style, safe_title, bot_username):
-    lang_tag = f"#{lang}" if lang else "#No Audio"
+    lang_tag = " ".join(f"#{lang.strip()}" for lang in lang.split(",")) if lang else "#No_Audio"
     genre_str = ", ".join(genres) or "N/A"
     movie_url = f"https://t.me/{bot_username}?start=Search_{safe_title}"
 
     if style == 1:
         return (
-            f"✅ **[{title}]({movie_url})** · ({year}) · `{movie_type}`\n\n"
+            f"✅ **{title}** · ({year}) · `{movie_type}`\n\n"
             f"🉑 {lang_tag}\n"
             f"🎭 {genre_str} · 📺 {platform}\n"
             f"**@MooviDex**"
