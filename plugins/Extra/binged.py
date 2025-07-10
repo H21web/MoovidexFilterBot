@@ -175,7 +175,7 @@ async def binged_detail(client, cq):
     safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
     style = temp.BINGED_STYLE.get(user_id, 1)
 
-    msg = build_binged_message(title, year, movie_type, langs[0] if langs else "Unknown", genres, platform_str, style, safe_title, temp.U_NAME)
+    msg = build_binged_message(title, year, movie_type, langs if langs else ["Unknown"], genres, platform_str, style, safe_title, temp.U_NAME)
 
     buttons = [[InlineKeyboardButton("🔍 Click to Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]]
     if user_id in ADMIN_IDS:
@@ -206,7 +206,7 @@ async def binged_post(client, cq):
     safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
     style = temp.BINGED_STYLE.get(cq.from_user.id, 1)
 
-    msg = build_binged_message(title, year, movie_type, langs[0] if langs else "Unknown", genres, platform_str, style, safe_title, temp.U_NAME)
+    msg = build_binged_message(title, year, movie_type, langs if langs else ["Unknown"], genres, platform_str, style, safe_title, temp.U_NAME)
 
     await client.send_message(
         chat_id=POST_CHANNEL_ID,
@@ -251,7 +251,7 @@ async def receive_custom_search(client, message):
     safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
     style = temp.BINGED_STYLE.get(user_id, 1)
 
-    msg = build_binged_message(title, year, movie_type, langs[0] if langs else "Unknown", genres, platform_str, style, safe_title, temp.U_NAME)
+    msg = build_binged_message(title, year, movie_type, langs if langs else ["Unknown"], genres, platform_str, style, safe_title, temp.U_NAME)
 
     # Decide URL
     if custom_input.startswith("http://") or custom_input.startswith("https://"):
