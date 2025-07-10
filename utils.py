@@ -190,7 +190,8 @@ async def get_poster(query, bulk=False, id=False, file=None):
     cast        = [a.get("name") for a in short.get("actor", [])]
     countries   = [c.get("text") for c in main.get("countriesDetails", {}).get("countries", [])]
     certificates= [main.get("certificate")] if main.get("certificate") else []
-    languages   = [l.get("text") for l in main.get("spokenLanguages", {}).get("spokenLanguages", [])]
+    spoken_langs = main.get("spokenLanguages") or {}
+    languages = [l.get("text") for l in spoken_langs.get("spokenLanguages", [])]
     directors   = [d.get("name") for d in short.get("director", [])]
     writers     = [w.get("name") for w in main.get("writer", [])]
     producers   = [p.get("name") for p in main.get("producer", [])]
