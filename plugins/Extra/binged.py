@@ -23,7 +23,7 @@ HEADERS = {
 
 # Helper: clean HTML entities & weird unicode
 def clean_text(text):
-    if not text:
+    if not isinstance(text, str):
         return ""
     text = html.unescape(text)
     for orig, sub in [
@@ -60,7 +60,6 @@ async def binged_search(client, message):
 
     buttons = []
     for movie in data:
-        # Fallbacks to avoid empty button text
         raw_title = movie.get("title") or "Unknown"
         title = clean_text(raw_title)
         year = movie.get("theatrical-year") or "N/A"
@@ -81,21 +80,26 @@ async def binged_search(client, message):
 async def binged_detail(client, cq):
     movie_id = cq.data.split("_")[-1]
     try:
-        resp = requests.get(f"{DETAIL_URL}/{movie_id}",
-                            headers=HEADERS,
-                            timeout=10)
+        resp = requests.get(f"{DETAIL_URL}/{movie_id}", headers=HEADERS, timeout=10)
         resp.raise_for_status()
     except requests.RequestException:
         return await cq.answer("Could not fetch movie details.", show_alert=True)
 
     m = resp.json()
-    title = clean_text(m.get("title") or "Unknown")
-    year = m.get("theatrical-year") or "N/A"
-    typ = clean_text(m.get("type") or "N/A")
-    genres = ", ".join(clean_text(g) for g in m.get("genres", [])) or "N/A"
-    langs = ", ".join(clean_text(l) for l in m.get("languages", [])) or "N/A"
-    plat  = ", ".join(p.get("name","") for p in m.get("platforms", [])) or "N/A"
-    streaming = m.get("streaming-date") or "Unknown"
+    title = clean_text(m.get("title")) or "Unknown"
+    year = clean_text(m.get("theatrical-year")) or "N/A"
+    typ = clean_text(m.get("type")) or "N/A"
+
+    genres_list = m.get("genres") or []
+    genres = ", ".join(clean_text(g) for g in genres_list if g) or "N/A"
+
+    langs_list = m.get("languages") or []
+    langs = ", ".join(clean_text(l) for l in langs_list if l) or "N/A"
+
+    platforms_list = m.get("platforms") or []
+    plat = ", ".join(clean_text(p.get("name")) for p in platforms_list if p.get("name")) or "N/A"
+
+    streaming = clean_text(m.get("streaming-date")) or "Unknown"
 
     details = (
         f"{title} ({year})\n"
@@ -108,21 +112,14 @@ async def binged_detail(client, cq):
 
     search_btn = InlineKeyboardButton(
         "Search in Bot 🔍",
-        url=(
-            f"https://t.me/{temp.U_NAME}"
-            f"?start=Search_{re.sub(r'[^a-zA-Z0-9]', '_', title)}_{year}"
-        )
+        url=f"https://t.me/{temp.U_NAME}?start=Search_{re.sub(r'[^a-zA-Z0-9]', '_', title)}_{year}"
     )
     markup = [[search_btn]]
     if cq.from_user.id in ADMIN_IDS:
-        markup.append([
-            InlineKeyboardButton("Post to Channel 📣",
-                                 callback_data=f"binged_post_{movie_id}")
-        ])
+        markup.append([InlineKeyboardButton("Post to Channel 📣", callback_data=f"binged_post_{movie_id}")])
     markup.append([InlineKeyboardButton("Close ❌", callback_data="close_message")])
 
-    await cq.message.reply_text(details,
-                                reply_markup=InlineKeyboardMarkup(markup))
+    await cq.message.reply_text(details, reply_markup=InlineKeyboardMarkup(markup))
     await cq.answer()
 
 # Post‐to‐channel callback – for admins only
@@ -133,21 +130,26 @@ async def binged_post(client, cq):
 
     movie_id = cq.data.split("_")[-1]
     try:
-        resp = requests.get(f"{DETAIL_URL}/{movie_id}",
-                            headers=HEADERS,
-                            timeout=10)
+        resp = requests.get(f"{DETAIL_URL}/{movie_id}", headers=HEADERS, timeout=10)
         resp.raise_for_status()
     except requests.RequestException:
         return await cq.answer("Could not fetch details.", show_alert=True)
 
     m = resp.json()
-    title = clean_text(m.get("title") or "Unknown")
-    year = m.get("theatrical-year") or "N/A"
-    typ = clean_text(m.get("type") or "N/A")
-    genres = ", ".join(clean_text(g) for g in m.get("genres", [])) or "N/A"
-    langs = ", ".join(clean_text(l) for l in m.get("languages", [])) or "N/A"
-    plat  = ", ".join(p.get("name","") for p in m.get("platforms", [])) or "N/A"
-    streaming = m.get("streaming-date") or "Unknown"
+    title = clean_text(m.get("title")) or "Unknown"
+    year = clean_text(m.get("theatrical-year")) or "N/A"
+    typ = clean_text(m.get("type")) or "N/A"
+
+    genres_list = m.get("genres") or []
+    genres = ", ".join(clean_text(g) for g in genres_list if g) or "N/A"
+
+    langs_list = m.get("languages") or []
+    langs = ", ".join(clean_text(l) for l in langs_list if l) or "N/A"
+
+    platforms_list = m.get("platforms") or []
+    plat = ", ".join(clean_text(p.get("name")) for p in platforms_list if p.get("name")) or "N/A"
+
+    streaming = clean_text(m.get("streaming-date")) or "Unknown"
 
     post_text = (
         f"{title} ({year})\n"
@@ -160,16 +162,16 @@ async def binged_post(client, cq):
     )
     search_btn = InlineKeyboardButton(
         "Search in Bot 🔍",
-        url=(
-            f"https://t.me/{temp.U_NAME}"
-            f"?start=Search_{re.sub(r'[^a-zA-Z0-9]', '_', title)}_{year}"
-        )
+        url=f"https://t.me/{temp.U_NAME}?start=Search_{re.sub(r'[^a-zA-Z0-9]', '_', title)}_{year}"
     )
+
     try:
         channel_id = "-1001680629032"  # Replace with your channel ID
-        await client.send_message(chat_id=channel_id,
-                                  text=post_text,
-                                  reply_markup=InlineKeyboardMarkup([[search_btn]]))
+        await client.send_message(
+            chat_id=channel_id,
+            text=post_text,
+            reply_markup=InlineKeyboardMarkup([[search_btn]])
+        )
         await cq.answer("Posted to channel.")
     except Exception as e:
         await cq.answer(f"Post failed: {e}", show_alert=True)
