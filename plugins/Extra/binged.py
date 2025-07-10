@@ -9,10 +9,10 @@ from info import *
 # List of Admin IDs
 ADMIN_IDS = [1011394081, 7191327005]
 
-# Search URL
+# Search API
 SEARCH_URL = "https://www.binged.com/wp-json/binged-api/v1/movies"
 
-# Headers to avoid 403
+# Anti-403 Headers
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
                   'AppleWebKit/537.36 (KHTML, like Gecko) '
@@ -20,11 +20,12 @@ HEADERS = {
     'Referer': 'https://www.binged.com/'
 }
 
-# Temporary storage
+# Temporary Data Stores
 temp.BINGED_RESULTS = {}   # user_id -> {movie_id: movie_data}
 temp.BINGED_STYLE = {}     # admin_id -> style number
+temp.EDITING_POST = {}     # admin_id -> movie_id
 
-# Clean HTML and unicode
+# Clean HTML entities and unicode
 def clean_text(text):
     if not isinstance(text, str):
         return ""
@@ -38,7 +39,7 @@ def clean_text(text):
         text = text.replace(orig, sub)
     return text.strip()
 
-# Safe list extraction
+# Extract list values from keys
 def extract_list(data, key, nested_key=None):
     items = data.get(key)
     if not isinstance(items, list):
@@ -51,9 +52,9 @@ def extract_list(data, key, nested_key=None):
             result.append(val)
     return result
 
-# Build message based on style
+# Generate message format by style
 def build_binged_message(title, year, movie_type, lang, genres, platform, style, safe_title, bot_username):
-    lang_tag = ", ".join(lang) or "N/A"
+    lang_tag = ", ".join(f"#{l.strip().title()}" for l in lang) if isinstance(lang, list) else f"#{lang.strip().title()}" if lang else "N/A"
     genre_str = ", ".join(genres) or "N/A"
     movie_url = f"https://t.me/{bot_username}?start=Search_{safe_title}"
 
@@ -108,7 +109,7 @@ async def set_style(client, message):
         return await message.reply_text("🚫 You are not authorized.")
     if len(message.command) < 2:
         return await message.reply_text(
-            "Usage: /set_binged_style <1-5>\n"
+            "Usage: /setstyle <1-5>\n"
             "Available Styles:\n1. Minimalist\n2. Centered Block\n3. Hashtag Style\n4. Detailed\n5. Instagram-style",
             parse_mode="markdown"
         )
@@ -120,14 +121,14 @@ async def set_style(client, message):
     except:
         await message.reply_text("❌ Invalid style number. Use 1–5.")
 
-# /binged command (admin only)
+# /binged command
 @Client.on_message(filters.command("binged"))
 async def binged_search(client, message):
     if message.from_user.id not in ADMIN_IDS:
         return await message.reply_text("🚫 This command is for admins only.")
-
     if len(message.command) < 2:
         return await message.reply_text("Usage: /binged <movie name>")
+
     query = " ".join(message.command[1:]).strip()
 
     try:
@@ -172,19 +173,21 @@ async def binged_detail(client, cq):
     langs = extract_list(movie, "languages")
     platform_str = extract_list(movie, "platforms", "name")[0] if extract_list(movie, "platforms", "name") else "N/A"
     safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
-
     style = temp.BINGED_STYLE.get(user_id, 1)
+
     msg = build_binged_message(title, year, movie_type, langs[0] if langs else "Unknown", genres, platform_str, style, safe_title, temp.U_NAME)
 
     buttons = [[InlineKeyboardButton("🔍 Click to Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]]
     if user_id in ADMIN_IDS:
-        buttons.append([InlineKeyboardButton("Post to Channel 📣", callback_data=f"binged_post_{movie_id}")])
-    buttons.append([InlineKeyboardButton("Close ❌", callback_data="close_message")])
-
+        buttons.append([
+            InlineKeyboardButton("✏️ Edit & Post", callback_data=f"binged_edit_post_{movie_id}"),
+            InlineKeyboardButton("📣 Post Default", callback_data=f"binged_post_{movie_id}")
+        ])
+    buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
     await cq.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(buttons), disable_web_page_preview=True)
     await cq.answer()
 
-# Post to channel
+# Post directly to channel
 @Client.on_callback_query(filters.regex(r"^binged_post_(\d+)$"))
 async def binged_post(client, cq):
     if cq.from_user.id not in ADMIN_IDS:
@@ -201,24 +204,73 @@ async def binged_post(client, cq):
     langs = extract_list(movie, "languages")
     platform_str = extract_list(movie, "platforms", "name")[0] if extract_list(movie, "platforms", "name") else "N/A"
     safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
-
     style = temp.BINGED_STYLE.get(cq.from_user.id, 1)
+
     msg = build_binged_message(title, year, movie_type, langs[0] if langs else "Unknown", genres, platform_str, style, safe_title, temp.U_NAME)
 
-    try:
-        await client.send_message(
-            chat_id="-1001680629032",
-            text=msg,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔍 Click to Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]
-            ]),
-            disable_web_page_preview=True
-        )
-        await cq.answer("Posted to channel.")
-    except Exception as e:
-        await cq.answer(f"Post failed: {e}", show_alert=True)
+    await client.send_message(
+        chat_id=POST_CHANNEL_ID,
+        text=msg,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔍 Click to Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]
+        ]),
+        disable_web_page_preview=True
+    )
+    await cq.answer("✅ Posted to channel.")
 
-# Close callback
+# Prompt for custom button input
+@Client.on_callback_query(filters.regex(r"^binged_edit_post_(\d+)$"))
+async def edit_post_prompt(client, cq):
+    movie_id = cq.data.split("_")[-1]
+    user_id = cq.from_user.id
+    temp.EDITING_POST[user_id] = movie_id
+
+    await cq.message.reply_text("✏️ Send the **new search keyword** or **full URL** to use in the search button.", quote=True)
+    await cq.answer()
+
+# Handle admin reply with custom button
+@Client.on_message(filters.text & filters.user(ADMIN_IDS))
+async def receive_custom_search(client, message):
+    user_id = message.from_user.id
+    custom_input = message.text.strip()
+
+    if user_id not in temp.EDITING_POST:
+        return
+
+    movie_id = temp.EDITING_POST.pop(user_id)
+    movie = temp.BINGED_RESULTS.get(user_id, {}).get(movie_id)
+    if not movie:
+        return await message.reply("❌ Movie session expired. Please search again.")
+
+    title = clean_text(movie.get("title")) or "Unknown"
+    year = movie.get("theatrical-year") or "N/A"
+    movie_type = clean_text(movie.get("type")) or "N/A"
+    genres = extract_list(movie, "genres")
+    langs = extract_list(movie, "languages")
+    platform_str = extract_list(movie, "platforms", "name")[0] if extract_list(movie, "platforms", "name") else "N/A"
+    safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
+    style = temp.BINGED_STYLE.get(user_id, 1)
+
+    msg = build_binged_message(title, year, movie_type, langs[0] if langs else "Unknown", genres, platform_str, style, safe_title, temp.U_NAME)
+
+    # Decide URL
+    if custom_input.startswith("http://") or custom_input.startswith("https://"):
+        button_url = custom_input
+    else:
+        keyword = re.sub(r'[^a-zA-Z0-9]', '_', custom_input)
+        button_url = f"https://t.me/{temp.U_NAME}?start=Search_{keyword}"
+
+    await client.send_message(
+        chat_id=POST_CHANNEL_ID,
+        text=msg,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔍 Click to Search", url=button_url)]
+        ]),
+        disable_web_page_preview=True
+    )
+    await message.reply("✅ Posted to channel with custom button.")
+
+# Close message handler
 @Client.on_callback_query(filters.regex(r"^close_message$"))
 async def close_message_callback(client, cq):
     try:
