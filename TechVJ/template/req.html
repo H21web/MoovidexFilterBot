@@ -354,16 +354,12 @@
         Telegram.WebApp.HapticFeedback.notificationOccurred('success');
     }
       
-    function get_file() {
-        const regex = /(\d+)\?id=(\d+)&/;
-        const match = videoLink.match(regex);
-        if (match) {
-
-            const openTG = `https://telegram.me/moovidexrobot`;  // Removed HTML comment for Username
+    function openTG() {
+          const openTG = `https://telegram.me/moovidexrobot`;  // Removed HTML comment for Username
           Telegram.WebApp.openTelegramLink(openTG, '_blank');
           Telegram.WebApp.close();
           Telegram.WebApp.HapticFeedback.notificationOccurred('success');
-        }
+        
     }
       
     function copyUrl() {
