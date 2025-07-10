@@ -20,8 +20,9 @@ HEADERS = {
     'Referer': 'https://www.binged.com/'
 }
 
-# Temporary storage for search results: user_id -> { movie_id: data }
-temp.BINGED_RESULTS = {}
+# Temporary storage
+temp.BINGED_RESULTS = {}   # user_id -> {movie_id: movie_data}
+temp.BINGED_STYLE = {}     # admin_id -> style number
 
 # Clean HTML and unicode
 def clean_text(text):
@@ -37,7 +38,7 @@ def clean_text(text):
         text = text.replace(orig, sub)
     return text.strip()
 
-# Helper to extract list safely
+# Safe list extraction
 def extract_list(data, key, nested_key=None):
     items = data.get(key)
     if not isinstance(items, list):
@@ -50,19 +51,87 @@ def extract_list(data, key, nested_key=None):
             result.append(val)
     return result
 
-# /binged search handler
+# Build message based on style
+def build_binged_message(title, year, movie_type, lang, genres, platform, style, safe_title, bot_username):
+    lang_tag = f"#{lang}" if lang else "#Unknown"
+    genre_str = ", ".join(genres) or "N/A"
+    movie_url = f"https://t.me/{bot_username}?start=Search_{safe_title}"
+
+    if style == 1:
+        return (
+            f"✅ **[{title}]({movie_url})** · `({year})  · {movie_type}`\n\n"
+            f"🉑 {lang_tag}\n"
+            f"🎭 {genre_str} · 📺 {platform}\n"
+            f"**@MooviDex**"
+        )
+    elif style == 2:
+        return (
+            f"🎬 **[{title}]({movie_url})**\n"
+            f"`───────────────`\n"
+            f"📆 {year}      · `{movie_type}`\n\n"
+            f"🗣️ Language: {lang_tag}\n"
+            f"🎭 Genre: {genre_str}\n"
+            f"📺 Platform: {platform}\n\n"
+            f"📡 **@MooviDex**"
+        )
+    elif style == 3:
+        return (
+            f"✅ **[{title}]({movie_url})**\n"
+            f"`({year} · {movie_type})`\n\n"
+            f"{lang_tag} 🎭 {genre_str} · 📺 {platform}\n\n"
+            f"**@MooviDex**"
+        )
+    elif style == 4:
+        return (
+            f"🎬 **[{title}]({movie_url})**\n"
+            f"`({year} · {movie_type})`\n\n"
+            f"🉑 Language: {lang_tag}\n"
+            f"🎭 Genres: {genre_str}\n"
+            f"📺 Streaming On: {platform}\n\n"
+            f"📝 *A compelling drama series.*\n\n"
+            f"📢 Powered by **@MooviDex**"
+        )
+    elif style == 5:
+        return (
+            f"✨ **[{title}]({movie_url})**\n"
+            f"`({year} · {movie_type})`\n\n"
+            f"{lang_tag} 🎭 {genre_str}\n"
+            f"📺 {platform}\n\n"
+            f"🔥 Only on **@MooviDex**"
+        )
+    return f"✅ **[{title}]({movie_url})** · `({year})  · {movie_type}`\n\n🉑 {lang_tag}\n🎭 {genre_str} · 📺 {platform}\n**@MooviDex**"
+
+# Set style command
+@Client.on_message(filters.command("set_binged_style"))
+async def set_style(client, message):
+    if message.from_user.id not in ADMIN_IDS:
+        return await message.reply_text("🚫 You are not authorized.")
+    if len(message.command) < 2:
+        return await message.reply_text(
+            "Usage: /set_binged_style <1-5>\n"
+            "Available Styles:\n1. Minimalist\n2. Centered Block\n3. Hashtag Style\n4. Detailed\n5. Instagram-style",
+            parse_mode="markdown"
+        )
+    try:
+        style = int(message.command[1])
+        if style not in range(1, 6): raise ValueError
+        temp.BINGED_STYLE[message.from_user.id] = style
+        await message.reply_text(f"✅ Style {style} selected.")
+    except:
+        await message.reply_text("❌ Invalid style number. Use 1–5.")
+
+# /binged command (admin only)
 @Client.on_message(filters.command("binged"))
 async def binged_search(client, message):
+    if message.from_user.id not in ADMIN_IDS:
+        return await message.reply_text("🚫 This command is for admins only.")
+
     if len(message.command) < 2:
         return await message.reply_text("Usage: /binged <movie name>")
     query = " ".join(message.command[1:]).strip()
 
     try:
-        resp = requests.get(
-            f"{SEARCH_URL}?mode=all&search={query}",
-            headers=HEADERS,
-            timeout=10
-        )
+        resp = requests.get(f"{SEARCH_URL}?mode=all&search={query}", headers=HEADERS, timeout=10)
         resp.raise_for_status()
     except requests.RequestException as e:
         return await message.reply_text(f"API error: {e}")
@@ -72,7 +141,6 @@ async def binged_search(client, message):
         return await message.reply_text("No results found.")
 
     temp.BINGED_RESULTS[message.from_user.id] = {}
-
     buttons = []
     for movie in results:
         movie_id = str(movie.get("id"))
@@ -81,21 +149,18 @@ async def binged_search(client, message):
         btn_text = f"{title} ({year})"
         temp.BINGED_RESULTS[message.from_user.id][movie_id] = movie
         buttons.append([InlineKeyboardButton(btn_text, callback_data=f"binged_detail_{movie_id}")])
-
     buttons.append([InlineKeyboardButton("Close ❌", callback_data="close_message")])
-
     await message.reply_text(
         f"Search results for: <b>{query}</b>",
         reply_markup=InlineKeyboardMarkup(buttons),
         disable_web_page_preview=True
     )
 
-# Show movie details from cached result
+# Show movie detail
 @Client.on_callback_query(filters.regex(r"^binged_detail_(\d+)$"))
 async def binged_detail(client, cq):
     movie_id = cq.data.split("_")[-1]
     user_id = cq.from_user.id
-
     movie = temp.BINGED_RESULTS.get(user_id, {}).get(movie_id)
     if not movie:
         return await cq.answer("Session expired. Please search again.", show_alert=True)
@@ -104,78 +169,56 @@ async def binged_detail(client, cq):
     year = movie.get("theatrical-year") or "N/A"
     movie_type = clean_text(movie.get("type")) or "N/A"
     genres = extract_list(movie, "genres")
-    genre_str = ", ".join(genres) or "N/A"
     langs = extract_list(movie, "languages")
-    lang_str = ", ".join(langs) or "N/A"
-    platforms = extract_list(movie, "platforms", "name")
-    platform_str = platforms[0] if platforms else "N/A"
+    platform_str = extract_list(movie, "platforms", "name")[0] if extract_list(movie, "platforms", "name") else "N/A"
+    safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
 
-    msg = (
-        f"✅ **{title}** · ({year})\n"
-        f"🎥 {movie_type}\n"
-        f"🎭 {genre_str} · 🉑 {lang_str}\n"
-        f"📺 {platform_str}\n"
-        f"**@MooviDex**"
-    )
+    style = temp.BINGED_STYLE.get(user_id, 1)
+    msg = build_binged_message(title, year, movie_type, langs[0] if langs else "Unknown", genres, platform_str, style, safe_title, temp.U_NAME)
 
-    search_btn = InlineKeyboardButton(
-        "Click to Search 🔎",
-        url=f"https://t.me/{temp.U_NAME}?start=Search_{re.sub(r'[^a-zA-Z0-9]', '_', title)}_{year}"
-    )
-
-    buttons = [[search_btn]]
+    buttons = [[InlineKeyboardButton("🔎 Click to Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]]
     if user_id in ADMIN_IDS:
         buttons.append([InlineKeyboardButton("Post to Channel 📣", callback_data=f"binged_post_{movie_id}")])
     buttons.append([InlineKeyboardButton("Close ❌", callback_data="close_message")])
 
-    await cq.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(buttons))
+    await cq.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(buttons), disable_web_page_preview=True)
     await cq.answer()
 
-# Post movie to channel (for admins)
+# Post to channel
 @Client.on_callback_query(filters.regex(r"^binged_post_(\d+)$"))
 async def binged_post(client, cq):
     if cq.from_user.id not in ADMIN_IDS:
         return await cq.answer("You're not authorized.", show_alert=True)
-
     movie_id = cq.data.split("_")[-1]
     movie = temp.BINGED_RESULTS.get(cq.from_user.id, {}).get(movie_id)
     if not movie:
-        return await cq.answer("Movie data not found in session.", show_alert=True)
+        return await cq.answer("Movie data not found.", show_alert=True)
 
     title = clean_text(movie.get("title")) or "Unknown"
     year = movie.get("theatrical-year") or "N/A"
     movie_type = clean_text(movie.get("type")) or "N/A"
     genres = extract_list(movie, "genres")
-    genre_str = ", ".join(genres) or "N/A"
     langs = extract_list(movie, "languages")
-    lang_str = ", ".join(langs) or "N/A"
-    platforms = extract_list(movie, "platforms", "name")
-    platform_str = platforms[0] if platforms else "N/A"
+    platform_str = extract_list(movie, "platforms", "name")[0] if extract_list(movie, "platforms", "name") else "N/A"
+    safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
 
-    post_text = (
-        f"✅ **{title}** · ({year})\n"
-        f"🎥 {movie_type}\n"
-        f"🎭 {genre_str} · 🉑 {lang_str}\n"
-        f"📺 {platform_str}\n"
-        f"**@MooviDex**"
-    )
-
-    search_btn = InlineKeyboardButton(
-        "Click to Search 🔎",
-        url=f"https://t.me/{temp.U_NAME}?start=Search_{re.sub(r'[^a-zA-Z0-9]', '_', title)}_{year}"
-    )
+    style = temp.BINGED_STYLE.get(cq.from_user.id, 1)
+    msg = build_binged_message(title, year, movie_type, langs[0] if langs else "Unknown", genres, platform_str, style, safe_title, temp.U_NAME)
 
     try:
         await client.send_message(
-            chat_id="-1001680629032",  # Replace with your channel ID
-            text=post_text,
-            reply_markup=InlineKeyboardMarkup([[search_btn]])
+            chat_id="-1001680629032",
+            text=msg,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔎 Click to Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]
+            ]),
+            disable_web_page_preview=True
         )
         await cq.answer("Posted to channel.")
     except Exception as e:
         await cq.answer(f"Post failed: {e}", show_alert=True)
 
-# Close button
+# Close callback
 @Client.on_callback_query(filters.regex(r"^close_message$"))
 async def close_message_callback(client, cq):
     try:
