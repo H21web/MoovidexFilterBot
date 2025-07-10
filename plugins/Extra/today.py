@@ -91,12 +91,13 @@ async def show_movie_detail(client, callback_query):
                 movie_type = clean_text(movie.get('type', 'No type specified'))
                 genres = ', '.join([clean_text(genre) for genre in movie.get('genres', ['No Data'])])
                 year = movie.get('theatrical-year', 'N/A')
+                lang_tag = ", ".join(f"#{l.strip().title()}" for l in language) if isinstance(language, list) else f"#{language.strip().title()}" if language else "N/A"
                 formatted_title = format_title_for_url(title) 
             
                 
                 movie_details = (
                     f"✅ **{title}** · ({year}) · `{movie_type}`\n\n"
-                    f"🉑 {language}\n"
+                    f"🉑 {lang_tag}\n"
                     f"🎭 {genres} · 📺 {platform}\n"
                 )
 
@@ -132,12 +133,13 @@ async def post_movie_to_channel(client, callback_query):
                 movie_type = clean_text(movie.get('type', 'No type specified'))
                 genres = ', '.join([clean_text(genre) for genre in movie.get('genres', ['No Data'])])
                 year = movie.get('theatrical-year', 'N/A')
+                lang_tag = ", ".join(f"#{l.strip().title()}" for l in language) if isinstance(language, list) else f"#{language.strip().title()}" if language else "N/A"
                 formatted_title = format_title_for_url(title)
                 
                 
                 movie_details = (
                     f"✅ **{title}** · ({year}) · `{movie_type}`\n\n"
-                    f"🉑 {language}\n"
+                    f"🉑 {lang_tag}\n"
                     f"🎭 {genres} · 📺 {platform}\n"
                     f"**@MooviDex**"
                 )
