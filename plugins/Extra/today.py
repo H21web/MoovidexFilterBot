@@ -92,11 +92,12 @@ async def show_movie_detail(client, callback_query):
                 genres = ', '.join([clean_text(genre) for genre in movie.get('genres', ['No Data'])])
                 year = movie.get('theatrical-year', 'N/A')
                 formatted_title = format_title_for_url(title) + f"_{year}"
+                lang_tag = f"#{language}" if language else "#No Audio"
                 movie_url = "https://t.me/{temp.U_NAME}?start=Search_{formatted_title}"
                 
                 movie_details = (
-                    f"✅ **[{title}]({movie_url})** · `({year})  · {movie_type}`\n\n"
-                    f"🉑 {language}\n"
+                    f"✅ **[{title}]({movie_url})** · ({year}) · `{movie_type}`\n\n"
+                    f"🉑 {lang_tag}\n"
                     f"🎭 {genres} · 📺 {platform}\n"
                 )
 
@@ -133,11 +134,12 @@ async def post_movie_to_channel(client, callback_query):
                 genres = ', '.join([clean_text(genre) for genre in movie.get('genres', ['No Data'])])
                 year = movie.get('theatrical-year', 'N/A')
                 formatted_title = format_title_for_url(title) + f"_{year}"
+                lang_tag = f"#{language}" if language else "#No Audio"
                 movie_url = "https://t.me/{temp.U_NAME}?start=Search_{formatted_title}"
                 
                 movie_details = (
-                    f"✅ **[{title}]({movie_url})** · `({year})  · {movie_type}`\n\n"
-                    f"🉑 {language}\n"
+                    f"✅ **[{title}]({movie_url})** · ({year}) · `{movie_type}`\n\n"
+                    f"🉑 {lang_tag}\n"
                     f"🎭 {genres} · 📺 {platform}\n"
                     f"**@MooviDex**"
                 )
