@@ -91,14 +91,14 @@ async def show_movie_detail(client, callback_query):
                 movie_type = clean_text(movie.get('type', 'No type specified'))
                 genres = ', '.join([clean_text(genre) for genre in movie.get('genres', ['No Data'])])
                 year = movie.get('theatrical-year', 'N/A')
-
-                movie_details = (
-                    f"✅ **{title}** · ({year})\n"
-                    f"🎭 {genres} · 🎥 {movie_type} · 🉑 {language}\n"
-                    f"📺 {platform}"
-                )
-
                 formatted_title = format_title_for_url(title) + f"_{year}"
+                movie_url = "https://t.me/{temp.U_NAME}?start=Search_{formatted_title}"
+                
+                movie_details = (
+                    f"✅ **[{title}]({movie_url})** · `({year})  · {movie_type}`\n\n"
+                    f"🉑 {language}\n"
+                    f"🎭 {genres} · 📺 {platform}\n"
+                )
 
 
                 buttons = [
@@ -132,17 +132,15 @@ async def post_movie_to_channel(client, callback_query):
                 movie_type = clean_text(movie.get('type', 'No type specified'))
                 genres = ', '.join([clean_text(genre) for genre in movie.get('genres', ['No Data'])])
                 year = movie.get('theatrical-year', 'N/A')
-
+                formatted_title = format_title_for_url(title) + f"_{year}"
+                movie_url = "https://t.me/{temp.U_NAME}?start=Search_{formatted_title}"
+                
                 movie_details = (
-                    f"✅ **{title}** · ({year})\n"
-                    f"🎥 {movie_type}\n"
-                    f"🎭 {genres} · 🉑 {language}\n"
-                    f"📺 {platform}\n"
+                    f"✅ **[{title}]({movie_url})** · `({year})  · {movie_type}`\n\n"
+                    f"🉑 {language}\n"
+                    f"🎭 {genres} · 📺 {platform}\n"
                     f"**@MooviDex**"
                 )
-
-                formatted_title = format_title_for_url(title) + f"_{year}"
-
 
                 search_button = InlineKeyboardButton("🔍 Click To Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{formatted_title}")
                 reply_markup = InlineKeyboardMarkup([[search_button]])
