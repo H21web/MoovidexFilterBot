@@ -229,7 +229,7 @@ async def edit_post_prompt(client, cq):
     await cq.answer()
 
 # Handle admin reply with custom button
-@Client.on_message(filters.text & filters.user(ADMIN_IDS))
+@Client.on_message(filters.private & filters.text & filters.user(ADMIN_IDS) & filters.create(lambda _, __, msg: msg.from_user.id in temp.EDITING_POST))
 async def receive_custom_search(client, message):
     user_id = message.from_user.id
     custom_input = message.text.strip()
