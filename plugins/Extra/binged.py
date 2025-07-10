@@ -209,7 +209,7 @@ async def binged_post(client, cq):
     msg = build_binged_message(title, year, movie_type, langs if langs else ["Unknown"], genres, platform_str, style, safe_title, temp.U_NAME)
 
     await client.send_message(
-        chat_id=POST_CHANNEL_ID,
+        chat_id=-1001680629032,
         text=msg,
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔍 Click to Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]
@@ -261,7 +261,7 @@ async def receive_custom_search(client, message):
         button_url = f"https://t.me/{temp.U_NAME}?start=Search_{keyword}"
 
     await client.send_message(
-        chat_id=POST_CHANNEL_ID,
+        chat_id=-1001680629032,
         text=msg,
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔍 Click to Search", url=button_url)]
