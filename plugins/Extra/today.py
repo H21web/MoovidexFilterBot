@@ -146,7 +146,7 @@ async def post_movie_to_channel(client, callback_query):
                 movie_details = (
                     f"✅ **{title}** · ({year}) · `{movie_type}`\n\n"
                     f"🉑 {lang_tag}\n"
-                    f"🎭 {genres} · 📺 {platform}\n"
+                    f"🎭 {genres} · 📺 {platform}\n\n"
                     f"**@MooviDex**"
                 )
 
