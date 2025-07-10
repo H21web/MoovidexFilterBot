@@ -86,12 +86,15 @@ async def show_movie_detail(client, callback_query):
         for movie in movies_data:
             if movie.get('title') == movie_title:
                 title = clean_text(movie.get('title', 'No title available'))
-                language = ', '.join([clean_text(lang) for lang in movie.get('languages', ['No language specified'])])
+                #language = ', '.join([clean_text(lang) for lang in movie.get('languages', ['No language specified'])])
                 platform = ', '.join([clean_text(p.get('name', 'No platform')) for p in movie.get('platforms', [])])
                 movie_type = clean_text(movie.get('type', 'No type specified'))
                 genres = ', '.join([clean_text(genre) for genre in movie.get('genres', ['No Data'])])
                 year = movie.get('theatrical-year', 'N/A')
-                lang_tag = ", ".join(f"#{l.strip().title()}" for l in language) if isinstance(language, list) else f"#{language.strip().title()}" if language else "N/A"
+                languages = [clean_text(l) for l in movie.get('languages', ['No Audio'])]
+                language = ', '.join(languages)
+                lang_tag = ', '.join(f"#{l.strip().title()}" for l in languages)
+
                 formatted_title = format_title_for_url(title) 
             
                 
@@ -128,12 +131,15 @@ async def post_movie_to_channel(client, callback_query):
         for movie in movies_data:
             if movie.get('title') == movie_title:
                 title = clean_text(movie.get('title', 'No title available'))
-                language = ', '.join([clean_text(lang) for lang in movie.get('languages', ['No language specified'])])
+                #language = ', '.join([clean_text(lang) for lang in movie.get('languages', ['No language specified'])])
                 platform = ', '.join([clean_text(p.get('name', 'No platform specified')) for p in movie.get('platforms', [])])
                 movie_type = clean_text(movie.get('type', 'No type specified'))
                 genres = ', '.join([clean_text(genre) for genre in movie.get('genres', ['No Data'])])
                 year = movie.get('theatrical-year', 'N/A')
-                lang_tag = ", ".join(f"#{l.strip().title()}" for l in language) if isinstance(language, list) else f"#{language.strip().title()}" if language else "N/A"
+                languages = [clean_text(l) for l in movie.get('languages', ['No language specified'])]
+                language = ', '.join(languages)
+                lang_tag = ', '.join(f"#{l.strip().title()}" for l in languages)
+
                 formatted_title = format_title_for_url(title)
                 
                 
