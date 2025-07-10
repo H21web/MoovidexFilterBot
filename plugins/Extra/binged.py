@@ -59,7 +59,7 @@ def build_binged_message(title, year, movie_type, lang, genres, platform, style,
 
     if style == 1:
         return (
-            f"✅ **[{title}]({movie_url})** · `({year})  · {movie_type}`\n\n"
+            f"✅ **[{title}]({movie_url})** · ({year}) · `{movie_type}`\n\n"
             f"🉑 {lang_tag}\n"
             f"🎭 {genre_str} · 📺 {platform}\n"
             f"**@MooviDex**"
