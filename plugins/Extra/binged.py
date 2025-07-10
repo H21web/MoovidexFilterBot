@@ -12,7 +12,7 @@ ADMIN_IDS = [1011394081, 7191327005]
 # Search URL
 SEARCH_URL = "https://www.binged.com/wp-json/binged-api/v1/movies"
 
-# Headers
+# Headers to avoid 403
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
                   'AppleWebKit/537.36 (KHTML, like Gecko) '
@@ -20,9 +20,10 @@ HEADERS = {
     'Referer': 'https://www.binged.com/'
 }
 
-# Temporary cache: user_id -> { movie_id: movie_data }
+# Temporary storage for search results: user_id -> { movie_id: data }
 temp.BINGED_RESULTS = {}
 
+# Clean HTML and unicode
 def clean_text(text):
     if not isinstance(text, str):
         return ""
@@ -36,19 +37,20 @@ def clean_text(text):
         text = text.replace(orig, sub)
     return text.strip()
 
+# Helper to extract list safely
 def extract_list(data, key, nested_key=None):
     items = data.get(key)
     if not isinstance(items, list):
-        return "N/A"
+        return []
     result = []
     for i in items:
         val = i.get(nested_key) if nested_key and isinstance(i, dict) else i
         val = clean_text(val)
         if val:
             result.append(val)
-    return ", ".join(result) or "N/A"
+    return result
 
-# /binged search
+# /binged search handler
 @Client.on_message(filters.command("binged"))
 async def binged_search(client, message):
     if len(message.command) < 2:
@@ -88,77 +90,78 @@ async def binged_search(client, message):
         disable_web_page_preview=True
     )
 
-# Movie detail (from cached search result)
+# Show movie details from cached result
 @Client.on_callback_query(filters.regex(r"^binged_detail_(\d+)$"))
 async def binged_detail(client, cq):
     movie_id = cq.data.split("_")[-1]
     user_id = cq.from_user.id
 
-    movie_data = temp.BINGED_RESULTS.get(user_id, {}).get(movie_id)
-    if not movie_data:
-        return await cq.answer("Session expired. Search again.", show_alert=True)
+    movie = temp.BINGED_RESULTS.get(user_id, {}).get(movie_id)
+    if not movie:
+        return await cq.answer("Session expired. Please search again.", show_alert=True)
 
-    title = clean_text(movie_data.get("title"))
-    year = movie_data.get("theatrical-year") or "N/A"
-    typ = clean_text(movie_data.get("type")) or "N/A"
-    genres = extract_list(movie_data, "genres")
-    langs = extract_list(movie_data, "languages")
-    platforms = extract_list(movie_data, "platforms", "name")
-    streaming = movie_data.get("streaming-date") or "Unknown"
+    title = clean_text(movie.get("title")) or "Unknown"
+    year = movie.get("theatrical-year") or "N/A"
+    movie_type = clean_text(movie.get("type")) or "N/A"
+    genres = extract_list(movie, "genres")
+    genre_str = ", ".join(genres) or "N/A"
+    langs = extract_list(movie, "languages")
+    lang_str = ", ".join(langs) or "N/A"
+    platforms = extract_list(movie, "platforms", "name")
+    platform_str = platforms[0] if platforms else "N/A"
 
-    details = (
-        f"{title} ({year})\n"
-        f"Type: {typ}\n"
-        f"Genres: {genres}\n"
-        f"Languages: {langs}\n"
-        f"Platforms: {platforms}\n"
-        f"Streaming from: {streaming}"
+    msg = (
+        f"✅ **{title}** · ({year})\n"
+        f"🎥 {movie_type}\n"
+        f"🎭 {genre_str} · 🉑 {lang_str}\n"
+        f"📺 {platform_str}\n"
+        f"**@MooviDex**"
     )
 
     search_btn = InlineKeyboardButton(
-        "Search in Bot 🔍",
+        "Click to Search 🔎",
         url=f"https://t.me/{temp.U_NAME}?start=Search_{re.sub(r'[^a-zA-Z0-9]', '_', title)}_{year}"
     )
 
-    markup = [[search_btn]]
+    buttons = [[search_btn]]
     if user_id in ADMIN_IDS:
-        markup.append([InlineKeyboardButton("Post to Channel 📣", callback_data=f"binged_post_{movie_id}")])
-    markup.append([InlineKeyboardButton("Close ❌", callback_data="close_message")])
+        buttons.append([InlineKeyboardButton("Post to Channel 📣", callback_data=f"binged_post_{movie_id}")])
+    buttons.append([InlineKeyboardButton("Close ❌", callback_data="close_message")])
 
-    await cq.message.reply_text(details, reply_markup=InlineKeyboardMarkup(markup))
+    await cq.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(buttons))
     await cq.answer()
 
-# Post to channel
+# Post movie to channel (for admins)
 @Client.on_callback_query(filters.regex(r"^binged_post_(\d+)$"))
 async def binged_post(client, cq):
     if cq.from_user.id not in ADMIN_IDS:
-        return await cq.answer("You’re not authorized.", show_alert=True)
+        return await cq.answer("You're not authorized.", show_alert=True)
 
     movie_id = cq.data.split("_")[-1]
-    movie_data = temp.BINGED_RESULTS.get(cq.from_user.id, {}).get(movie_id)
-    if not movie_data:
+    movie = temp.BINGED_RESULTS.get(cq.from_user.id, {}).get(movie_id)
+    if not movie:
         return await cq.answer("Movie data not found in session.", show_alert=True)
 
-    title = clean_text(movie_data.get("title"))
-    year = movie_data.get("theatrical-year") or "N/A"
-    typ = clean_text(movie_data.get("type")) or "N/A"
-    genres = extract_list(movie_data, "genres")
-    langs = extract_list(movie_data, "languages")
-    platforms = extract_list(movie_data, "platforms", "name")
-    streaming = movie_data.get("streaming-date") or "Unknown"
+    title = clean_text(movie.get("title")) or "Unknown"
+    year = movie.get("theatrical-year") or "N/A"
+    movie_type = clean_text(movie.get("type")) or "N/A"
+    genres = extract_list(movie, "genres")
+    genre_str = ", ".join(genres) or "N/A"
+    langs = extract_list(movie, "languages")
+    lang_str = ", ".join(langs) or "N/A"
+    platforms = extract_list(movie, "platforms", "name")
+    platform_str = platforms[0] if platforms else "N/A"
 
     post_text = (
-        f"{title} ({year})\n"
-        f"Type: {typ}\n"
-        f"Genres: {genres}\n"
-        f"Languages: {langs}\n"
-        f"Platforms: {platforms}\n"
-        f"Streaming from: {streaming}\n\n"
-        f"@MooviDex"
+        f"✅ **{title}** · ({year})\n"
+        f"🎥 {movie_type}\n"
+        f"🎭 {genre_str} · 🉑 {lang_str}\n"
+        f"📺 {platform_str}\n"
+        f"**@MooviDex**"
     )
 
     search_btn = InlineKeyboardButton(
-        "Search in Bot 🔍",
+        "Click to Search 🔎",
         url=f"https://t.me/{temp.U_NAME}?start=Search_{re.sub(r'[^a-zA-Z0-9]', '_', title)}_{year}"
     )
 
@@ -170,7 +173,7 @@ async def binged_post(client, cq):
         )
         await cq.answer("Posted to channel.")
     except Exception as e:
-        await cq.answer(f"Failed to post: {e}", show_alert=True)
+        await cq.answer(f"Post failed: {e}", show_alert=True)
 
 # Close button
 @Client.on_callback_query(filters.regex(r"^close_message$"))
