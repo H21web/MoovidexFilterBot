@@ -138,21 +138,27 @@ async def imdb_search(client: Client, message: Message):
         return await message.reply("❗ Give me a movie or series name.")
 
     query = message.text.split(None, 1)[1]
+    encoded_query = quote(query)
     reply = await message.reply("🔍 Searching IMDb...")
 
     try:
-        res = requests.get(f"https://imdb.iamidiotareyoutoo.com/search?q={query}")
+        res = requests.get(f"https://imdb.iamidiotareyoutoo.com/search?q={encoded_query}", timeout=10)
+
+        if res.status_code != 200:
+            raise ValueError("IMDb API did not return 200 OK")
+
         data = res.json()
 
-        if not data.get("ok") or not data.get("description"):
-            raise ValueError("No movie suggestions found.")
+        if not data.get("ok") or not isinstance(data.get("description"), list):
+            raise ValueError("Invalid IMDb API response format.")
+
+        suggestions = data["description"]
+        if not suggestions:
+            raise ValueError("Empty suggestions list.")
+
     except Exception as e:
         logger.exception("IMDb search API failed: %s", e)
         return await reply.edit_text("😕 No results found on IMDb.")
-
-    suggestions = data["description"]
-    if not suggestions:
-        return await reply.edit_text("😕 No results found.")
 
     buttons = []
     movie_list = []
@@ -184,8 +190,8 @@ async def imdb_callback(bot: Client, quer_y: CallbackQuery):
     imdb = await get_poster(query=movie_id, id=True)
     message = quer_y.message.reply_to_message or quer_y.message
 
-    if not imdb:
-        return await quer_y.message.edit("❌ No results found.")
+    if not imdb or not imdb.get("title"):
+        return await quer_y.message.edit("❌ IMDb metadata not found.")
 
     btn = [[
         InlineKeyboardButton(
@@ -196,39 +202,38 @@ async def imdb_callback(bot: Client, quer_y: CallbackQuery):
 
     try:
         caption = IMDB_TEMPLATE.format(
-            query = imdb['title'],
-            title = imdb['title'],
-            votes = imdb['votes'],
-            aka = imdb["aka"],
-            seasons = imdb["seasons"],
-            box_office = imdb['box_office'],
-            localized_title = imdb['localized_title'],
-            kind = imdb['kind'],
-            imdb_id = imdb["imdb_id"],
-            cast = imdb["cast"],
-            runtime = imdb["runtime"],
-            countries = imdb["countries"],
-            certificates = imdb["certificates"],
-            languages = imdb["languages"],
-            director = imdb["director"],
-            writer = imdb["writer"],
-            producer = imdb["producer"],
-            composer = imdb["composer"],
-            cinematographer = imdb["cinematographer"],
-            music_team = imdb["music_team"],
-            distributors = imdb["distributors"],
-            release_date = imdb['release_date'],
-            year = imdb['year'],
-            genres = imdb['genres'],
-            poster = imdb['poster'],
-            plot = imdb['plot'],
-            rating = imdb['rating'],
-            url = imdb['url'],
-            **locals()
+            query=imdb['title'],
+            title=imdb['title'],
+            votes=imdb.get('votes', '-'),
+            aka=imdb.get("aka", '-'),
+            seasons=imdb.get("seasons", '-'),
+            box_office=imdb.get('box_office', '-'),
+            localized_title=imdb.get('localized_title', '-'),
+            kind=imdb.get('kind', '-'),
+            imdb_id=imdb.get("imdb_id", movie_id),
+            cast=imdb.get("cast", '-'),
+            runtime=imdb.get("runtime", '-'),
+            countries=imdb.get("countries", '-'),
+            certificates=imdb.get("certificates", '-'),
+            languages=imdb.get("languages", '-'),
+            director=imdb.get("director", '-'),
+            writer=imdb.get("writer", '-'),
+            producer=imdb.get("producer", '-'),
+            composer=imdb.get("composer", '-'),
+            cinematographer=imdb.get("cinematographer", '-'),
+            music_team=imdb.get("music_team", '-'),
+            distributors=imdb.get("distributors", '-'),
+            release_date=imdb.get('release_date', '-'),
+            year=imdb.get('year', '-'),
+            genres=imdb.get('genres', '-'),
+            poster=imdb.get('poster', ''),
+            plot=imdb.get('plot', 'No description'),
+            rating=imdb.get('rating', '-'),
+            url=imdb.get('url', f'https://www.imdb.com/title/{movie_id}')
         )
     except Exception as e:
         logger.exception("Template formatting failed: %s", e)
-        caption = f"<b>{imdb['title']}</b>\n\n{imdb['plot'] or 'No description'}"
+        caption = f"<b>{imdb.get('title', 'Unknown')}</b>\n\n{imdb.get('plot') or 'No description available.'}"
 
     if imdb.get('poster'):
         try:
@@ -252,5 +257,4 @@ async def imdb_callback(bot: Client, quer_y: CallbackQuery):
 
     await quer_y.message.delete()
     await quer_y.answer()
-
-        
+    
