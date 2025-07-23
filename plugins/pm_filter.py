@@ -226,7 +226,7 @@ def extract_shortdetails(filename, file_size, max_length=64):
 
     full_lang_set = set([
         'Hindi', 'English', 'Tamil', 'Telugu', 'Malayalam', 'Kannada',
-        'Bengali', 'Dual Audio', 'Multi', 'Korean', 'Multi Audio'
+        'Bengali', 'Dual Audio', 'Multi', 'Korean', 'Spanish', 'Multi Audio'
     ])
 
     language = []
@@ -498,18 +498,6 @@ async def advantage_spoll_choker(bot, query):
             else:
                 reqstr = await bot.get_users(query.from_user.id if query.from_user else 0)
 
-                # API fallback info
-                api_answer = ""
-                query_param = movie.replace(" ", "%20")
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(f"https://api.safone.co/asq?query={query_param}%20ott%20released%20date(short)") as resp:
-                            if resp.status == 200:
-                                data = await resp.json()
-                                api_answer = data.get("answer", "")
-                except Exception:
-                    api_answer = ""  # Fail silently
-
                 encoded_movie = re.sub(r'\W+', '_', movie)
                 request_btn = [[
                     InlineKeyboardButton(
@@ -519,16 +507,13 @@ async def advantage_spoll_choker(bot, query):
                 ]]
 
                 final_text = script.MVE_NT_FND
-                if api_answer:
-                    final_text += f"\n\n<blockquote expandable><b>{api_answer}</b></blockquote>\n"
-          
+
                 msg = await query.message.edit(
                     final_text,
                     reply_markup=InlineKeyboardMarkup(request_btn),
                     disable_web_page_preview=True
                 )
                 
-                # Fix: use 'bot' instead of undefined 'client'
                 await bot.send_message(
                     chat_id=LOG_CHANNEL,
                     text=(script.NORSLTS.format(reqstr.id, reqstr.mention, movie))
@@ -536,6 +521,7 @@ async def advantage_spoll_choker(bot, query):
                 
                 await asyncio.sleep(120)
                 await msg.delete()
+
 
 #languages
 
@@ -2642,7 +2628,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         #if re.findall("((^\/|^,|^!|^\.|^[\U0001F600-\U000E007F]).*)", message.text):
             #return
         text = message.caption or message.text or ""
-        if len(text) < 50:
+        if len(text) < 20:
             search = name
             search = search.lower()
             find = search.split(" ")
