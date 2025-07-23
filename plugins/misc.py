@@ -131,6 +131,126 @@ async def who_is(client, message):
     await status_message.delete()
 
 
-        
+
+@Client.on_message(filters.command(["imdb", "search"]))
+async def imdb_search(client: Client, message: Message):
+    if ' ' not in message.text:
+        return await message.reply("❗ Give me a movie or series name.")
+
+    query = message.text.split(None, 1)[1]
+    reply = await message.reply("🔍 Searching IMDb...")
+
+    try:
+        res = requests.get(f"https://imdb.iamidiotareyoutoo.com/search?q={query}")
+        data = res.json()
+
+        if not data.get("ok") or not data.get("description"):
+            raise ValueError("No movie suggestions found.")
+    except Exception as e:
+        logger.exception("IMDb search API failed: %s", e)
+        return await reply.edit_text("😕 No results found on IMDb.")
+
+    suggestions = data["description"]
+    if not suggestions:
+        return await reply.edit_text("😕 No results found.")
+
+    buttons = []
+    movie_list = []
+
+    for i, movie in enumerate(suggestions[:5]):
+        title = movie.get("#TITLE", "Unknown")
+        year = movie.get("#YEAR", "")
+        imdb_id = movie.get("#IMDB_ID", "")
+
+        full_title = f"{title} - {year}".strip(" -")
+        if imdb_id:
+            buttons.append([
+                InlineKeyboardButton(text=full_title, callback_data=f"imdb#{imdb_id}")
+            ])
+        movie_list.append(full_title)
+
+    SPELL_CHECK[message.id] = movie_list
+
+    buttons.append([
+        InlineKeyboardButton("❌ Close", callback_data=f"spol#{message.from_user.id}#close_spellcheck")
+    ])
+
+    await reply.edit_text("🎬 Found the following titles on IMDb:", reply_markup=InlineKeyboardMarkup(buttons))
+
+
+@Client.on_callback_query(filters.regex(r"^imdb#"))
+async def imdb_callback(bot: Client, quer_y: CallbackQuery):
+    _, movie_id = quer_y.data.split('#', 1)
+    imdb = await get_poster(query=movie_id, id=True)
+    message = quer_y.message.reply_to_message or quer_y.message
+
+    if not imdb:
+        return await quer_y.message.edit("❌ No results found.")
+
+    btn = [[
+        InlineKeyboardButton(
+            text=f"{imdb.get('title', 'Open in IMDb')}",
+            url=imdb.get('url', f'https://www.imdb.com/title/{movie_id}')
+        )
+    ]]
+
+    try:
+        caption = IMDB_TEMPLATE.format(
+            query = imdb['title'],
+            title = imdb['title'],
+            votes = imdb['votes'],
+            aka = imdb["aka"],
+            seasons = imdb["seasons"],
+            box_office = imdb['box_office'],
+            localized_title = imdb['localized_title'],
+            kind = imdb['kind'],
+            imdb_id = imdb["imdb_id"],
+            cast = imdb["cast"],
+            runtime = imdb["runtime"],
+            countries = imdb["countries"],
+            certificates = imdb["certificates"],
+            languages = imdb["languages"],
+            director = imdb["director"],
+            writer = imdb["writer"],
+            producer = imdb["producer"],
+            composer = imdb["composer"],
+            cinematographer = imdb["cinematographer"],
+            music_team = imdb["music_team"],
+            distributors = imdb["distributors"],
+            release_date = imdb['release_date'],
+            year = imdb['year'],
+            genres = imdb['genres'],
+            poster = imdb['poster'],
+            plot = imdb['plot'],
+            rating = imdb['rating'],
+            url = imdb['url'],
+            **locals()
+        )
+    except Exception as e:
+        logger.exception("Template formatting failed: %s", e)
+        caption = f"<b>{imdb['title']}</b>\n\n{imdb['plot'] or 'No description'}"
+
+    if imdb.get('poster'):
+        try:
+            await quer_y.message.reply_photo(
+                photo=imdb['poster'],
+                caption=caption,
+                reply_markup=InlineKeyboardMarkup(btn)
+            )
+        except (MediaEmpty, PhotoInvalidDimensions, WebpageMediaEmpty):
+            poster = imdb['poster'].replace('.jpg', "._V1_UX360.jpg")
+            await quer_y.message.reply_photo(
+                photo=poster,
+                caption=caption,
+                reply_markup=InlineKeyboardMarkup(btn)
+            )
+        except Exception as e:
+            logger.exception("Photo send failed: %s", e)
+            await quer_y.message.reply(caption, reply_markup=InlineKeyboardMarkup(btn))
+    else:
+        await quer_y.message.edit(caption, reply_markup=InlineKeyboardMarkup(btn))
+
+    await quer_y.message.delete()
+    await quer_y.answer()
 
         
