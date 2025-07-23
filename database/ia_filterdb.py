@@ -13,20 +13,21 @@ from info import FILE_DB_URI, SEC_FILE_DB_URI, DATABASE_NAME, COLLECTION_NAME, M
 client = MongoClient(FILE_DB_URI)
 db = client[DATABASE_NAME]
 col = db[COLLECTION_NAME]
+col.create_index([("file_name", 1), ("file_size", 1)])
+col.create_index("caption")
 
 sec_client = MongoClient(SEC_FILE_DB_URI)
 sec_db = sec_client[DATABASE_NAME]
 sec_col = sec_db[COLLECTION_NAME]
+sec_col.create_index([("file_name", 1), ("file_size", 1)])
+sec_col.create_index("caption")
 
 def clean_file_name(file_name):
     file_name = re.sub(r"[_\-\.\+]", " ", str(file_name))
     for char in ['[', ']', '(', ')', '{', '}']:
         file_name = file_name.replace(char, '')
     return ' '.join(
-        filter(
-            lambda x: not x.startswith(('@', 'http', 'www.', 't.me')),
-            file_name.split()
-        )
+        filter(lambda x: not x.startswith(('@', 'http', 'www.', 't.me')), file_name.split())
     )
 
 def encode_file_id(s: bytes) -> str:
@@ -44,35 +45,33 @@ def encode_file_id(s: bytes) -> str:
 def unpack_new_file_id(new_file_id):
     decoded = FileId.decode(new_file_id)
     return encode_file_id(
-        pack(
-            "<iiqq",
-            int(decoded.file_type),
-            decoded.dc_id,
-            decoded.media_id,
-            decoded.access_hash
-        )
+        pack("<iiqq", int(decoded.file_type), decoded.dc_id, decoded.media_id, decoded.access_hash)
     )
 
 def is_file_already_saved(file_id, file_name, file_size=None):
-    filter_id = {'file_id': file_id}
-    filter_name_size = {'file_name': file_name, 'file_size': file_size} if file_size else None
+    filters = {"$or": [{"file_id": file_id}]}
+    if file_name and file_size:
+        filters["$or"].append({"file_name": file_name, "file_size": file_size})
+
     for collection in [col, sec_col] if MULTIPLE_DATABASE else [col]:
-        if collection.find_one(filter_id) or (filter_name_size and collection.find_one(filter_name_size)):
+        if collection.find_one(filters):
             return True
     return False
 
 async def save_file(media):
     file_id = unpack_new_file_id(media.file_id)
     file_name = clean_file_name(media.file_name)
+    file_size = media.file_size
+
+    if is_file_already_saved(file_id, file_name, file_size):
+        return False, 0
+
     file = {
         'file_id': file_id,
         'file_name': file_name,
-        'file_size': media.file_size,
+        'file_size': file_size,
         'caption': media.caption.html if media.caption else None
     }
-
-    if is_file_already_saved(file_id, file_name, media.file_size):
-        return False, 0
 
     try:
         col.insert_one(file)
@@ -94,48 +93,42 @@ async def save_file(media):
 
 async def get_search_results(chat_id, query, file_type=None, max_results=10, offset=0, filter=False):
     query = query.strip()
-    if not query:
-        raw_pattern = "."
-    elif ' ' not in query:
-        raw_pattern = rf"(\b|[.\-+_]){re.escape(query)}(\b|[.\-+_])"
-    else:
-        raw_pattern = re.sub(r'\s+', r'.*[\s.\-+_]', re.escape(query))
-
+    raw_pattern = '.' if not query else re.sub(r'\s+', r'.*[\s.\-+_]', re.escape(query))
     try:
         regex = re.compile(raw_pattern, re.IGNORECASE)
     except re.error:
         regex = re.compile(re.escape(query), re.IGNORECASE)
 
     base_filter = {'file_name': regex}
-    if USE_CAPTION_FILTER:
-        search_filter = {'$or': [base_filter, {'caption': regex}]}
-    else:
-        search_filter = base_filter
+    search_filter = {'$or': [base_filter, {'caption': regex}]} if USE_CAPTION_FILTER else base_filter
 
-    cursor_primary = col.find(search_filter).sort('$natural', -1).skip(offset).limit(max_results)
-    files = list(cursor_primary)
+    # Combined search from primary and secondary
+    collections = [col, sec_col] if MULTIPLE_DATABASE else [col]
+    seen = set()
+    results = []
 
-    if MULTIPLE_DATABASE:
-        cursor_secondary = sec_col.find(search_filter).sort('$natural', -1).skip(offset).limit(max_results)
-        files += list(cursor_secondary)
+    for collection in collections:
+        cursor = collection.find(search_filter).sort('$natural', -1).skip(offset).limit(max_results * 2)
+        for doc in cursor:
+            key = (doc.get('file_name'), doc.get('file_size'))
+            if key in seen:
+                continue
+            seen.add(key)
+            results.append(doc)
+            if len(results) >= max_results:
+                break
+        if len(results) >= max_results:
+            break
 
-    total_primary = col.count_documents(search_filter)
-    total_secondary = sec_col.count_documents(search_filter) if MULTIPLE_DATABASE else 0
-    total_results = total_primary + total_secondary
+    # Count all matches
+    total = sum(collection.count_documents(search_filter) for collection in collections)
+    next_offset = "" if (offset + max_results) >= total else (offset + max_results)
 
-    next_offset = "" if (offset + max_results) >= total_results else (offset + max_results)
-
-    return files, next_offset, total_results
+    return results[:max_results], next_offset, total
 
 async def get_bad_files(query):
     query = query.strip()
-    if not query:
-        raw_pattern = '.'
-    elif ' ' not in query:
-        raw_pattern = rf'(\b|[.+-_]){re.escape(query)}(\b|[.+-_])'
-    else:
-        raw_pattern = re.sub(r'\s+', r'.*[s.+-_]', re.escape(query))
-
+    raw_pattern = '.' if not query else re.sub(r'\s+', r'.*[s.+-_]', re.escape(query))
     try:
         regex = re.compile(raw_pattern, flags=re.IGNORECASE)
     except re.error:
@@ -146,14 +139,18 @@ async def get_bad_files(query):
         filter_criteria = {'$or': [filter_criteria, {'caption': regex}]}
 
     collections = [col, sec_col] if MULTIPLE_DATABASE else [col]
+    seen = set()
     files = []
-    total = 0
-    for collection in collections:
-        found = list(collection.find(filter_criteria))
-        files.extend(found)
-        total += len(found)
 
-    return files, total
+    for collection in collections:
+        for doc in collection.find(filter_criteria):
+            key = (doc.get('file_name'), doc.get('file_size'))
+            if key in seen:
+                continue
+            seen.add(key)
+            files.append(doc)
+
+    return files, len(files)
 
 async def get_file_details(query):
     return col.find_one({'file_id': query}) or sec_col.find_one({'file_id': query})
