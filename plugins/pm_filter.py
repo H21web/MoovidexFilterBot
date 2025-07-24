@@ -41,72 +41,35 @@ async def give_filter(client, message):
     user_id = user.id if user else 0
     content = message.text
 
-    # === Global Filter ===
-    try:
-        if await global_filters(client, message):
+    # === Support Group Restriction ===
+    if chat_id == SUPPORT_CHAT_ID:
+        files, offset, total = await get_search_results(chat_id, content.lower(), 0, filter=True)
+        if total == 0:
             return
-    except ImportError:
-        pass  # No global filters module
+        return await message.reply_text(
+            f"<b>Hey {user.mention}, {total} results found for \"{content}\".\n\n"
+            f"This is a support group. Please search here instead:\n{GRP_LNK}</b>"
+        )
 
     # === Update Top Messages ===
     await mdb.update_top_messages(user_id, content)
 
-    # === Support Group Restriction ===
-    if chat_id == SUPPORT_CHAT_ID:
-        search = content
-        temp_files, temp_offset, total_results = await get_search_results(
-            chat_id=chat_id, query=search.lower(), offset=0, filter=True
-        )
-        if total_results == 0:
+    # === Global Filters ===
+    try:
+        if await global_filters(client, message):
             return
-        return await message.reply_text(
-            f"<b>Hᴇʏ {user.mention}, {total_results} ʀᴇsᴜʟᴛs ғᴏᴜɴᴅ ғᴏʀ \"{search}\".\n\n"
-            f"Bᴜᴛ ᴛʜɪs ɪs ᴀ sᴜᴘᴘᴏʀᴛ ɢʀᴏᴜᴘ, ᴘʟᴇᴀsᴇ sᴇᴀʀᴄʜ ɪɴ ᴏᴜʀ ᴍᴀɪɴ ɢʀᴏᴜᴘ 👇\n\n"
-            f"{GRP_LNK}</b>"
-        )
-
-    # === Chat Settings ===
-    settings = await get_settings(chat_id)
-
-    # === Force Subscribe ===
-    if settings.get('fsub'):
-        try:
-            btn = await pub_is_subscribed(client, message, settings['fsub'])
-            if btn:
-                btn.append([InlineKeyboardButton("Unmute Me 🔕", callback_data=f"unmuteme#{user_id}")])
-                await client.restrict_chat_member(chat_id, user_id, ChatPermissions(can_send_messages=False))
-                await message.reply_photo(
-                    photo=random.choice(PICS),
-                    caption=f"👋 Hello {user.mention},\n\nPlease join the channel and then click the unmute button. 😇",
-                    reply_markup=InlineKeyboardMarkup(btn),
-                    parse_mode=enums.ParseMode.HTML
-                )
-                return
-        except Exception as e:
-            print(f"[FSub Error] {e}")
+    except ImportError:
+        pass
 
     # === Manual Filters ===
-    try:
-        if await manual_filters(client, message):
-            return
-    except Exception as e:
-        print(f"[ManualFilter Error] {e}")
+    if await manual_filters(client, message):
+        return
 
     # === Auto Filter ===
-    try:
-        if settings.get("auto_ffilter"):
-            reply_msg = await message.reply_text(f"<b><i>Searching For {content} 🔍</i></b>")
-            await auto_filter(client, content, message, reply_msg, ai_search=True)
-        else:
-            # Enable auto filter if not set
-            grpid = await active_connection(str(user_id))
-            await save_group_settings(grpid, 'auto_ffilter', True)
-            settings = await get_settings(chat_id)
-            if settings.get("auto_ffilter"):
-                reply_msg = await message.reply_text(f"<b><i>Searching For {content} 🔍</i></b>")
-                await auto_filter(client, content, message, reply_msg, ai_search=True)
-    except Exception as e:
-        print(f"[AutoFilter Error] {e}")
+    settings = await get_settings(chat_id)
+    if settings.get("auto_ffilter", True):  # default True if not set
+        reply = await message.reply_text(f"<b><i>Searching For {content} 🔍</i></b>")
+        await auto_filter(client, content, message, reply, ai_search=True)
 
 
 async def boovo(bot, title, message):
