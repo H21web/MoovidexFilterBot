@@ -1495,8 +1495,8 @@ Type the series name followed by season and episode.
     keyboard = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("💬 Support Group", url="https://t.me/YourSupportGroupLink"),
-                InlineKeyboardButton("🎞 Watch Tutorials", url="https://t.me/YourTutorialVideoLink")
+                InlineKeyboardButton("💬 Support Group", url="https://t.me/moovidexvangaurd"),
+                InlineKeyboardButton("🎞 Watch Tutorials", url="https://t.me/moovidex/14")
             ],
             [
                 InlineKeyboardButton("❌ Close", callback_data="close_help")
