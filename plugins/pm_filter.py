@@ -41,29 +41,34 @@ async def give_filter(client, message):
     user_id = user.id if user else 0
     content = message.text
 
-    # Run global filter first
-    if await global_filters(client, message):
-        return
+    # === Global Filter ===
+    try:
+        if await global_filters(client, message):
+            return
+    except ImportError:
+        pass  # No global filters module
 
-    # Update top messages only after global filter
+    # === Update Top Messages ===
     await mdb.update_top_messages(user_id, content)
 
-    # Support Group Restriction Logic
+    # === Support Group Restriction ===
     if chat_id == SUPPORT_CHAT_ID:
         search = content
-        temp_files, temp_offset, total_results = await get_search_results(chat_id=chat_id, query=search.lower(), offset=0, filter=True)
+        temp_files, temp_offset, total_results = await get_search_results(
+            chat_id=chat_id, query=search.lower(), offset=0, filter=True
+        )
         if total_results == 0:
             return
         return await message.reply_text(
-            f"<b>Hᴇʏ {user.mention}, {str(total_results)} ʀᴇsᴜʟᴛs ᴀʀᴇ ғᴏᴜɴᴅ ɪɴ ᴍʏ ᴅᴀᴛᴀʙᴀsᴇ ғᴏʀ ʏᴏᴜʀ ᴏ̨ᴜᴇʀʏ {search}.\n\n"
-            f"Tʜɪs ɪs ᴀ sᴜᴘᴘᴏʀᴛ ɢʀᴏᴜᴘ sᴏ ʏᴏᴜ ᴄᴀɴ'ᴛ ɢᴇᴛ ғɪʟᴇs ғʀᴏᴍ ʜᴇʀᴇ...\n\n"
-            f"Jᴏɪɴ ᴀɴᴅ Sᴇᴀʀᴄʜ Hᴇʀᴇ - {GRP_LNK}</b>"
+            f"<b>Hᴇʏ {user.mention}, {total_results} ʀᴇsᴜʟᴛs ғᴏᴜɴᴅ ғᴏʀ \"{search}\".\n\n"
+            f"Bᴜᴛ ᴛʜɪs ɪs ᴀ sᴜᴘᴘᴏʀᴛ ɢʀᴏᴜᴘ, ᴘʟᴇᴀsᴇ sᴇᴀʀᴄʜ ɪɴ ᴏᴜʀ ᴍᴀɪɴ ɢʀᴏᴜᴘ 👇\n\n"
+            f"{GRP_LNK}</b>"
         )
 
-    # Fetch chat settings
+    # === Chat Settings ===
     settings = await get_settings(chat_id)
 
-    # Force subscribe check
+    # === Force Subscribe ===
     if settings.get('fsub'):
         try:
             btn = await pub_is_subscribed(client, message, settings['fsub'])
@@ -72,7 +77,7 @@ async def give_filter(client, message):
                 await client.restrict_chat_member(chat_id, user_id, ChatPermissions(can_send_messages=False))
                 await message.reply_photo(
                     photo=random.choice(PICS),
-                    caption=f"👋 Hello {user.mention},\n\nPlease join the channel then click on unmute me button. 😇",
+                    caption=f"👋 Hello {user.mention},\n\nPlease join the channel and then click the unmute button. 😇",
                     reply_markup=InlineKeyboardMarkup(btn),
                     parse_mode=enums.ParseMode.HTML
                 )
@@ -80,25 +85,29 @@ async def give_filter(client, message):
         except Exception as e:
             print(f"[FSub Error] {e}")
 
-    # Manual filters next
-    if await manual_filters(client, message):
-        return
+    # === Manual Filters ===
+    try:
+        if await manual_filters(client, message):
+            return
+    except Exception as e:
+        print(f"[ManualFilter Error] {e}")
 
-    # Auto-filter fallback
-    if settings.get("auto_ffilter"):
-        reply_msg = await message.reply_text(f"<b><i>Searching For {content} 🔍</i></b>")
-        await auto_filter(client, content, message, reply_msg, ai_search=True)
-    else:
-        # If no auto_ffilter key, set default True
-        try:
+    # === Auto Filter ===
+    try:
+        if settings.get("auto_ffilter"):
+            reply_msg = await message.reply_text(f"<b><i>Searching For {content} 🔍</i></b>")
+            await auto_filter(client, content, message, reply_msg, ai_search=True)
+        else:
+            # Enable auto filter if not set
             grpid = await active_connection(str(user_id))
             await save_group_settings(grpid, 'auto_ffilter', True)
             settings = await get_settings(chat_id)
             if settings.get("auto_ffilter"):
                 reply_msg = await message.reply_text(f"<b><i>Searching For {content} 🔍</i></b>")
                 await auto_filter(client, content, message, reply_msg, ai_search=True)
-        except Exception as e:
-            print(f"[AutoFilter Setup Error] {e}")
+    except Exception as e:
+        print(f"[AutoFilter Error] {e}")
+
 
 async def boovo(bot, title, message):
     ai_search = True
@@ -114,21 +123,24 @@ async def boovo(bot, title, message):
 
 @Client.on_message(filters.private & filters.text & filters.incoming)
 async def pm_text(bot, message):
+    await mdb.update_top_messages(message.from_user.id, message.text)
     content = message.text
+    user = message.from_user.first_name
+    user_id = message.from_user.id
+
     if content.startswith("/") or content.startswith("#"):
         return
-    kd = await global_filters(bot, message)
-    if kd is not False:
-        return  
-    await mdb.update_top_messages(message.from_user.id, content)
 
-    if PM_SEARCH:
-        reply_msg = await bot.send_message(
-            chat_id=message.chat.id,
-            text=f"<b>🔎 Searching {content}</b>",
-            reply_to_message_id=message.id
-        )
-        await auto_filter(bot, content, message, reply_msg, ai_search=True)
+    kd = await global_filters(bot, message)
+    if kd is False:
+        if PM_SEARCH == True:
+            ai_search = True
+            reply_msg = await bot.send_message(
+                chat_id=message.chat.id,
+                text=f"<b>🔎 Searching {content} </b>",
+                reply_to_message_id=message.id
+            )
+            await auto_filter(bot, content, message, reply_msg, ai_search=True)
 
     # After processing, send the nicely formatted PM search log:
    # await bot.send_message(
@@ -226,7 +238,7 @@ def extract_shortdetails(filename, file_size, max_length=64):
 
     full_lang_set = set([
         'Hindi', 'English', 'Tamil', 'Telugu', 'Malayalam', 'Kannada',
-        'Bengali', 'Dual Audio', 'Multi', 'Korean', 'Spanish', 'Multi Audio'
+        'Bengali', 'Dual Audio', 'Multi', 'Korean', 'Multi Audio'
     ])
 
     language = []
@@ -498,6 +510,18 @@ async def advantage_spoll_choker(bot, query):
             else:
                 reqstr = await bot.get_users(query.from_user.id if query.from_user else 0)
 
+                # API fallback info
+                api_answer = ""
+                query_param = movie.replace(" ", "%20")
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(f"https://api.safone.co/asq?query={query_param}%20ott%20released%20date(short)") as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                api_answer = data.get("answer", "")
+                except Exception:
+                    api_answer = ""  # Fail silently
+
                 encoded_movie = re.sub(r'\W+', '_', movie)
                 request_btn = [[
                     InlineKeyboardButton(
@@ -507,13 +531,16 @@ async def advantage_spoll_choker(bot, query):
                 ]]
 
                 final_text = script.MVE_NT_FND
-
+                if api_answer:
+                    final_text += f"\n\n<blockquote expandable><b>{api_answer}</b></blockquote>\n"
+          
                 msg = await query.message.edit(
                     final_text,
                     reply_markup=InlineKeyboardMarkup(request_btn),
                     disable_web_page_preview=True
                 )
                 
+                # Fix: use 'bot' instead of undefined 'client'
                 await bot.send_message(
                     chat_id=LOG_CHANNEL,
                     text=(script.NORSLTS.format(reqstr.id, reqstr.mention, movie))
@@ -521,7 +548,6 @@ async def advantage_spoll_choker(bot, query):
                 
                 await asyncio.sleep(120)
                 await msg.delete()
-
 
 #languages
 
@@ -2162,7 +2188,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
 
 
-    elif query.data == "botstats":
+    elif query.data == "stats":
         buttons = [[
             InlineKeyboardButton('⟸ Bᴀᴄᴋ', callback_data='help'),
             InlineKeyboardButton('⟲ Rᴇғʀᴇsʜ', callback_data='rfrsh')
@@ -2628,7 +2654,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         #if re.findall("((^\/|^,|^!|^\.|^[\U0001F600-\U000E007F]).*)", message.text):
             #return
         text = message.caption or message.text or ""
-        if len(text) < 20:
+        if len(text) < 50:
             search = name
             search = search.lower()
             find = search.split(" ")
