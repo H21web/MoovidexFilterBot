@@ -41,48 +41,41 @@ async def give_filter(client, message):
     user_id = user.id if user else 0
     content = message.text
 
-    # === DISABLED: Support Group Restriction ===
-    # if chat_id == SUPPORT_CHAT_ID:
-    #     files, offset, total = await get_search_results(chat_id, content.lower(), 0, filter=True)
-    #     if total == 0:
-    #         return
-    #     return await message.reply_text(
-    #         f"<b>Hey {user.mention}, {total} results found for \"{content}\".\n\n"
-    #         f"This is a support group. Please search here instead:\n{GRP_LNK}</b>"
-    #     )
-
-    # === Global Filter Check ===
-    global_filter_result = False
+    # === Check Global Filter ===
+    global_result = False
     try:
-        
-        global_filter_result = await global_filters(client, message)
+        from plugins.filters import global_filters
+        global_result = await global_filters(client, message)
     except ImportError:
-        global_filter_result = False
+        pass
     except Exception as e:
         print(f"[GlobalFilter Error] {e}")
 
-    # === Manual Filter Check ===
-    manual_filter_result = False
+    if global_result:
+        return
+
+    # === Check Manual Filter ===
+    manual_result = False
     try:
-        manual_filter_result = await manual_filters(client, message)
+        manual_result = await manual_filters(client, message)
     except Exception as e:
         print(f"[ManualFilter Error] {e}")
 
-    # === If Either Filter Found, Don't Run Auto Filter ===
-    if global_filter_result or manual_filter_result:
+    if manual_result:
         return
 
-    # === Auto Filter (only if both filters failed) ===
+    # === Run Auto Filter if no other matched ===
     try:
         settings = await get_settings(chat_id)
-        if settings.get("auto_ffilter", True):  # Default to True
-            reply = await message.reply_text(f"<b><i>Searching For {content} 🔍</i></b>")
+        if settings.get("auto_ffilter", True):  # Default: True
+            reply = await message.reply_text(f"<b><i>Searching for {content} 🔍</i></b>")
             await auto_filter(client, content, message, reply, ai_search=True)
     except Exception as e:
         print(f"[AutoFilter Error] {e}")
 
     # === Update Top Messages at the End ===
     await mdb.update_top_messages(user_id, content)
+
 
 
 async def boovo(bot, title, message):
