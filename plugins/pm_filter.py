@@ -40,64 +40,34 @@ async def give_filter(client, message):
     user = message.from_user
     user_id = user.id if user else 0
     content = message.text
-
-    # === Global Filter Check ===
-    global_result = False
-    try:
-        
-        global_result = await global_filters(client, message)
-    except ImportError:
-        pass
-    except Exception as e:
-        print(f"[GlobalFilter Error] {e}")
-
-    if global_result:
-        await mdb.update_top_messages(user_id, content)
-        return
-
-    # === Manual Filter Check ===
-    manual_result = False
-    try:
-        manual_result = await manual_filters(client, message)
-    except Exception as e:
-        print(f"[ManualFilter Error] {e}")
-
-    if manual_result:
-        await mdb.update_top_messages(user_id, content)
-        return
-
-    # === Auto Filter or Fallback ===
-    search = content
-    try:
-        settings = await get_settings(chat_id)
-
-        if settings.get("auto_ffilter", False):
-            reply = await message.reply_text(f"<b><i>Searching for {content} 🔍</i></b>")
-            await auto_filter(client, content, message, reply, ai_search=True)
-        else:
-            # Fallback search if auto_ffilter is off
-            temp_files, temp_offset, total_results = await get_search_results(
-                chat_id=chat_id,
-                query=search.lower(),
-                offset=0,
-                filter=True
-            )
-
-            if total_results == 0:
-                await mdb.update_top_messages(user_id, content)
-                return
-
-            await message.reply_text(
-                f"<b>👋 Hey {user.mention},\n"
-                f"📁 {total_results} results found for your query <code>{search}</code>.\n\n"
-                f"Kindly ask movies and series here ⬇\n@MalluFilesGroup</b>"
-            )
-
-    except Exception as e:
-        print(f"[AutoFilter/Fallback Error] {e}")
-
-    # === Update Top Messages at End ===
-    await mdb.update_top_messages(user_id, content)
+    if message.chat.id != SUPPORT_CHAT_ID:
+            await mdb.update_top_messages(user_id, content)
+            glob = await global_filters(client, message)
+            if glob == False:
+                manual = await manual_filters(client, message)
+                if manual == False:
+                    settings = await get_settings(message.chat.id)
+                    try:
+                        if settings['auto_ffilter']:
+                            reply = await message.reply_text(f"<b><i>Searching for {content} 🔍</i></b>")
+                            await auto_filter(client, content, message, reply, ai_search=True)
+                    except KeyError:
+                        grpid = await active_connection(str(message.from_user.id))
+                        await save_group_settings(grpid, 'auto_ffilter', True)
+                        settings = await get_settings(message.chat.id)
+                        if settings['auto_ffilter']:
+                            reply = await message.reply_text(f"<b><i>Searching for {content} 🔍</i></b>")
+                            await auto_filter(client, content, message, reply, ai_search=True)
+                        
+                        else: #a better logic to avoid repeated lines of code in auto_filter function
+                            search = message.text
+                            temp_files, temp_offset, total_results = await get_search_results(chat_id=message.chat.id, query=search.lower(), offset=0, filter=True)
+                    
+                    if total_results == 0:
+                    
+                        return
+            else:
+                return await message.reply_text(f"<b>👋 𝖧𝖾𝗒 {message.from_user.mention} \n📁 {str(total_results)} 𝖱𝖾𝗌𝗎𝗅𝗍𝗌 𝖺𝗋𝖾 𝖿𝗈𝗎𝗇𝖽 𝖿𝗈𝗋 𝗒𝗈𝗎𝗋 𝗊𝗎𝖾𝗋𝗒 {search}.\n\nKindly ask movies and series here ⬇\n@MalluFilesGroup</b>")
 
 
 
