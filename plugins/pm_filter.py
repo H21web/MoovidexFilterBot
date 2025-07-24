@@ -41,7 +41,7 @@ async def give_filter(client, message):
     user_id = user.id if user else 0
     content = message.text
 
-    # === Check Global Filter ===
+    # === Global Filter Check ===
     global_result = False
     try:
         from plugins.filters import global_filters
@@ -52,9 +52,10 @@ async def give_filter(client, message):
         print(f"[GlobalFilter Error] {e}")
 
     if global_result:
+        await mdb.update_top_messages(user_id, content)
         return
 
-    # === Check Manual Filter ===
+    # === Manual Filter Check ===
     manual_result = False
     try:
         manual_result = await manual_filters(client, message)
@@ -62,19 +63,42 @@ async def give_filter(client, message):
         print(f"[ManualFilter Error] {e}")
 
     if manual_result:
+        await mdb.update_top_messages(user_id, content)
         return
 
-    # === Run Auto Filter if no other matched ===
+    # === Auto Filter or Fallback ===
+    search = content
     try:
         settings = await get_settings(chat_id)
-        if settings.get("auto_ffilter", True):  # Default: True
+
+        if settings.get("auto_ffilter", False):
             reply = await message.reply_text(f"<b><i>Searching for {content} 🔍</i></b>")
             await auto_filter(client, content, message, reply, ai_search=True)
-    except Exception as e:
-        print(f"[AutoFilter Error] {e}")
+        else:
+            # Fallback search if auto_ffilter is off
+            temp_files, temp_offset, total_results = await get_search_results(
+                chat_id=chat_id,
+                query=search.lower(),
+                offset=0,
+                filter=True
+            )
 
-    # === Update Top Messages at the End ===
+            if total_results == 0:
+                await mdb.update_top_messages(user_id, content)
+                return
+
+            await message.reply_text(
+                f"<b>👋 Hey {user.mention},\n"
+                f"📁 {total_results} results found for your query <code>{search}</code>.\n\n"
+                f"Kindly ask movies and series here ⬇\n@MalluFilesGroup</b>"
+            )
+
+    except Exception as e:
+        print(f"[AutoFilter/Fallback Error] {e}")
+
+    # === Update Top Messages at End ===
     await mdb.update_top_messages(user_id, content)
+
 
 
 
