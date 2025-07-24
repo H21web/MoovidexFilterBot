@@ -44,7 +44,7 @@ async def give_filter(client, message):
     # === Global Filter Check ===
     global_result = False
     try:
-        from plugins.filters import global_filters
+        
         global_result = await global_filters(client, message)
     except ImportError:
         pass
