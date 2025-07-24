@@ -114,27 +114,23 @@ async def boovo(bot, title, message):
 @Client.on_message(filters.private & filters.text & filters.incoming)
 async def pm_text(bot, message):
     await mdb.update_top_messages(message.from_user.id, message.text)
-
     content = message.text
     user = message.from_user.first_name
     user_id = message.from_user.id
 
-    # Ignore commands and hashtags
     if content.startswith("/") or content.startswith("#"):
         return
 
     kd = await global_filters(bot, message)
-    if kd is True:
-        return  
-
-    if PM_SEARCH:
-        reply_msg = await bot.send_message(
-            chat_id=message.chat.id,
-            text=f"<b>🔎 Searching {content} </b>",
-            reply_to_message_id=message.id
-        )
-        await auto_filter(bot, content, message, reply_msg, ai_search=True)
-
+    if kd is False:
+        if PM_SEARCH == True:
+            ai_search = True
+            reply_msg = await bot.send_message(
+                chat_id=message.chat.id,
+                text=f"<b>🔎 Searching {content} </b>",
+                reply_to_message_id=message.id
+            )
+            await auto_filter(bot, content, message, reply_msg, ai_search=True)
 
     # After processing, send the nicely formatted PM search log:
    # await bot.send_message(
