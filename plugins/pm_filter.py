@@ -54,27 +54,29 @@ async def give_filter(client, message):
     # === Update Top Messages ===
     await mdb.update_top_messages(user_id, content)
 
-    # === Global Filters ===
-    global_filter_matched = False
+    # === Global Filter (default to False) ===
+    global_filter_result = False
     try:
         from plugins.filters import global_filters
-        global_filter_matched = await global_filters(client, message)
+        global_filter_result = await global_filters(client, message)
     except ImportError:
         pass
+    except Exception as e:
+        print(f"[Global Filter Error] {e}")
 
-    if global_filter_matched:
-        return
+    # === Manual Filter ===
+    manual_filter_result = False
+    try:
+        manual_filter_result = await manual_filters(client, message)
+    except Exception as e:
+        print(f"[Manual Filter Error] {e}")
 
-    # === Manual Filters ===
-    if await manual_filters(client, message):
-        return
-
-    # === Auto Filter ===
-    settings = await get_settings(chat_id)
-    if settings.get("auto_ffilter", True):  # default to True
-        reply = await message.reply_text(f"<b><i>Searching For {content} 🔍</i></b>")
-        await auto_filter(client, content, message, reply, ai_search=True)
-
+    # === Auto Filter only if both filters failed ===
+    if not global_filter_result and not manual_filter_result:
+        settings = await get_settings(chat_id)
+        if settings.get("auto_ffilter", True):  # Default True
+            reply = await message.reply_text(f"<b><i>Searching For {content} 🔍</i></b>")
+            await auto_filter(client, content, message, reply, ai_search=True)
 
 
 async def boovo(bot, title, message):
