@@ -55,11 +55,15 @@ async def give_filter(client, message):
     await mdb.update_top_messages(user_id, content)
 
     # === Global Filters ===
+    global_filter_matched = False
     try:
-        if await global_filters(client, message):
-            return
+        from plugins.filters import global_filters
+        global_filter_matched = await global_filters(client, message)
     except ImportError:
         pass
+
+    if global_filter_matched:
+        return
 
     # === Manual Filters ===
     if await manual_filters(client, message):
@@ -67,9 +71,10 @@ async def give_filter(client, message):
 
     # === Auto Filter ===
     settings = await get_settings(chat_id)
-    if settings.get("auto_ffilter", True):  # default True if not set
+    if settings.get("auto_ffilter", True):  # default to True
         reply = await message.reply_text(f"<b><i>Searching For {content} 🔍</i></b>")
         await auto_filter(client, content, message, reply, ai_search=True)
+
 
 
 async def boovo(bot, title, message):
