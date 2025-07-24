@@ -42,7 +42,7 @@ async def answer(bot, query):
         await query.answer(
             results=[],
             cache_time=0,
-            switch_pm_text='You have to subscribe my channel to use the bot',
+            switch_pm_text='You have to join update channel to use this bot',
             switch_pm_parameter="subscribe"
         )
         return
@@ -83,7 +83,7 @@ async def answer(bot, query):
         )
 
     if results:
-        switch_pm_text = f"{emoji.FILE_FOLDER} Results - {total}"
+        switch_pm_text = f"{emoji.FILE_FOLDER} Results for {string}"
         if string:
             switch_pm_text += f" for {string}"
         try:
