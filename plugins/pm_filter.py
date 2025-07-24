@@ -53,7 +53,7 @@ async def give_filter(client, message):
                 print(e)
 
         
-        if await manual_filters(client, message)
+        if await manual_filters(client, message):
             return
         if await global_filters(client, message):
             return
