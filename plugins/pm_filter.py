@@ -36,7 +36,6 @@ SPELL_CHECK = {}
 
 @Client.on_message(filters.group & filters.text & filters.incoming)
 async def give_filter(client, message):
-    from plugins.filters import global_filters
 
     chat_id = message.chat.id
     user = message.from_user
