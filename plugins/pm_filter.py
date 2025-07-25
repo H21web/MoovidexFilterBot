@@ -51,13 +51,9 @@ async def give_filter(client, message):
                     return
             except Exception as e:
                 print(e)
-
-        
-        if await manual_filters(client, message):
-            return
-        if await global_filters(client, message):
-            return
             
+        manual = await manual_filters(client, message)
+        if manual == False:
             settings = await get_settings(message.chat.id)
             try:
                 if settings['auto_ffilter']:
@@ -118,7 +114,6 @@ async def pm_text(bot, message):
     #    chat_id=LOG_CHANNEL,
      #   text=f"<b><u>🔎 BOT SEARCH</u>\n<blockquote>👤 {user} ({user_id})</blockquote>\n\n📜<code> {content}</code></b>"
    # )
-
 
 
 async def doo(bot, data, message):
