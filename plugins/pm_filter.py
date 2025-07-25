@@ -115,7 +115,6 @@ async def pm_text(bot, message):
      #   text=f"<b><u>🔎 BOT SEARCH</u>\n<blockquote>👤 {user} ({user_id})</blockquote>\n\n📜<code> {content}</code></b>"
    # )
 
-
 async def doo(bot, data, message):
     user = message.from_user.first_name
     user_id = message.from_user.id
@@ -478,6 +477,7 @@ async def advantage_spoll_choker(bot, query):
             else:
                 reqstr = await bot.get_users(query.from_user.id if query.from_user else 0)
 
+
                 encoded_movie = re.sub(r'\W+', '_', movie)
                 request_btn = [[
                     InlineKeyboardButton(
@@ -486,13 +486,15 @@ async def advantage_spoll_choker(bot, query):
                     )
                 ]]
 
-                final_text = script.MVE_NT_FND          
+                final_text = script.MVE_NT_FND
+               
                 msg = await query.message.edit(
                     final_text,
                     reply_markup=InlineKeyboardMarkup(request_btn),
                     disable_web_page_preview=True
                 )
                 
+                # Fix: use 'bot' instead of undefined 'client'
                 await bot.send_message(
                     chat_id=LOG_CHANNEL,
                     text=(script.NORSLTS.format(reqstr.id, reqstr.mention, movie))
