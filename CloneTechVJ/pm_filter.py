@@ -953,6 +953,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             rating=imdb['rating'],
             url=imdb['url'],
             **locals()
+            
         )
         temp.IMDB_CAP[message.from_user.id] = cap
     else:
@@ -1056,3 +1057,4 @@ async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
         )
         await asyncio.sleep(600)
         await spell_check_del.delete()
+
