@@ -2725,6 +2725,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     TEMPLATE = script.IMDB_TEMPLATE_TXT
     if imdb:
         cap = TEMPLATE.format(
+            
             qurey=search,
             title=imdb['title'],
             votes=imdb['votes'],
@@ -2754,6 +2755,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             rating=imdb['rating'],
             url=imdb['url'],
             **locals()
+            
         )
         temp.IMDB_CAP[message.from_user.id] = cap
         if not settings["button"]:
