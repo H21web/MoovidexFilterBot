@@ -18,6 +18,7 @@ from database.join_reqs import JoinReqs
 from bs4 import BeautifulSoup
 from shortzy import Shortzy
 from urllib.parse import quote   
+from pymoviedb import MovieDb
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -97,140 +98,263 @@ async def is_subscribed(bot, query):
         return False
 
 
+mdb = MovieDb()
 
-def list_to_str(items):
+def _safe_get(obj, *keys, default=None):
+    cur = obj
+    for k in keys:
+        if cur is None:
+            return default
+        if isinstance(cur, dict):
+            cur = cur.get(k)
+        else:
+            return default
+    return cur if cur is not None else default
+
+def _join_people(items, key='name'):
     if not items:
+        return ""
+    names = []
+    for it in items:
+        # PyMovieDb typically uses 'name' for person name
+        n = it.get(key) if isinstance(it, dict) else None
+        if n:
+            names.append(n)
+    return list_to_str(names)
+
+def _normalize_year(y):
+    # y may be '1999', 1999, '1999-12-31', or '1999–2004'
+    if not y:
         return None
-    if isinstance(items, str):
-        return items
-    if isinstance(items, list):
-        return ", ".join(str(i) for i in items if i)
-    return str(items)
+    s = str(y)
+    m = re.search(r'([12]\d{3})', s)
+    return m.group(1) if m else None
 
-def format_runtime(runtime_str=None, seconds=None):
-    if runtime_str and isinstance(runtime_str, str):
-        m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?", runtime_str)
-        if m:
-            h = int(m.group(1)) if m.group(1) else 0
-            m_ = int(m.group(2)) if m.group(2) else 0
-            return f"{h}hr {m_}min" if h or m_ else None
-    if seconds:
-        h, m_ = divmod(int(seconds), 3600)
-        m_ = m_ // 60
-        return f"{h}hr {m_}min" if h or m_ else None
+def _title_year_match(item, target_year):
+    if not target_year:
+        return True
+    item_year = _normalize_year(
+        item.get('year') or item.get('release_year') or item.get('start_year') or item.get('released')
+    )
+    return str(item_year) == str(target_year)
+
+def _extract_kind(item):
+    # Map to 'movie' or 'tv series' if possible
+    kind = (item.get('type') or item.get('titleType') or '').lower()
+    if 'tv' in kind or 'series' in kind:
+        return 'tv series'
+    if 'movie' in kind or kind == 'film' or kind == 'feature':
+        return 'movie'
+    # Fallback based on runtime/episodes
+    if item.get('number_of_seasons') or item.get('seasons') or item.get('episodes'):
+        return 'tv series'
+    return kind or 'movie'
+
+def _first_non_empty(*vals):
+    for v in vals:
+        if v:
+            return v
     return None
-
-async def lookup_imdb_id(title):
-    """Use new IMDb API to find IMDb ID."""
-    title = title.lower().strip()
-    if title in IMDB_CACHE:
-        return IMDB_CACHE[title]
-
-    api_url = f"https://imdblinkz.s1mallufiles.workers.dev/?q={title.replace(' ', '%20')}"
-    
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(api_url) as response:
-                data = await response.json()
-                for result in data.get("results", []):
-                    if result.get("type") == "title":
-                        imdb_id = result["id"]
-                        IMDB_CACHE[title] = imdb_id
-                        return imdb_id
-    except Exception:
-        logger.exception("IMDb link API failed for %s", title)
-    
-    return None
-
-
-async def fetch_json(imdb_id):
-    url = f"https://imdb.iamidiotareyoutoo.com/search?tt={imdb_id}"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            return await response.json()
 
 async def get_poster(query, bulk=False, id=False, file=None):
-    imdb_id = query if id else await lookup_imdb_id(query)
-    if not imdb_id:
-        return None
+    if not id:
+        query = (query.strip()).lower()
+        title = query
+        year = re.findall(r'[1-2]\d{3}$', query, re.IGNORECASE)
+        if year:
+            year = list_to_str(year[:1])
+            title = (query.replace(year, "")).strip()
+        elif file is not None:
+            year = re.findall(r'[1-2]\d{3}', file, re.IGNORECASE)
+            if year:
+                year = list_to_str(year[:1]) 
+        else:
+            year = None
 
+        # Search with PyMovieDb
+        try:
+            # PyMovieDb.search returns a dict with 'titles' or 'results' (depending on version)
+            res = mdb.search(title)
+        except Exception:
+            return None
+
+        # Normalize results list
+        candidates = []
+        if isinstance(res, dict):
+            if 'titles' in res and isinstance(res['titles'], list):
+                candidates = res['titles']
+            elif 'results' in res and isinstance(res['results'], list):
+                candidates = res['results']
+            else:
+                # Some versions return list directly
+                if 'imdb_id' in res or 'id' in res:
+                    candidates = [res]
+        elif isinstance(res, list):
+            candidates = res
+
+        if not candidates:
+            return None
+
+        # Filter by year if provided
+        filtered = [c for c in candidates if _title_year_match(c, year)] or candidates
+
+        # Filter by kind to ['movie', 'tv series'] similar to your logic
+        filtered_kind = []
+        for c in filtered:
+            k = _extract_kind(c)
+            if k in ['movie', 'tv series']:
+                filtered_kind.append(c)
+        if not filtered_kind:
+            filtered_kind = filtered
+
+        if bulk:
+            # Return the list in a format close to IMDbPY's result objects
+            # We will include essential keys available.
+            out = []
+            for c in filtered_kind:
+                out.append({
+                    'imdb_id': _first_non_empty(c.get('imdb_id'), c.get('id')),
+                    'title': c.get('title'),
+                    'year': _normalize_year(_first_non_empty(c.get('year'), c.get('release_year'), c.get('start_year'), c.get('released'))),
+                    'kind': _extract_kind(c),
+                })
+            return out
+
+        # Choose first candidate
+        top = filtered_kind[0]
+        imdb_id = _first_non_empty(top.get('imdb_id'), top.get('id'))
+        if not imdb_id:
+            return None
+        # Ensure it has tt prefix
+        if not str(imdb_id).startswith('tt'):
+            imdb_id = f"tt{imdb_id}"
+    else:
+        imdb_id = query
+        if not str(imdb_id).startswith('tt'):
+            imdb_id = f"tt{imdb_id}"
+
+    # Fetch full details by IMDb ID
     try:
-        data = await fetch_json(imdb_id)
+        # Depending on version: use get_by_id or title
+        movie = None
+        try:
+            movie = mdb.get_by_id(imdb_id)
+        except Exception:
+            movie = None
+        if not movie:
+            movie = mdb.title(imdb_id)
     except Exception:
-        logger.exception("Fetch failed for %s", imdb_id)
         return None
 
-    if not data.get("ok"):
+    if not movie:
         return None
 
-    short = data.get("short", {}) or {}
-    main  = data.get("main", {}) or {}
+    # Extract fields with fallbacks
+    title = _first_non_empty(movie.get('title'), movie.get('name'))
+    rating = _first_non_empty(movie.get('rating'), movie.get('imdb_rating'))
+    votes = _first_non_empty(movie.get('votes'), movie.get('imdb_votes'))
+    year_val = _normalize_year(
+        _first_non_empty(movie.get('year'), movie.get('release_year'), movie.get('start_year'), movie.get('released'))
+    )
+    original_air_date = _first_non_empty(
+        movie.get('original_air_date'),
+        movie.get('first_air_date'),
+        movie.get('release_date'),
+        movie.get('released')
+    )
+    date = original_air_date or year_val or "N/A"
 
-    title        = short.get("name")
-    votes        = short.get("aggregateRating", {}).get("ratingCount")
-    rating_val   = short.get("aggregateRating", {}).get("ratingValue")
-    rating       = f"{rating_val}/10" if rating_val is not None else None
-    kind         = short.get("@type", "").capitalize()
+    # Plot handling
+    plot_short = _first_non_empty(movie.get('plot'), movie.get('plot_summary'), movie.get('overview'))
+    plot_outline = _first_non_empty(movie.get('plot_outline'), movie.get('summary'))
+    plot = plot_outline if LONG_IMDB_DESCRIPTION else plot_short or plot_outline or ""
+    if plot and len(plot) > 800:
+        plot = plot[0:800] + "..."
 
-    release = main.get("releaseDate", {})
-    release_year = main.get("releaseYear", {}).get("year") or release.get("year")
-    release_date = None
-    try:
-        y, m, d = release.get("year"), release.get("month"), release.get("day")
-        if y and m and d:
-            release_date = f"{d:02d}-{m:02d}-{y}"
-    except Exception:
-        release_date = None
+    # Poster
+    poster = _first_non_empty(
+        movie.get('poster'), 
+        _safe_get(movie, 'images', 'poster'),
+        _safe_get(movie, 'image', 'url')
+    )
 
-    duration_iso = short.get("duration")
-    runtime_sec = (main.get("runtime") or {}).get("seconds")
-    runtime = format_runtime(duration_iso, runtime_sec)
+    # People and departments
+    directors = _safe_get(movie, 'directors') or _safe_get(movie, 'director') or []
+    writers = _safe_get(movie, 'writers') or _safe_get(movie, 'writer') or []
+    producers = _safe_get(movie, 'producers') or _safe_get(movie, 'producer') or []
+    composers = _safe_get(movie, 'composers') or _safe_get(movie, 'music') or []
+    cinematographers = _safe_get(movie, 'cinematographers') or _safe_get(movie, 'cinematographer') or []
+    cast = _safe_get(movie, 'cast') or _safe_get(movie, 'actors') or []
+    music_dept = _safe_get(movie, 'music_department') or []
+    distributors = _safe_get(movie, 'distributors') or []
 
-    akas        = [a.get("text") or a.get("title") for a in main.get("akas", {}).get("edges", [])]
-    cast        = [a.get("name") for a in short.get("actor", [])]
-    countries   = [c.get("text") for c in main.get("countriesDetails", {}).get("countries", [])]
-    certificates= [main.get("certificate")] if main.get("certificate") else []
-    spoken_langs = main.get("spokenLanguages") or {}
-    languages = [l.get("text") for l in spoken_langs.get("spokenLanguages", [])]
-    directors   = [d.get("name") for d in short.get("director", [])]
-    writers     = [w.get("name") for w in main.get("writer", [])]
-    producers   = [p.get("name") for p in main.get("producer", [])]
-    composers   = [c.get("name") for c in main.get("composer", [])]
-    cinematogs  = [c.get("name") for c in main.get("cinematographer", [])]
-    music_team  = [m.get("name") for m in main.get("musicDepartment", [])]
-    distributors= [d.get("name") for d in main.get("distributors", [])]
+    # Technicals and metadata
+    runtimes = movie.get('runtime')  # minutes
+    if isinstance(runtimes, (int, float)):
+        runtimes = [str(int(runtimes))]
+    countries = movie.get('countries') or movie.get('country') or []
+    languages = movie.get('languages') or movie.get('language') or []
+    certificates = movie.get('certificates') or movie.get('certificate') or []
+    genres = movie.get('genres') or []
 
-    movie = {
+    # Seasons (for TV)
+    seasons = _first_non_empty(movie.get('number_of_seasons'), movie.get('seasons'), movie.get('total_seasons'))
+
+    # Box office if available
+    box_office = _first_non_empty(
+        movie.get('box_office'),
+        {
+            'budget': movie.get('budget'),
+            'gross': movie.get('gross'),
+            'opening_weekend': movie.get('opening_weekend')
+        } if any([movie.get('budget'), movie.get('gross'), movie.get('opening_weekend')]) else None
+    )
+
+    # AKA/localization
+    akas = movie.get('aka') or movie.get('also_known_as') or []
+    localized_title = movie.get('localized_title') or None
+
+    # Certificates normalization: ensure string
+    def _norm_list(val):
+        if not val:
+            return ""
+        if isinstance(val, list):
+            return list_to_str([str(v) for v in val])
+        if isinstance(val, (str, int, float)):
+            return str(val)
+        return list_to_str([str(val)])
+
+    result = {
         'title': title,
         'votes': votes,
-        "aka": list_to_str(akas),
-        "seasons": (main.get("series") or {}).get("numberOfSeasons"),
-        "box_office": main.get("lifetimeGross"),
-        'localized_title': short.get("alternateNames", [None])[0],
-        'kind': kind,
+        "aka": _norm_list(akas),
+        "seasons": seasons,
+        "box_office": box_office,
+        'localized_title': localized_title,
+        'kind': _extract_kind(movie),
         "imdb_id": imdb_id,
-        "cast": list_to_str(cast),
-        "runtime": runtime,
-        "countries": list_to_str(countries),
-        "certificates": list_to_str(certificates),
-        "languages": list_to_str(languages),
-        "director": list_to_str(directors),
-        "writer": list_to_str(writers),
-        "producer": list_to_str(producers),
-        "composer": list_to_str(composers),
-        "cinematographer": list_to_str(cinematogs),
-        "music_team": list_to_str(music_team),
-        "distributors": list_to_str(distributors),
-        'release_date': release_date,
-        'year': release_year,
-        'genres': list_to_str(short.get("genre")),
-        'poster': short.get("image"),
-        'plot': short.get("description"),
-        'rating': rating,
-        'url': short.get("url") or f'https://www.imdb.com/title/{imdb_id}'
+        "cast": _join_people(cast),
+        "runtime": _norm_list(runtimes),
+        "countries": _norm_list(countries),
+        "certificates": _norm_list(certificates),
+        "languages": _norm_list(languages),
+        "director": _join_people(directors),
+        "writer": _join_people(writers),
+        "producer": _join_people(producers),
+        "composer": _join_people(composers),
+        "cinematographer": _join_people(cinematographers),
+        "music_team": _join_people(music_dept),
+        "distributors": _norm_list(distributors if isinstance(distributors, list) else [distributors] if distributors else []),
+        'release_date': date,
+        'year': year_val,
+        'genres': _norm_list(genres),
+        'poster': poster,
+        'plot': plot,
+        'rating': str(rating) if rating is not None else None,
+        'url': f'https://www.imdb.com/title/{imdb_id}'
     }
 
-    return movie
+    return result
 
 
 async def broadcast_messages(user_id, message):
@@ -822,4 +946,5 @@ async def is_check_admin(bot, chat_id, user_id):
         return member.status in [enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER]
     except:
         return False
+
 
