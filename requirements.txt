@@ -36,4 +36,7 @@ dnspython==2.3.0
 ffmpeg-python>=0.2.0
 googlesearch-python
 speechrecognition
+lxml==4.9.3
+lxml_html_clean
+
 
