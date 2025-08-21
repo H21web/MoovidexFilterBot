@@ -2,6 +2,7 @@ import requests
 import re
 import html
 import asyncio
+import sys
 from datetime import datetime
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
