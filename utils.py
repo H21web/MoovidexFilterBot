@@ -98,7 +98,7 @@ async def is_subscribed(bot, query):
 
 
 
-# Initialize PyMovieDb IMDB instance
+
 imdb = IMDB()
 
 async def get_poster(query, bulk=False, id=False, file=None):
@@ -121,20 +121,23 @@ async def get_poster(query, bulk=False, id=False, file=None):
         try:
             # First try as movie
             movie_data = imdb.get_by_name(title, tv=False)
-        except:
-            try:
-                # Then try as TV series
+            
+            # Check if movie_data is a string (error message) or None
+            if isinstance(movie_data, str) or not movie_data:
+                # Try as TV series
                 movie_data = imdb.get_by_name(title, tv=True)
-            except:
+                
+            # If still string or None, return None
+            if isinstance(movie_data, str) or not movie_data:
                 return None
                 
-        if not movie_data:
+        except Exception as e:
+            print(f"Error fetching movie data: {e}")
+            return None
+                
+        if not movie_data or isinstance(movie_data, str):
             return None
             
-        # If year is specified, you might want to verify it matches
-        # Note: PyMovieDb doesn't provide multiple results to filter by year
-        # You would need to implement additional logic if year matching is critical
-        
         if bulk:
             return [movie_data]  # PyMovieDb returns single result, wrap in list for consistency
             
@@ -143,7 +146,8 @@ async def get_poster(query, bulk=False, id=False, file=None):
         # PyMovieDb doesn't have a direct get_by_id method in the current API
         return None
     
-    if not movie_data:
+    # Additional check to ensure movie_data is a dictionary
+    if not isinstance(movie_data, dict):
         return None
     
     # Extract plot description
@@ -157,9 +161,12 @@ async def get_poster(query, bulk=False, id=False, file=None):
     date = movie_data.get('datePublished', 'N/A')
     year_extracted = None
     if date and date != 'N/A':
-        year_match = re.findall(r'[1-2]\d{3}', date)
+        year_match = re.findall(r'[1-2]\d{3}', str(date))
         if year_match:
-            year_extracted = int(year_match[0])
+            try:
+                year_extracted = int(year_match[0])
+            except:
+                year_extracted = None
     
     # Extract IMDB ID from URL
     imdb_id = ""
@@ -171,47 +178,56 @@ async def get_poster(query, bulk=False, id=False, file=None):
     
     # Extract cast, director, creator info
     cast_list = []
-    if movie_data.get('actor'):
-        cast_list = [actor['name'] for actor in movie_data['actor']]
+    if movie_data.get('actor') and isinstance(movie_data['actor'], list):
+        cast_list = [actor.get('name', '') for actor in movie_data['actor'] if isinstance(actor, dict)]
     
     director_list = []
-    if movie_data.get('director'):
-        director_list = [director['name'] for director in movie_data['director']]
-    elif movie_data.get('creator'):  # For TV series
-        director_list = [creator['name'] for creator in movie_data['creator']]
+    if movie_data.get('director') and isinstance(movie_data['director'], list):
+        director_list = [director.get('name', '') for director in movie_data['director'] if isinstance(director, dict)]
+    elif movie_data.get('creator') and isinstance(movie_data['creator'], list):  # For TV series
+        director_list = [creator.get('name', '') for creator in movie_data['creator'] if isinstance(creator, dict)]
     
     # Extract rating info
     rating_value = ""
     votes = ""
-    if movie_data.get('rating'):
+    if movie_data.get('rating') and isinstance(movie_data['rating'], dict):
         rating_info = movie_data['rating']
         rating_value = str(rating_info.get('ratingValue', ''))
         votes = rating_info.get('ratingCount', '')
     
+    # Safe list_to_str function call
+    def safe_list_to_str(data):
+        if not data:
+            return ""
+        try:
+            return list_to_str(data)
+        except:
+            return str(data) if data else ""
+    
     return {
         'title': movie_data.get('name', ''),
-        'votes': votes,
+        'votes': str(votes) if votes else '',
         "aka": "",  # Not available in PyMovieDb
         "seasons": "",  # Not directly available in PyMovieDb
         "box_office": "",  # Not available in PyMovieDb
         'localized_title': movie_data.get('name', ''),
-        'kind': movie_data.get('type', '').lower(),
+        'kind': movie_data.get('type', '').lower() if movie_data.get('type') else '',
         "imdb_id": imdb_id,
-        "cast": list_to_str(cast_list),
-        "runtime": movie_data.get('duration', ''),
+        "cast": safe_list_to_str(cast_list),
+        "runtime": str(movie_data.get('duration', '')),
         "countries": "",  # Not available in PyMovieDb
-        "certificates": movie_data.get('contentRating', ''),
+        "certificates": str(movie_data.get('contentRating', '')),
         "languages": "",  # Not available in PyMovieDb
-        "director": list_to_str(director_list),
+        "director": safe_list_to_str(director_list),
         "writer": "",  # Not available in PyMovieDb
         "producer": "",  # Not available in PyMovieDb
         "composer": "",  # Not available in PyMovieDb
         "cinematographer": "",  # Not available in PyMovieDb
         "music_team": "",  # Not available in PyMovieDb
         "distributors": "",  # Not available in PyMovieDb
-        'release_date': date,
+        'release_date': str(date) if date else 'N/A',
         'year': year_extracted,
-        'genres': list_to_str(movie_data.get('genre', [])),
+        'genres': safe_list_to_str(movie_data.get('genre', [])),
         'poster': movie_data.get('poster', ''),
         'plot': plot,
         'rating': rating_value,
@@ -809,6 +825,7 @@ async def is_check_admin(bot, chat_id, user_id):
         return member.status in [enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER]
     except:
         return False
+
 
 
 
