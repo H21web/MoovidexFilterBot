@@ -4,7 +4,7 @@
 
 import logging, asyncio, os, re, random, pytz, aiohttp, requests, string, json, http.client
 from info import *
-from PyMovieDb import IMDB
+from imdbinfo.services import search_title, get_movie
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram import enums
 from urllib.parse import quote_plus
@@ -97,11 +97,7 @@ async def is_subscribed(bot, query):
         return False
 
 
-
-
-imdb = IMDB()
-
-async def get_poster(query, bulk=False, id=False, file=None):
+async def get_poster_imdbinfo(query, bulk=False, id=False, file=None):
     if not id:
         query = (query.strip()).lower()
         title = query
@@ -115,123 +111,86 @@ async def get_poster(query, bulk=False, id=False, file=None):
                 year = list_to_str(year[:1]) 
         else:
             year = None
-            
-        # Try to get movie first, then TV series if not found
-        movie_data = None
-        try:
-            # First try as movie
-            movie_data = imdb.get_by_name(title, tv=False)
-            
-            # Check if movie_data is a string (error message) or None
-            if isinstance(movie_data, str) or not movie_data:
-                # Try as TV series
-                movie_data = imdb.get_by_name(title, tv=True)
-                
-            # If still string or None, return None
-            if isinstance(movie_data, str) or not movie_data:
-                return None
-                
-        except Exception as e:
-            print(f"Error fetching movie data: {e}")
+        
+        # Use imdbinfo's search_title instead
+        search_results = search_title(title)
+        if not search_results.titles:
             return None
-                
-        if not movie_data or isinstance(movie_data, str):
-            return None
-            
+        
+        movieid_candidates = search_results.titles[:10]  # Limit to 10 results
+        
+        if year:
+            filtered = [movie for movie in movieid_candidates if str(movie.year) == str(year)]
+            if not filtered:
+                filtered = movieid_candidates
+        else:
+            filtered = movieid_candidates
+        
+        # Filter by content type (movie, tvSeries, etc.)
+        movieid_candidates = [movie for movie in filtered if movie.kind in ['movie', 'tvSeries', 'tvMiniSeries']]
+        if not movieid_candidates:
+            movieid_candidates = filtered
+        
         if bulk:
-            return [movie_data]  # PyMovieDb returns single result, wrap in list for consistency
-            
+            return movieid_candidates
+        
+        movieid = movieid_candidates[0].imdb_id.replace('tt', '')
     else:
-        # If ID is provided, you'd need to implement get_by_id functionality
-        # PyMovieDb doesn't have a direct get_by_id method in the current API
+        movieid = query.replace('tt', '') if query.startswith('tt') else query
+    
+    # Get detailed movie information
+    movie = get_movie(movieid)
+    if not movie:
         return None
     
-    # Additional check to ensure movie_data is a dictionary
-    if not isinstance(movie_data, dict):
-        return None
+    # Handle date information
+    if hasattr(movie, 'original_air_date') and movie.original_air_date:
+        date = movie.original_air_date
+    elif movie.year:
+        date = movie.year
+    else:
+        date = "N/A"
     
-    # Extract plot description
+    # Handle plot information
     plot = ""
-    if movie_data.get('description'):
-        plot = movie_data['description']
-        if plot and len(plot) > 800:
-            plot = plot[0:800] + "..."
+    if not LONG_IMDB_DESCRIPTION:
+        plot = movie.plot if hasattr(movie, 'plot') else ""
+        if isinstance(plot, list) and len(plot) > 0:
+            plot = plot
+    else:
+        plot = movie.plot_outline if hasattr(movie, 'plot_outline') else ""
     
-    # Extract release date/year
-    date = movie_data.get('datePublished', 'N/A')
-    year_extracted = None
-    if date and date != 'N/A':
-        year_match = re.findall(r'[1-2]\d{3}', str(date))
-        if year_match:
-            try:
-                year_extracted = int(year_match[0])
-            except:
-                year_extracted = None
-    
-    # Extract IMDB ID from URL
-    imdb_id = ""
-    if movie_data.get('url'):
-        url = movie_data['url']
-        id_match = re.search(r'tt(\d+)', url)
-        if id_match:
-            imdb_id = f"tt{id_match.group(1)}"
-    
-    # Extract cast, director, creator info
-    cast_list = []
-    if movie_data.get('actor') and isinstance(movie_data['actor'], list):
-        cast_list = [actor.get('name', '') for actor in movie_data['actor'] if isinstance(actor, dict)]
-    
-    director_list = []
-    if movie_data.get('director') and isinstance(movie_data['director'], list):
-        director_list = [director.get('name', '') for director in movie_data['director'] if isinstance(director, dict)]
-    elif movie_data.get('creator') and isinstance(movie_data['creator'], list):  # For TV series
-        director_list = [creator.get('name', '') for creator in movie_data['creator'] if isinstance(creator, dict)]
-    
-    # Extract rating info
-    rating_value = ""
-    votes = ""
-    if movie_data.get('rating') and isinstance(movie_data['rating'], dict):
-        rating_info = movie_data['rating']
-        rating_value = str(rating_info.get('ratingValue', ''))
-        votes = rating_info.get('ratingCount', '')
-    
-    # Safe list_to_str function call
-    def safe_list_to_str(data):
-        if not data:
-            return ""
-        try:
-            return list_to_str(data)
-        except:
-            return str(data) if data else ""
-    
+    if plot and len(plot) > 800:
+        plot = plot[0:800] + "..."
+
     return {
-        'title': movie_data.get('name', ''),
-        'votes': str(votes) if votes else '',
-        "aka": "",  # Not available in PyMovieDb
-        "seasons": "",  # Not directly available in PyMovieDb
-        "box_office": "",  # Not available in PyMovieDb
-        'localized_title': movie_data.get('name', ''),
-        'kind': movie_data.get('type', '').lower() if movie_data.get('type') else '',
-        "imdb_id": imdb_id,
-        "cast": safe_list_to_str(cast_list),
-        "runtime": str(movie_data.get('duration', '')),
-        "countries": "",  # Not available in PyMovieDb
-        "certificates": str(movie_data.get('contentRating', '')),
-        "languages": "",  # Not available in PyMovieDb
-        "director": safe_list_to_str(director_list),
-        "writer": "",  # Not available in PyMovieDb
-        "producer": "",  # Not available in PyMovieDb
-        "composer": "",  # Not available in PyMovieDb
-        "cinematographer": "",  # Not available in PyMovieDb
-        "music_team": "",  # Not available in PyMovieDb
-        "distributors": "",  # Not available in PyMovieDb
-        'release_date': str(date) if date else 'N/A',
-        'year': year_extracted,
-        'genres': safe_list_to_str(movie_data.get('genre', [])),
-        'poster': movie_data.get('poster', ''),
+        'title': movie.title,
+        'votes': getattr(movie, 'votes', None),
+        "aka": list_to_str(getattr(movie, 'akas', [])),
+        "seasons": getattr(movie, 'number_of_seasons', None),
+        "box_office": getattr(movie, 'box_office', None),
+        'localized_title': getattr(movie, 'localized_title', None),
+        'kind': movie.kind,
+        "imdb_id": movie.imdb_id,
+        "cast": list_to_str(getattr(movie, 'cast', [])),
+        "runtime": list_to_str(getattr(movie, 'runtimes', [])),
+        "countries": list_to_str(getattr(movie, 'countries', [])),
+        "certificates": list_to_str(getattr(movie, 'certificates', [])),
+        "languages": list_to_str(getattr(movie, 'languages', [])),
+        "director": list_to_str(getattr(movie, 'directors', [])),
+        "writer": list_to_str(getattr(movie, 'writers', [])),
+        "producer": list_to_str(getattr(movie, 'producers', [])),
+        "composer": list_to_str(getattr(movie, 'composers', [])),
+        "cinematographer": list_to_str(getattr(movie, 'cinematographers', [])),
+        "music_team": list_to_str(getattr(movie, 'music_department', [])),
+        "distributors": list_to_str(getattr(movie, 'distributors', [])),
+        'release_date': date,
+        'year': movie.year,
+        'genres': list_to_str(getattr(movie, 'genres', [])),
+        'poster': getattr(movie, 'cover_url', None),
         'plot': plot,
-        'rating': rating_value,
-        'url': movie_data.get('url', '')
+        'rating': str(movie.rating) if movie.rating else None,
+        'url': f'https://www.imdb.com/title/{movie.imdb_id}'
     }
 
 
@@ -825,6 +784,7 @@ async def is_check_admin(bot, chat_id, user_id):
         return member.status in [enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER]
     except:
         return False
+
 
 
 
