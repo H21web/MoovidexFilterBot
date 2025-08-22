@@ -4,7 +4,6 @@
 
 import logging, asyncio, os, re, random, pytz, aiohttp, requests, string, json, http.client
 from info import *
-from imdbinfo.services import search_title, get_movie
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram import enums
 from urllib.parse import quote_plus
@@ -16,6 +15,7 @@ from database.users_chats_db import db
 from database.join_reqs import JoinReqs
 from bs4 import BeautifulSoup
 from shortzy import Shortzy
+from tmdbv3api import TMDb, Movie, TV
 from urllib.parse import quote   
 
 
@@ -97,101 +97,173 @@ async def is_subscribed(bot, query):
         return False
 
 
+
+
+tmdb = TMDb()
+tmdb.api_key = 'b3d10dab8e82525e3a2ed8ed8bc38874'  # Set your TMDb API key
+
 async def get_poster(query, bulk=False, id=False, file=None):
     if not id:
         query = (query.strip()).lower()
         title = query
         year = re.findall(r'[1-2]\d{3}$', query, re.IGNORECASE)
         if year:
-            year = list_to_str(year[:1])
+            year = year[0]
             title = (query.replace(year, "")).strip()
         elif file is not None:
-            year = re.findall(r'[1-2]\d{3}', file, re.IGNORECASE)
-            if year:
-                year = list_to_str(year[:1]) 
+            year_match = re.findall(r'[1-2]\d{3}', file, re.IGNORECASE)
+            if year_match:
+                year = year_match[0]
+            else:
+                year = None
         else:
             year = None
+            
+        # Search for movies and TV shows
+        movie = Movie()
+        tv = TV()
         
-        # Use imdbinfo's search_title instead
-        search_results = search_title(title)
-        if not search_results.titles:
+        # Search movies
+        movie_results = movie.search(title)
+        tv_results = tv.search(title)
+        
+        # Combine results
+        all_results = []
+        
+        for result in movie_results:
+            all_results.append({
+                'id': result.id,
+                'title': result.title,
+                'year': getattr(result, 'release_date', '')[:4] if hasattr(result, 'release_date') and result.release_date else None,
+                'kind': 'movie'
+            })
+            
+        for result in tv_results:
+            all_results.append({
+                'id': result.id,
+                'title': result.name,
+                'year': getattr(result, 'first_air_date', '')[:4] if hasattr(result, 'first_air_date') and result.first_air_date else None,
+                'kind': 'tv series'
+            })
+        
+        if not all_results:
             return None
-        
-        movieid_candidates = search_results.titles[:10]  # Limit to 10 results
-        
+            
+        # Filter by year if provided
         if year:
-            filtered = [movie for movie in movieid_candidates if str(movie.year) == str(year)]
+            filtered = [item for item in all_results if item['year'] == year]
             if not filtered:
-                filtered = movieid_candidates
+                filtered = all_results
         else:
-            filtered = movieid_candidates
-        
-        # Filter by content type (movie, tvSeries, etc.)
-        movieid_candidates = [movie for movie in filtered if movie.kind in ['movie', 'tvSeries', 'tvMiniSeries']]
-        if not movieid_candidates:
-            movieid_candidates = filtered
-        
+            filtered = all_results
+            
         if bulk:
-            return movieid_candidates
-        
-        movieid = movieid_candidates[0].imdb_id.replace('tt', '')
+            return filtered
+            
+        # Get the first result
+        selected = filtered[0]
+        movie_id = selected['id']
+        content_type = selected['kind']
     else:
-        movieid = query.replace('tt', '') if query.startswith('tt') else query
+        movie_id = query
+        # You'll need to determine if it's a movie or TV show
+        # For simplicity, we'll try movie first, then TV
+        content_type = 'movie'
     
-    # Get detailed movie information
-    movie = get_movie(movieid)
-    if not movie:
+    try:
+        if content_type == 'movie':
+            movie = Movie()
+            details = movie.details(movie_id)
+            credits = movie.credits(movie_id)
+            
+            # Get cast
+            cast = [member.name for member in credits.cast[:10]] if credits.cast else []
+            
+            # Get crew
+            crew = credits.crew if credits.crew else []
+            directors = [member.name for member in crew if member.job == 'Director']
+            writers = [member.name for member in crew if member.job in ['Writer', 'Screenplay', 'Story']]
+            producers = [member.name for member in crew if member.job == 'Producer']
+            composers = [member.name for member in crew if member.job == 'Original Music Composer']
+            cinematographers = [member.name for member in crew if member.job == 'Director of Photography']
+            
+            return {
+                'title': details.title,
+                'votes': details.vote_count,
+                'aka': None,  # Not directly available in TMDb
+                'seasons': None,  # Movies don't have seasons
+                'box_office': None,  # Not available in free TMDb API
+                'localized_title': details.original_title,
+                'kind': 'movie',
+                'imdb_id': details.imdb_id,
+                'cast': ', '.join(cast),
+                'runtime': f"{details.runtime} min" if details.runtime else None,
+                'countries': ', '.join([country.name for country in details.production_countries]) if details.production_countries else None,
+                'certificates': None,  # Not directly available
+                'languages': ', '.join([lang.english_name for lang in details.spoken_languages]) if details.spoken_languages else None,
+                'director': ', '.join(directors),
+                'writer': ', '.join(writers),
+                'producer': ', '.join(producers),
+                'composer': ', '.join(composers),
+                'cinematographer': ', '.join(cinematographers),
+                'music_team': None,  # Not directly available
+                'distributors': None,  # Not directly available in free API
+                'release_date': details.release_date,
+                'year': details.release_date[:4] if details.release_date else None,
+                'genres': ', '.join([genre.name for genre in details.genres]) if details.genres else None,
+                'poster': f"https://image.tmdb.org/t/p/original{details.poster_path}" if details.poster_path else None,
+                'plot': details.overview[:800] + "..." if details.overview and len(details.overview) > 800 else details.overview,
+                'rating': str(details.vote_average),
+                'url': f'https://www.themoviedb.org/movie/{movie_id}'
+            }
+            
+        else:  # TV series
+            tv = TV()
+            details = tv.details(movie_id)
+            credits = tv.credits(movie_id)
+            
+            # Get cast
+            cast = [member.name for member in credits.cast[:10]] if credits.cast else []
+            
+            # Get crew
+            crew = credits.crew if credits.crew else []
+            directors = [member.name for member in crew if member.job == 'Director']
+            writers = [member.name for member in crew if member.job in ['Writer', 'Creator']]
+            producers = [member.name for member in crew if member.job == 'Producer']
+            
+            return {
+                'title': details.name,
+                'votes': details.vote_count,
+                'aka': None,
+                'seasons': details.number_of_seasons,
+                'box_office': None,
+                'localized_title': details.original_name,
+                'kind': 'tv series',
+                'imdb_id': None,  # TMDb doesn't provide IMDB ID for TV shows in basic response
+                'cast': ', '.join(cast),
+                'runtime': f"{details.episode_run_time[0]} min" if details.episode_run_time else None,
+                'countries': ', '.join([country.name for country in details.production_countries]) if details.production_countries else None,
+                'certificates': None,
+                'languages': ', '.join([lang.english_name for lang in details.spoken_languages]) if details.spoken_languages else None,
+                'director': ', '.join(directors),
+                'writer': ', '.join(writers),
+                'producer': ', '.join(producers),
+                'composer': None,
+                'cinematographer': None,
+                'music_team': None,
+                'distributors': None,
+                'release_date': details.first_air_date,
+                'year': details.first_air_date[:4] if details.first_air_date else None,
+                'genres': ', '.join([genre.name for genre in details.genres]) if details.genres else None,
+                'poster': f"https://image.tmdb.org/t/p/original{details.poster_path}" if details.poster_path else None,
+                'plot': details.overview[:800] + "..." if details.overview and len(details.overview) > 800 else details.overview,
+                'rating': str(details.vote_average),
+                'url': f'https://www.themoviedb.org/tv/{movie_id}'
+            }
+            
+    except Exception as e:
         return None
-    
-    # Handle date information
-    if hasattr(movie, 'original_air_date') and movie.original_air_date:
-        date = movie.original_air_date
-    elif movie.year:
-        date = movie.year
-    else:
-        date = "N/A"
-    
-    # Handle plot information
-    plot = ""
-    if not LONG_IMDB_DESCRIPTION:
-        plot = movie.plot if hasattr(movie, 'plot') else ""
-        if isinstance(plot, list) and len(plot) > 0:
-            plot = plot
-    else:
-        plot = movie.plot_outline if hasattr(movie, 'plot_outline') else ""
-    
-    if plot and len(plot) > 800:
-        plot = plot[0:800] + "..."
 
-    return {
-        'title': movie.title,
-        'votes': getattr(movie, 'votes', None),
-        "aka": list_to_str(getattr(movie, 'akas', [])),
-        "seasons": getattr(movie, 'number_of_seasons', None),
-        "box_office": getattr(movie, 'box_office', None),
-        'localized_title': getattr(movie, 'localized_title', None),
-        'kind': movie.kind,
-        "imdb_id": movie.imdb_id,
-        "cast": list_to_str(getattr(movie, 'cast', [])),
-        "runtime": list_to_str(getattr(movie, 'runtimes', [])),
-        "countries": list_to_str(getattr(movie, 'countries', [])),
-        "certificates": list_to_str(getattr(movie, 'certificates', [])),
-        "languages": list_to_str(getattr(movie, 'languages', [])),
-        "director": list_to_str(getattr(movie, 'directors', [])),
-        "writer": list_to_str(getattr(movie, 'writers', [])),
-        "producer": list_to_str(getattr(movie, 'producers', [])),
-        "composer": list_to_str(getattr(movie, 'composers', [])),
-        "cinematographer": list_to_str(getattr(movie, 'cinematographers', [])),
-        "music_team": list_to_str(getattr(movie, 'music_department', [])),
-        "distributors": list_to_str(getattr(movie, 'distributors', [])),
-        'release_date': date,
-        'year': movie.year,
-        'genres': list_to_str(getattr(movie, 'genres', [])),
-        'poster': getattr(movie, 'cover_url', None),
-        'plot': plot,
-        'rating': str(movie.rating) if movie.rating else None,
-        'url': f'https://www.imdb.com/title/{movie.imdb_id}'
-    }
 
 
 
@@ -784,6 +856,7 @@ async def is_check_admin(bot, chat_id, user_id):
         return member.status in [enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER]
     except:
         return False
+
 
 
 
