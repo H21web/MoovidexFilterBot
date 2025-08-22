@@ -99,138 +99,330 @@ async def is_subscribed(bot, query):
 
 
 def list_to_str(items):
+    """Convert list to comma-separated string safely."""
     if not items:
         return None
     if isinstance(items, str):
-        return items
+        return items.strip() or None
     if isinstance(items, list):
-        return ", ".join(str(i) for i in items if i)
-    return str(items)
+        filtered_items = [str(i).strip() for i in items if i and str(i).strip()]
+        return ", ".join(filtered_items) if filtered_items else None
+    return str(items).strip() or None
 
 def format_runtime(runtime_str=None, seconds=None):
-    if runtime_str and isinstance(runtime_str, str):
-        m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?", runtime_str)
-        if m:
-            h = int(m.group(1)) if m.group(1) else 0
-            m_ = int(m.group(2)) if m.group(2) else 0
-            return f"{h}hr {m_}min" if h or m_ else None
-    if seconds:
-        h, m_ = divmod(int(seconds), 3600)
-        m_ = m_ // 60
-        return f"{h}hr {m_}min" if h or m_ else None
+    """Format runtime from ISO string or seconds."""
+    try:
+        if runtime_str and isinstance(runtime_str, str):
+            m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?", runtime_str.strip())
+            if m:
+                h = int(m.group(1)) if m.group(1) else 0
+                m_ = int(m.group(2)) if m.group(2) else 0
+                if h or m_:
+                    return f"{h}hr {m_}min"
+        
+        if seconds and isinstance(seconds, (int, float)):
+            total_seconds = int(seconds)
+            h, remainder = divmod(total_seconds, 3600)
+            m_ = remainder // 60
+            if h or m_:
+                return f"{h}hr {m_}min"
+    except Exception:
+        pass
     return None
 
 async def lookup_imdb_id(title):
-    """Use new IMDb API to find IMDb ID."""
+    """Lookup IMDb ID with proper URL encoding for special characters."""
+    if not title or not isinstance(title, str):
+        return None
+    
     title = title.lower().strip()
+    if not title:
+        return None
+    
+    # Check cache first
     if title in IMDB_CACHE:
         return IMDB_CACHE[title]
 
-    api_url = f"https://imdblinkz.s1mallufiles.workers.dev/?q={title.replace(' ', '%20')}"
+    # Proper URL encoding for special characters
+    encoded_title = quote_plus(title)
+    api_url = f"https://imdblinkz.s1mallufiles.workers.dev/?q={encoded_title}"
     
     try:
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=6)
+        connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
+        
+        async with aiohttp.ClientSession(
+            timeout=timeout, 
+            connector=connector,
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        ) as session:
             async with session.get(api_url) as response:
+                if response.status != 200:
+                    return None
+                
                 data = await response.json()
-                for result in data.get("results", []):
-                    if result.get("type") == "title":
-                        imdb_id = result["id"]
-                        IMDB_CACHE[title] = imdb_id
-                        return imdb_id
-    except Exception:
-        logger.exception("IMDb link API failed for %s", title)
+                
+                if not isinstance(data, dict):
+                    return None
+                
+                results = data.get("results", [])
+                if not isinstance(results, list):
+                    return None
+                
+                # Try to find exact match first, then partial match
+                for result in results:
+                    if isinstance(result, dict) and result.get("type") == "title":
+                        result_title = result.get("title", "").lower()
+                        imdb_id = result.get("id")
+                        
+                        if imdb_id and isinstance(imdb_id, str):
+                            # Cache and return first valid result
+                            IMDB_CACHE[title] = imdb_id
+                            return imdb_id
+                            
+    except asyncio.TimeoutError:
+        logger.warning(f"Timeout looking up: {title}")
+    except Exception as e:
+        logger.warning(f"Lookup failed for {title}: {str(e)[:100]}")
     
     return None
 
-
 async def fetch_json(imdb_id):
+    """Fetch movie data with connection pooling."""
+    if not imdb_id or not isinstance(imdb_id, str):
+        return None
+    
     url = f"https://imdb.iamidiotareyoutoo.com/search?tt={imdb_id}"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            return await response.json()
+    
+    try:
+        timeout = aiohttp.ClientTimeout(total=6)
+        connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
+        
+        async with aiohttp.ClientSession(
+            timeout=timeout, 
+            connector=connector,
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        ) as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return None
+                
+                data = await response.json()
+                return data if isinstance(data, dict) else None
+                
+    except asyncio.TimeoutError:
+        logger.warning(f"Timeout fetching: {imdb_id}")
+    except Exception as e:
+        logger.warning(f"Fetch failed for {imdb_id}: {str(e)[:100]}")
+    
+    return None
+
+def safe_get(data, *keys, default=None):
+    """Safely navigate nested dictionaries."""
+    try:
+        current = data
+        for key in keys:
+            if isinstance(current, dict) and key in current:
+                current = current[key]
+            elif isinstance(current, list) and isinstance(key, int) and 0 <= key < len(current):
+                current = current[key]
+            else:
+                return default
+        return current if current is not None else default
+    except (KeyError, IndexError, TypeError):
+        return default
+
+def extract_names(data, key="name"):
+    """Extract names from list with better error handling."""
+    if not isinstance(data, list):
+        return []
+    
+    names = []
+    for item in data:
+        try:
+            if isinstance(item, dict):
+                name = item.get(key)
+                if name and isinstance(name, str) and name.strip():
+                    names.append(name.strip())
+        except Exception:
+            continue
+    return names
+
+def extract_character_info(cast_data):
+    """Extract cast with character information."""
+    if not isinstance(cast_data, list):
+        return []
+    
+    cast_info = []
+    for actor in cast_data:
+        try:
+            if isinstance(actor, dict):
+                actor_name = actor.get("name", "").strip()
+                if actor_name:
+                    # Try to get character name
+                    character = None
+                    if "character" in actor:
+                        char_data = actor["character"]
+                        if isinstance(char_data, str):
+                            character = char_data.strip()
+                        elif isinstance(char_data, dict):
+                            character = char_data.get("name", "").strip()
+                    
+                    # Format: "Actor Name (as Character)" or just "Actor Name"
+                    if character:
+                        cast_info.append(f"{actor_name} (as {character})")
+                    else:
+                        cast_info.append(actor_name)
+        except Exception:
+            continue
+    
+    return cast_info
 
 async def get_poster(query, bulk=False, id=False, file=None):
-    imdb_id = query if id else await lookup_imdb_id(query)
-    if not imdb_id:
+    """Get movie details with 6-second max load time and better character handling."""
+    if not query or not isinstance(query, str):
         return None
-
+    
+    start_time = asyncio.get_event_loop().time()
+    
     try:
-        data = await fetch_json(imdb_id)
-    except Exception:
-        logger.exception("Fetch failed for %s", imdb_id)
+        # Set overall timeout
+        async with asyncio.timeout(6.0):
+            # Get IMDb ID
+            imdb_id = query.strip() if id else await lookup_imdb_id(query)
+            if not imdb_id:
+                return None
+
+            # Check if we're running out of time
+            elapsed = asyncio.get_event_loop().time() - start_time
+            if elapsed > 5.0:
+                return None
+
+            # Fetch movie data
+            data = await fetch_json(imdb_id)
+            if not data or not data.get("ok"):
+                return None
+
+            # Extract data safely
+            short = safe_get(data, "short", default={})
+            main = safe_get(data, "main", default={})
+            
+            if not short and not main:
+                return None
+
+            # Basic info
+            title = safe_get(short, "name")
+            if not title:
+                return None
+
+            # Rating info
+            rating_info = safe_get(short, "aggregateRating", default={})
+            votes = safe_get(rating_info, "ratingCount")
+            rating_val = safe_get(rating_info, "ratingValue")
+            rating = f"{rating_val}/10" if rating_val is not None else None
+
+            # Release info
+            release = safe_get(main, "releaseDate", default={})
+            release_year = safe_get(main, "releaseYear", "year") or safe_get(release, "year")
+            
+            release_date = None
+            try:
+                y, m, d = safe_get(release, "year"), safe_get(release, "month"), safe_get(release, "day")
+                if all(isinstance(x, int) for x in [y, m, d]):
+                    release_date = f"{d:02d}-{m:02d}-{y}"
+            except Exception:
+                pass
+
+            # Runtime
+            duration_iso = safe_get(short, "duration")
+            runtime_sec = safe_get(main, "runtime", "seconds")
+            runtime = format_runtime(duration_iso, runtime_sec)
+
+            # Extract cast with character information
+            cast_data = safe_get(short, "actor", default=[])
+            cast_with_chars = extract_character_info(cast_data)
+            
+            # Fallback to simple names if character extraction fails
+            if not cast_with_chars:
+                cast_with_chars = extract_names(cast_data)
+
+            # Other lists
+            akas = []
+            aka_edges = safe_get(main, "akas", "edges", default=[])
+            for aka in aka_edges:
+                aka_text = safe_get(aka, "text") or safe_get(aka, "title")
+                if aka_text and isinstance(aka_text, str):
+                    akas.append(aka_text.strip())
+
+            countries = []
+            country_data = safe_get(main, "countriesDetails", "countries", default=[])
+            for country in country_data:
+                country_text = safe_get(country, "text")
+                if country_text and isinstance(country_text, str):
+                    countries.append(country_text.strip())
+
+            # Certificates
+            certificates = []
+            cert = safe_get(main, "certificate")
+            if cert and isinstance(cert, str):
+                certificates = [cert.strip()]
+
+            # Languages
+            languages = []
+            lang_data = safe_get(main, "spokenLanguages", "spokenLanguages", default=[])
+            for lang in lang_data:
+                lang_text = safe_get(lang, "text")
+                if lang_text and isinstance(lang_text, str):
+                    languages.append(lang_text.strip())
+
+            # Crew
+            directors = extract_names(safe_get(short, "director", default=[]))
+            writers = extract_names(safe_get(main, "writer", default=[]))
+            producers = extract_names(safe_get(main, "producer", default=[]))
+            composers = extract_names(safe_get(main, "composer", default=[]))
+            cinematogs = extract_names(safe_get(main, "cinematographer", default=[]))
+            music_team = extract_names(safe_get(main, "musicDepartment", default=[]))
+            distributors = extract_names(safe_get(main, "distributors", default=[]))
+
+            # Build result
+            movie = {
+                'title': title,
+                'votes': votes,
+                "aka": list_to_str(akas),
+                "seasons": safe_get(main, "series", "numberOfSeasons"),
+                "box_office": safe_get(main, "lifetimeGross"),
+                'localized_title': safe_get(short, "alternateNames", 0) if isinstance(safe_get(short, "alternateNames"), list) else None,
+                'kind': safe_get(short, "@type", default="").capitalize(),
+                "imdb_id": imdb_id,
+                "cast": list_to_str(cast_with_chars),
+                "runtime": runtime,
+                "countries": list_to_str(countries),
+                "certificates": list_to_str(certificates),
+                "languages": list_to_str(languages),
+                "director": list_to_str(directors),
+                "writer": list_to_str(writers),
+                "producer": list_to_str(producers),
+                "composer": list_to_str(composers),
+                "cinematographer": list_to_str(cinematogs),
+                "music_team": list_to_str(music_team),
+                "distributors": list_to_str(distributors),
+                'release_date': release_date,
+                'year': release_year,
+                'genres': list_to_str(safe_get(short, "genre")),
+                'poster': safe_get(short, "image"),
+                'plot': safe_get(short, "description"),
+                'rating': rating,
+                'url': safe_get(short, "url") or f'https://www.imdb.com/title/{imdb_id}'
+            }
+
+            return movie
+
+    except asyncio.TimeoutError:
+        logger.warning(f"Overall timeout for query: {query}")
         return None
-
-    if not data.get("ok"):
+    except Exception as e:
+        logger.error(f"Error in get_poster for '{query}': {str(e)[:100]}")
         return None
-
-    short = data.get("short", {}) or {}
-    main  = data.get("main", {}) or {}
-
-    title        = short.get("name")
-    votes        = short.get("aggregateRating", {}).get("ratingCount")
-    rating_val   = short.get("aggregateRating", {}).get("ratingValue")
-    rating       = f"{rating_val}/10" if rating_val is not None else None
-    kind         = short.get("@type", "").capitalize()
-
-    release = main.get("releaseDate", {})
-    release_year = main.get("releaseYear", {}).get("year") or release.get("year")
-    release_date = None
-    try:
-        y, m, d = release.get("year"), release.get("month"), release.get("day")
-        if y and m and d:
-            release_date = f"{d:02d}-{m:02d}-{y}"
-    except Exception:
-        release_date = None
-
-    duration_iso = short.get("duration")
-    runtime_sec = (main.get("runtime") or {}).get("seconds")
-    runtime = format_runtime(duration_iso, runtime_sec)
-
-    akas        = [a.get("text") or a.get("title") for a in main.get("akas", {}).get("edges", [])]
-    cast        = [a.get("name") for a in short.get("actor", [])]
-    countries   = [c.get("text") for c in main.get("countriesDetails", {}).get("countries", [])]
-    certificates= [main.get("certificate")] if main.get("certificate") else []
-    spoken_langs = main.get("spokenLanguages") or {}
-    languages = [l.get("text") for l in spoken_langs.get("spokenLanguages", [])]
-    directors   = [d.get("name") for d in short.get("director", [])]
-    writers     = [w.get("name") for w in main.get("writer", [])]
-    producers   = [p.get("name") for p in main.get("producer", [])]
-    composers   = [c.get("name") for c in main.get("composer", [])]
-    cinematogs  = [c.get("name") for c in main.get("cinematographer", [])]
-    music_team  = [m.get("name") for m in main.get("musicDepartment", [])]
-    distributors= [d.get("name") for d in main.get("distributors", [])]
-
-    movie = {
-        'title': title,
-        'votes': votes,
-        "aka": list_to_str(akas),
-        "seasons": (main.get("series") or {}).get("numberOfSeasons"),
-        "box_office": main.get("lifetimeGross"),
-        'localized_title': short.get("alternateNames", [None])[0],
-        'kind': kind,
-        "imdb_id": imdb_id,
-        "cast": list_to_str(cast),
-        "runtime": runtime,
-        "countries": list_to_str(countries),
-        "certificates": list_to_str(certificates),
-        "languages": list_to_str(languages),
-        "director": list_to_str(directors),
-        "writer": list_to_str(writers),
-        "producer": list_to_str(producers),
-        "composer": list_to_str(composers),
-        "cinematographer": list_to_str(cinematogs),
-        "music_team": list_to_str(music_team),
-        "distributors": list_to_str(distributors),
-        'release_date': release_date,
-        'year': release_year,
-        'genres': list_to_str(short.get("genre")),
-        'poster': short.get("image"),
-        'plot': short.get("description"),
-        'rating': rating,
-        'url': short.get("url") or f'https://www.imdb.com/title/{imdb_id}'
-    }
-
-    return movie
 
 
 async def broadcast_messages(user_id, message):
@@ -822,4 +1014,5 @@ async def is_check_admin(bot, chat_id, user_id):
         return member.status in [enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER]
     except:
         return False
+
 
