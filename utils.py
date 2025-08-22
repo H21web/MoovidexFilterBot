@@ -148,7 +148,7 @@ async def lookup_imdb_id(title):
     api_url = f"https://imdblinkz.s1mallufiles.workers.dev/?q={encoded_title}"
     
     try:
-        timeout = aiohttp.ClientTimeout(total=6)
+        timeout = aiohttp.ClientTimeout(total=4)
         connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
         
         async with aiohttp.ClientSession(
@@ -195,7 +195,7 @@ async def fetch_json(imdb_id):
     url = f"https://imdb.iamidiotareyoutoo.com/search?tt={imdb_id}"
     
     try:
-        timeout = aiohttp.ClientTimeout(total=6)
+        timeout = aiohttp.ClientTimeout(total=4)
         connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
         
         async with aiohttp.ClientSession(
@@ -278,152 +278,152 @@ def extract_character_info(cast_data):
     
     return cast_info
 
-async def get_poster(query, bulk=False, id=False, file=None):
-    """Get movie details with 6-second max load time and better character handling."""
+async def _get_poster_internal(query, bulk=False, id=False, file=None):
+    """Internal function for get_poster without timeout wrapper."""
     if not query or not isinstance(query, str):
         return None
     
-    start_time = asyncio.get_event_loop().time()
-    
     try:
-        # Set overall timeout
-        async with asyncio.timeout(6.0):
-            # Get IMDb ID
-            imdb_id = query.strip() if id else await lookup_imdb_id(query)
-            if not imdb_id:
-                return None
+        # Get IMDb ID
+        imdb_id = query.strip() if id else await lookup_imdb_id(query)
+        if not imdb_id:
+            return None
 
-            # Check if we're running out of time
-            elapsed = asyncio.get_event_loop().time() - start_time
-            if elapsed > 5.0:
-                return None
+        # Fetch movie data
+        data = await fetch_json(imdb_id)
+        if not data or not data.get("ok"):
+            return None
 
-            # Fetch movie data
-            data = await fetch_json(imdb_id)
-            if not data or not data.get("ok"):
-                return None
+        # Extract data safely
+        short = safe_get(data, "short", default={})
+        main = safe_get(data, "main", default={})
+        
+        if not short and not main:
+            return None
 
-            # Extract data safely
-            short = safe_get(data, "short", default={})
-            main = safe_get(data, "main", default={})
-            
-            if not short and not main:
-                return None
+        # Basic info
+        title = safe_get(short, "name")
+        if not title:
+            return None
 
-            # Basic info
-            title = safe_get(short, "name")
-            if not title:
-                return None
+        # Rating info
+        rating_info = safe_get(short, "aggregateRating", default={})
+        votes = safe_get(rating_info, "ratingCount")
+        rating_val = safe_get(rating_info, "ratingValue")
+        rating = f"{rating_val}/10" if rating_val is not None else None
 
-            # Rating info
-            rating_info = safe_get(short, "aggregateRating", default={})
-            votes = safe_get(rating_info, "ratingCount")
-            rating_val = safe_get(rating_info, "ratingValue")
-            rating = f"{rating_val}/10" if rating_val is not None else None
+        # Release info
+        release = safe_get(main, "releaseDate", default={})
+        release_year = safe_get(main, "releaseYear", "year") or safe_get(release, "year")
+        
+        release_date = None
+        try:
+            y, m, d = safe_get(release, "year"), safe_get(release, "month"), safe_get(release, "day")
+            if all(isinstance(x, int) for x in [y, m, d]):
+                release_date = f"{d:02d}-{m:02d}-{y}"
+        except Exception:
+            pass
 
-            # Release info
-            release = safe_get(main, "releaseDate", default={})
-            release_year = safe_get(main, "releaseYear", "year") or safe_get(release, "year")
-            
-            release_date = None
-            try:
-                y, m, d = safe_get(release, "year"), safe_get(release, "month"), safe_get(release, "day")
-                if all(isinstance(x, int) for x in [y, m, d]):
-                    release_date = f"{d:02d}-{m:02d}-{y}"
-            except Exception:
-                pass
+        # Runtime
+        duration_iso = safe_get(short, "duration")
+        runtime_sec = safe_get(main, "runtime", "seconds")
+        runtime = format_runtime(duration_iso, runtime_sec)
 
-            # Runtime
-            duration_iso = safe_get(short, "duration")
-            runtime_sec = safe_get(main, "runtime", "seconds")
-            runtime = format_runtime(duration_iso, runtime_sec)
+        # Extract cast with character information
+        cast_data = safe_get(short, "actor", default=[])
+        cast_with_chars = extract_character_info(cast_data)
+        
+        # Fallback to simple names if character extraction fails
+        if not cast_with_chars:
+            cast_with_chars = extract_names(cast_data)
 
-            # Extract cast with character information
-            cast_data = safe_get(short, "actor", default=[])
-            cast_with_chars = extract_character_info(cast_data)
-            
-            # Fallback to simple names if character extraction fails
-            if not cast_with_chars:
-                cast_with_chars = extract_names(cast_data)
+        # Other lists
+        akas = []
+        aka_edges = safe_get(main, "akas", "edges", default=[])
+        for aka in aka_edges:
+            aka_text = safe_get(aka, "text") or safe_get(aka, "title")
+            if aka_text and isinstance(aka_text, str):
+                akas.append(aka_text.strip())
 
-            # Other lists
-            akas = []
-            aka_edges = safe_get(main, "akas", "edges", default=[])
-            for aka in aka_edges:
-                aka_text = safe_get(aka, "text") or safe_get(aka, "title")
-                if aka_text and isinstance(aka_text, str):
-                    akas.append(aka_text.strip())
+        countries = []
+        country_data = safe_get(main, "countriesDetails", "countries", default=[])
+        for country in country_data:
+            country_text = safe_get(country, "text")
+            if country_text and isinstance(country_text, str):
+                countries.append(country_text.strip())
 
-            countries = []
-            country_data = safe_get(main, "countriesDetails", "countries", default=[])
-            for country in country_data:
-                country_text = safe_get(country, "text")
-                if country_text and isinstance(country_text, str):
-                    countries.append(country_text.strip())
+        # Certificates
+        certificates = []
+        cert = safe_get(main, "certificate")
+        if cert and isinstance(cert, str):
+            certificates = [cert.strip()]
 
-            # Certificates
-            certificates = []
-            cert = safe_get(main, "certificate")
-            if cert and isinstance(cert, str):
-                certificates = [cert.strip()]
+        # Languages
+        languages = []
+        lang_data = safe_get(main, "spokenLanguages", "spokenLanguages", default=[])
+        for lang in lang_data:
+            lang_text = safe_get(lang, "text")
+            if lang_text and isinstance(lang_text, str):
+                languages.append(lang_text.strip())
 
-            # Languages
-            languages = []
-            lang_data = safe_get(main, "spokenLanguages", "spokenLanguages", default=[])
-            for lang in lang_data:
-                lang_text = safe_get(lang, "text")
-                if lang_text and isinstance(lang_text, str):
-                    languages.append(lang_text.strip())
+        # Crew
+        directors = extract_names(safe_get(short, "director", default=[]))
+        writers = extract_names(safe_get(main, "writer", default=[]))
+        producers = extract_names(safe_get(main, "producer", default=[]))
+        composers = extract_names(safe_get(main, "composer", default=[]))
+        cinematogs = extract_names(safe_get(main, "cinematographer", default=[]))
+        music_team = extract_names(safe_get(main, "musicDepartment", default=[]))
+        distributors = extract_names(safe_get(main, "distributors", default=[]))
 
-            # Crew
-            directors = extract_names(safe_get(short, "director", default=[]))
-            writers = extract_names(safe_get(main, "writer", default=[]))
-            producers = extract_names(safe_get(main, "producer", default=[]))
-            composers = extract_names(safe_get(main, "composer", default=[]))
-            cinematogs = extract_names(safe_get(main, "cinematographer", default=[]))
-            music_team = extract_names(safe_get(main, "musicDepartment", default=[]))
-            distributors = extract_names(safe_get(main, "distributors", default=[]))
+        # Build result
+        movie = {
+            'title': title,
+            'votes': votes,
+            "aka": list_to_str(akas),
+            "seasons": safe_get(main, "series", "numberOfSeasons"),
+            "box_office": safe_get(main, "lifetimeGross"),
+            'localized_title': safe_get(short, "alternateNames", 0) if isinstance(safe_get(short, "alternateNames"), list) else None,
+            'kind': safe_get(short, "@type", default="").capitalize(),
+            "imdb_id": imdb_id,
+            "cast": list_to_str(cast_with_chars),
+            "runtime": runtime,
+            "countries": list_to_str(countries),
+            "certificates": list_to_str(certificates),
+            "languages": list_to_str(languages),
+            "director": list_to_str(directors),
+            "writer": list_to_str(writers),
+            "producer": list_to_str(producers),
+            "composer": list_to_str(composers),
+            "cinematographer": list_to_str(cinematogs),
+            "music_team": list_to_str(music_team),
+            "distributors": list_to_str(distributors),
+            'release_date': release_date,
+            'year': release_year,
+            'genres': list_to_str(safe_get(short, "genre")),
+            'poster': safe_get(short, "image"),
+            'plot': safe_get(short, "description"),
+            'rating': rating,
+            'url': safe_get(short, "url") or f'https://www.imdb.com/title/{imdb_id}'
+        }
 
-            # Build result
-            movie = {
-                'title': title,
-                'votes': votes,
-                "aka": list_to_str(akas),
-                "seasons": safe_get(main, "series", "numberOfSeasons"),
-                "box_office": safe_get(main, "lifetimeGross"),
-                'localized_title': safe_get(short, "alternateNames", 0) if isinstance(safe_get(short, "alternateNames"), list) else None,
-                'kind': safe_get(short, "@type", default="").capitalize(),
-                "imdb_id": imdb_id,
-                "cast": list_to_str(cast_with_chars),
-                "runtime": runtime,
-                "countries": list_to_str(countries),
-                "certificates": list_to_str(certificates),
-                "languages": list_to_str(languages),
-                "director": list_to_str(directors),
-                "writer": list_to_str(writers),
-                "producer": list_to_str(producers),
-                "composer": list_to_str(composers),
-                "cinematographer": list_to_str(cinematogs),
-                "music_team": list_to_str(music_team),
-                "distributors": list_to_str(distributors),
-                'release_date': release_date,
-                'year': release_year,
-                'genres': list_to_str(safe_get(short, "genre")),
-                'poster': safe_get(short, "image"),
-                'plot': safe_get(short, "description"),
-                'rating': rating,
-                'url': safe_get(short, "url") or f'https://www.imdb.com/title/{imdb_id}'
-            }
+        return movie
 
-            return movie
+    except Exception as e:
+        logger.error(f"Error in _get_poster_internal for '{query}': {str(e)[:100]}")
+        return None
 
+async def get_poster(query, bulk=False, id=False, file=None):
+    """Get movie details with 6-second max load time and better character handling."""
+    try:
+        # Use asyncio.wait_for for timeout (compatible with all Python versions)
+        result = await asyncio.wait_for(_get_poster_internal(query, bulk, id, file), timeout=6.0)
+        return result
     except asyncio.TimeoutError:
         logger.warning(f"Overall timeout for query: {query}")
         return None
     except Exception as e:
         logger.error(f"Error in get_poster for '{query}': {str(e)[:100]}")
         return None
-
 
 async def broadcast_messages(user_id, message):
     try:
@@ -1014,5 +1014,6 @@ async def is_check_admin(bot, chat_id, user_id):
         return member.status in [enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER]
     except:
         return False
+
 
 
