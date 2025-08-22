@@ -25,7 +25,7 @@ PyLeaves==1.0.2
 opencv-python-headless==4.7.0.68 
 googletrans==4.0.0rc1
 pydub==0.25.1
-imdbinfo
+tmdbv3api
 python-dotenv==0.21.1 
 gTTS==2.5.1
 speedtest==0.0.1 
@@ -36,5 +36,6 @@ dnspython==2.3.0
 ffmpeg-python>=0.2.0
 googlesearch-python
 speechrecognition
+
 
 
