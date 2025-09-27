@@ -1530,8 +1530,9 @@ async def invite_handler(client: Client, message: Message):
     await message.reply(
         "<b>👤 Your Referral Program</b>\n\n"
         f"🔗 Link: <code>{referral_link}</code>\n"
-        f"👥 Referrals: {num_referrals}/{REFERAL_COUNT}\n"
+        # f"👥 Referrals: {num_referrals}/{REFERAL_COUNT}\n"
         f"🎁 Reward: Premium for {REFERAL_PREMIUM_TIME}\n\n"
         "Invite friends to unlock premium! 🚀",
         reply_markup=buttons
     )
+
