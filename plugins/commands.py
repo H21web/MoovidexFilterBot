@@ -245,7 +245,7 @@ async def start(client, message):
                     log_msg = await client.send_cached_media(chat_id=STREAM_FILES_CHANNEL, file_id=msg.get("file_id"))
                     fileName = {quote_plus(get_name(log_msg))}
                     stream = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
-                    encoded_stream = quote(stream, safe="")
+                    encoded_stream = quote(stream, safe=":/?=&") 
                     download = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
 
                 if STREAM_MODE == True:
@@ -328,7 +328,7 @@ async def start(client, message):
                     log_msg = await client.send_cached_media(chat_id=STREAM_FILES_CHANNEL, file_id=file_id)
                     fileName = {quote_plus(get_name(log_msg))}
                     stream = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
-                    encoded_stream = quote(stream, safe="")
+                    encoded_stream = quote(stream, safe=":/?=&") 
                     download = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
  
                 if STREAM_MODE == True:
@@ -1511,6 +1511,7 @@ Type the series name followed by season and episode.
 @Client.on_callback_query(filters.regex("close_help"))
 async def close_help_callback(client, callback_query):
     await callback_query.message.delete()
+
 
 
 
