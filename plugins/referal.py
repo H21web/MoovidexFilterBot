@@ -34,9 +34,10 @@ async def delete_referrals_handler(client: Client, message: Message):
     try:
         user_id = message.from_user.id
         
-        # Check if user is admin
+        # Only admins can delete ALL referrals, regular users can delete their own
+        # This function now deletes all referrals (admin only)
         if user_id not in ADMINS:
-            await message.reply("❌ You don't have permission to use this command.")
+            await message.reply("❌ Only admins can delete all referrals. Use /clearmyreferrals to delete your own referrals.")
             return
         
         # Send processing message
@@ -75,46 +76,58 @@ async def delete_user_referrals_handler(client: Client, message: Message):
     try:
         user_id = message.from_user.id
         
-        # Check if user is admin
-        if user_id not in ADMINS:
-            await message.reply("❌ You don't have permission to use this command.")
-            return
+        # Allow users to delete their own referrals, admins can delete any user's referrals
+        is_admin = user_id in ADMINS
         
         # Parse command arguments
         command_parts = message.text.split()
+        
+        # If no user ID provided, delete own referrals
         if len(command_parts) < 2:
-            await message.reply(
-                "❌ <b>Invalid Usage!</b>\n\n"
-                "Usage: <code>/delreferrals user_id</code>\n"
-                "Example: <code>/delreferrals 123456789</code>"
-            )
-            return
-            
-        try:
-            target_user_id = int(command_parts[1])
-        except ValueError:
-            await message.reply("❌ Invalid user ID. Please provide a valid number.")
-            return
+            target_user_id = user_id  # Delete own referrals
+        else:
+            try:
+                target_user_id = int(command_parts[1])
+                # Non-admins can only delete their own referrals
+                if not is_admin and target_user_id != user_id:
+                    await message.reply("❌ You can only delete your own referrals. Use /clearmyreferrals or /delreferrals without user ID.")
+                    return
+            except ValueError:
+                await message.reply("❌ Invalid user ID. Please provide a valid number.")
+                return
         
         # Send processing message
-        processing_msg = await message.reply(f"🔄 Processing... Checking referrals for user {target_user_id}...")
+        if target_user_id == user_id:
+            processing_msg = await message.reply("🔄 Processing... Deleting your referrals...")
+        else:
+            processing_msg = await message.reply(f"🔄 Processing... Checking referrals for user {target_user_id}...")
         
         try:
             # Get referral count for the specific user
             user_referrals = await get_referal_users_count(target_user_id)
             
             if user_referrals == 0:
-                await processing_msg.edit(f"ℹ️ User {target_user_id} has no referrals to delete.")
+                if target_user_id == user_id:
+                    await processing_msg.edit("ℹ️ You have no referrals to delete.")
+                else:
+                    await processing_msg.edit(f"ℹ️ User {target_user_id} has no referrals to delete.")
                 return
             
             # Note: You need to implement delete_user_referal_users function in your database module
             # For now, this is a placeholder that shows what would happen
-            await processing_msg.edit(
-                f"⚠️ <b>Function Not Implemented</b>\n\n"
-                f"👤 User ID: {target_user_id}\n"
-                f"📊 Found referrals: {user_referrals}\n\n"
-                f"Please implement <code>delete_user_referal_users(user_id)</code> function in your database module to enable this feature."
-            )
+            if target_user_id == user_id:
+                await processing_msg.edit(
+                    f"⚠️ <b>Function Not Implemented</b>\n\n"
+                    f"👤 Your referrals: {user_referrals}\n\n"
+                    f"Please implement <code>delete_user_referal_users(user_id)</code> function in your database module to enable this feature."
+                )
+            else:
+                await processing_msg.edit(
+                    f"⚠️ <b>Function Not Implemented</b>\n\n"
+                    f"👤 User ID: {target_user_id}\n"
+                    f"📊 Found referrals: {user_referrals}\n\n"
+                    f"Please implement <code>delete_user_referal_users(user_id)</code> function in your database module to enable this feature."
+                )
             
         except Exception as e:
             logger.error(f"Error deleting user referrals: {e}")
@@ -127,6 +140,41 @@ async def delete_user_referrals_handler(client: Client, message: Message):
         logger.error(f"Error in delete_user_referrals_handler: {e}")
         await message.reply("❌ An unexpected error occurred.")
 
+# Add handler for users to delete their own referrals
+async def clear_my_referrals_handler(client: Client, message: Message):
+    try:
+        user_id = message.from_user.id
+        
+        # Send processing message
+        processing_msg = await message.reply("🔄 Processing... Deleting your referrals...")
+        
+        try:
+            # Get user's referral count
+            user_referrals = await get_referal_users_count(user_id)
+            
+            if user_referrals == 0:
+                await processing_msg.edit("ℹ️ You have no referrals to delete.")
+                return
+            
+            # Note: You need to implement delete_user_referal_users function in your database module
+            # For now, this is a placeholder
+            await processing_msg.edit(
+                f"⚠️ <b>Feature Coming Soon</b>\n\n"
+                f"👤 Your referrals: {user_referrals}\n\n"
+                f"This feature will be available once the database function is implemented."
+            )
+            
+        except Exception as e:
+            logger.error(f"Error deleting user's own referrals: {e}")
+            await processing_msg.edit(
+                f"❌ <b>Error deleting your referrals:</b>\n"
+                f"<code>{str(e)}</code>"
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in clear_my_referrals_handler: {e}")
+        await message.reply("❌ An unexpected error occurred.")
+
 # Command handlers with proper filters
 @Client.on_message(filters.command("clearreferrals") & filters.private)
 async def clear_all_referrals(client: Client, message: Message):
@@ -136,48 +184,69 @@ async def clear_all_referrals(client: Client, message: Message):
 async def del_user_referrals(client: Client, message: Message):
     await delete_user_referrals_handler(client, message)
 
+@Client.on_message(filters.command("clearmyreferrals") & filters.private)
+async def clear_my_referrals(client: Client, message: Message):
+    await clear_my_referrals_handler(client, message)
+
 @Client.on_message(filters.command("invite") & filters.private)
 async def invite_command(client: Client, message: Message):
     await invite_handler(client, message)
 
-# Additional admin command to check referral stats
+
+
+# Show referral stats - accessible by all users
 @Client.on_message(filters.command("refstats") & filters.private)
 async def referral_stats(client: Client, message: Message):
     try:
         user_id = message.from_user.id
-        
-        if user_id not in ADMINS:
-            await message.reply("❌ You don't have permission to use this command.")
-            return
+        is_admin = user_id in ADMINS
         
         processing_msg = await message.reply("🔄 Fetching referral statistics...")
         
         try:
-            all_referrals = await get_referal_all_users()
-            total_referrals = len(all_referrals) if all_referrals else 0
-            
-            # Create stats message
-            stats_text = (
-                f"📊 <b>Referral Statistics</b>\n\n"
-                f"👥 Total Referrals: {total_referrals}\n"
-                f"🎯 Required for Premium: {REFERAL_COUNT}\n"
-                f"⏰ Premium Duration: {REFERAL_PREMEIUM_TIME}\n\n"
-            )
-            
-            if all_referrals and len(all_referrals) > 0:
-                stats_text += "📋 <b>Recent Activity:</b>\n"
-                # Show first 5 referrals as example
-                for i, ref_user in enumerate(all_referrals[:5]):
-                    if isinstance(ref_user, dict):
-                        user_info = f"User ID: {ref_user.get('user_id', 'Unknown')}"
-                    else:
-                        user_info = f"User ID: {ref_user}"
-                    stats_text += f"• {user_info}\n"
+            if is_admin:
+                # Admins see global stats
+                all_referrals = await get_referal_all_users()
+                total_referrals = len(all_referrals) if all_referrals else 0
+                user_referrals = await get_referal_users_count(user_id)
                 
-                if len(all_referrals) > 5:
-                    stats_text += f"... and {len(all_referrals) - 5} more\n"
+                stats_text = (
+                    f"📊 <b>Global Referral Statistics</b>\n\n"
+                    f"👥 Total System Referrals: {total_referrals}\n"
+                    f"👤 Your Referrals: {user_referrals}\n"
+                    f"🎯 Required for Premium: {REFERAL_COUNT}\n"
+                    f"⏰ Premium Duration: {REFERAL_PREMEIUM_TIME}\n\n"
+                )
+                
+                if all_referrals and len(all_referrals) > 0:
+                    stats_text += "📋 <b>Recent Activity:</b>\n"
+                    for i, ref_user in enumerate(all_referrals[:5]):
+                        if isinstance(ref_user, dict):
+                            user_info = f"User ID: {ref_user.get('user_id', 'Unknown')}"
+                        else:
+                            user_info = f"User ID: {ref_user}"
+                        stats_text += f"• {user_info}\n"
+                    
+                    if len(all_referrals) > 5:
+                        stats_text += f"... and {len(all_referrals) - 5} more\n"
+                else:
+                    stats_text += "📋 No referrals found."
             else:
-                stats_text += "📋 No referrals found."
+                # Regular users see only their stats
+                user_referrals = await get_referal_users_count(user_id)
+                
+                stats_text = (
+                    f"📊 <b>Your Referral Statistics</b>\n\n"
+                    f"👤 Your Referrals: {user_referrals}/{REFERAL_COUNT}\n"
+                    f"🎯 Required for Premium: {REFERAL_COUNT}\n"
+                    f"⏰ Premium Duration: {REFERAL_PREMEIUM_TIME}\n\n"
+                )
+                
+                if user_referrals >= REFERAL_COUNT:
+                    stats_text += "🎉 <b>Congratulations!</b> You've earned premium access!\n"
+                else:
+                    remaining = REFERAL_COUNT - user_referrals
+                    stats_text += f"💪 You need {remaining} more referrals to unlock premium!\n"
             
             await processing_msg.edit(stats_text)
             
