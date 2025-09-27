@@ -20,7 +20,7 @@ from database.gfilters_mdb import find_gfilter, get_gfilters, del_allg
 from urllib.parse import quote_plus
 from TechVJ.util.file_properties import get_name, get_hash, get_media_file_size
 from database.config_db import mdb
-from plugins.commands import invite_handler
+from plugins.referal import invite_handler
 
 
 logger = logging.getLogger(__name__)
@@ -3388,6 +3388,7 @@ async def global_filters(client, message, text=False):
                 break
     else:
         return False
+
 
 
 
