@@ -1,7 +1,8 @@
 from database.users_chats_db import db, delete_all_referal_users, get_referal_users_count, get_referal_all_users, referal_add_user
-from pyrogram import Client
+from pyrogram import Client,filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from info import REFERAL_COUNT,REFERAL_PREMEIUM_TIME
+
+from info import REFERAL_COUNT,REFERAL_PREMEIUM_TIME, ADMINS
 
 async def invite_handler(client: Client, message: Message):
     bot_username = (await client.get_me()).username
@@ -22,3 +23,14 @@ async def invite_handler(client: Client, message: Message):
         "Invite friends to unlock premium! 🚀",
         reply_markup=buttons
     )
+
+@Client.on_message(filters.command("reset_referrals") & filters.private)
+async def reset_referrals(client: Client, message: Message):
+    user_id = message.from_user.id
+
+    if user_id not in ADMINS:
+        await message.reply("❌ You are not authorized to perform this action.")
+        return
+
+    await delete_all_referal_users()  # Deletes all referral users
+    await message.reply("✅ All referral data has been cleared by the admin.")
