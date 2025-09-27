@@ -14,7 +14,7 @@ from database.join_reqs import JoinReqs
 from info import STREAM_FILES_CHANNEL,OTHER_DB_URI, CLONE_MODE, OWNER_LNK, REACTIONS, CHANNELS, REQUEST_TO_JOIN_MODE, TRY_AGAIN_BTN, ADMINS, SHORTLINK_MODE, PREMIUM_AND_REFERAL_MODE, STREAM_MODE, AUTH_CHANNEL, REFERAL_PREMEIUM_TIME, REFERAL_COUNT, PAYMENT_TEXT, PAYMENT_QR, LOG_CHANNEL, PICS, BATCH_FILE_CAPTION, CUSTOM_FILE_CAPTION, PROTECT_CONTENT, CHNL_LNK, GRP_LNK, REQST_CHANNEL, SUPPORT_CHAT, MAX_B_TN, VERIFY, SHORTLINK_API, SHORTLINK_URL, TUTORIAL, VERIFY_TUTORIAL, IS_TUTORIAL, URL
 from utils import get_wish, get_settings, pub_is_subscribed, get_size, is_subscribed, save_group_settings, temp, verify_user, check_token, check_verification, get_token, get_shortlink, get_tutorial, get_seconds
 from database.connections_mdb import active_connection
-from urllib.parse import quote
+from urllib.parse import quote_plus
 from database.config_db import mdb
 from database.topdb import JsTopDB
 from plugins.Extra.latest import latest_movies_command
@@ -243,15 +243,14 @@ async def start(client, message):
             try:
                 if STREAM_MODE == True:
                     log_msg = await client.send_cached_media(chat_id=STREAM_FILES_CHANNEL, file_id=msg.get("file_id"))
-                    fileName = {quote(get_name(log_msg))}
-                    stream = f"{URL}watch/{str(log_msg.id)}/{quote(get_name(log_msg))}?hash={get_hash(log_msg)}"
-                    encoded_stream = quote(stream, safe=":/?=&") 
-                    download = f"{URL}watch/{str(log_msg.id)}/{quote(get_name(log_msg))}?hash={get_hash(log_msg)}"
+                    fileName = {quote_plus(get_name(log_msg))}
+                    stream = f"{URL}watch/{str(log_msg.id)}?hash={get_hash(log_msg)}"
+                    download = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
 
                 if STREAM_MODE == True:
                     button = [[
                         InlineKeyboardButton("📥 Download ", url=download),
-                        InlineKeyboardButton('📤 Share', url=f'https://t.me/share/url?url={encoded_stream}')
+                        InlineKeyboardButton('📤 Share', url=f'https://t.me/share/url?url={stream}')
                     ],[
                         InlineKeyboardButton("📱 Open in Telegram", web_app=WebAppInfo(url=stream))
                     ]]
@@ -326,15 +325,14 @@ async def start(client, message):
                 file_id = file.file_id
                 if STREAM_MODE == True:
                     log_msg = await client.send_cached_media(chat_id=STREAM_FILES_CHANNEL, file_id=file_id)
-                    fileName = {quote(get_name(log_msg))}
-                    stream = f"{URL}watch/{str(log_msg.id)}/{quote(get_name(log_msg))}?hash={get_hash(log_msg)}"
-                    encoded_stream = quote(stream, safe=":/?=&") 
-                    download = f"{URL}watch/{str(log_msg.id)}/{quote(get_name(log_msg))}?hash={get_hash(log_msg)}"
+                    fileName = {quote_plus(get_name(log_msg))}
+                    stream = f"{URL}watch/{str(log_msg.id)}?hash={get_hash(log_msg)}"
+                    download = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
  
                 if STREAM_MODE == True:
                     button = [[
                         InlineKeyboardButton("📥 Download ", url=download),
-                        InlineKeyboardButton('📤 Share', url=f'https://t.me/share/url?url={encoded_stream}')
+                        InlineKeyboardButton('📤 Share', url=f'https://t.me/share/url?url={stream}')
                     ],[
                         InlineKeyboardButton("📱 Open in Telegram", web_app=WebAppInfo(url=stream))
                     ]]
@@ -1513,19 +1511,11 @@ async def close_help_callback(client, callback_query):
     await callback_query.message.delete()
 
 
-
 @Client.on_message(filters.command("reset_referrals") & filters.private)
 async def reset_referrals(client: Client, message: Message):
     user_id = message.from_user.id
-
-    if user_id not in ADMINS:
-        await message.reply("❌ You are not authorized to perform this action.")
-        return
-
-    await delete_all_referal_users()  # Deletes all referral users
-    await message.reply("✅ All referral data has been cleared by the admin.")
-
-
+    await delete_all_referal_users(user_id)
+    await message.reply("✅ Your referral count has been reset.")
 
 
 
