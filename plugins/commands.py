@@ -1511,11 +1511,5 @@ async def close_help_callback(client, callback_query):
     await callback_query.message.delete()
 
 
-@Client.on_message(filters.command("reset_referrals") & filters.private)
-async def reset_referrals(client: Client, message: Message):
-    user_id = message.from_user.id
-    await delete_all_referal_users(user_id)
-    await message.reply("✅ Your referral count has been reset.")
-
 
 
