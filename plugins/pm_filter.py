@@ -2618,14 +2618,19 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     curr_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
     if not spoll:
         message = msg
-        #if message.text.startswith("/"): return  # ignore commands
-        #if re.findall("((^\/|^,|^!|^\.|^[\U0001F600-\U000E007F]).*)", message.text):
-            #return
+        # User has satisfied referral requirement, proceed with auto filter
+        message = msg
+        user_id = message.from_user.id
+    else:
+        # For spoll case, we need to get user_id differently
+        user_id = msg.from_user.id
+    
+        # Simple referral check - both conditions must be satisfied
         num_referrals = await get_referal_users_count(user_id)
         
         # If user hasn't satisfied referral requirement OR premium time is not active, don't proceed
         if num_referrals < REFERAL_COUNT or not REFERAL_PREMEIUM_TIME:
-            return
+        return
         
         text = message.caption or message.text or ""
         if len(text) < 50:
@@ -3390,6 +3395,7 @@ async def global_filters(client, message, text=False):
                 break
     else:
         return False
+
 
 
 
