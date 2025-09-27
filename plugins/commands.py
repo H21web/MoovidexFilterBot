@@ -1511,30 +1511,5 @@ async def close_help_callback(client, callback_query):
     await callback_query.message.delete()
 
 
-async def invite_handler(client: Client, message: Message):
-    bot_username = (await client.get_me()).username
-    user_id = message.from_user.id
-
-    referral_link = f"https://t.me/{bot_username}?start=MVDEX-{user_id}"
-    num_referrals = await get_referal_users_count(user_id)
-
-    # Create button
-    buttons = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton("🔗 Share Invite Link", url=f"https://t.me/share/url?url={referral_link}")
-            ]
-        ]
-    )
-
-    await message.reply(
-        "<b>👤 Your Referral Program</b>\n\n"
-        f"🔗 Link: <code>{referral_link}</code>\n"
-        # f"👥 Referrals: {num_referrals}/{REFERAL_COUNT}\n"
-        f"🎁 Reward: Premium for {REFERAL_PREMIUM_TIME}\n\n"
-        "Invite friends to unlock premium! 🚀",
-        reply_markup=buttons
-    )
-
 
 
