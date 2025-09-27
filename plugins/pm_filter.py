@@ -2616,8 +2616,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
 async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     curr_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
-    user_id = message.from_user.id
-    vj = await referal_add_user(user_id, user_id)
+    vj = await referal_add_user(msg.from_user.id,msg.from_user.id)
     if vj and PREMIUM_AND_REFERAL_MODE == True:
         await invite_handler(client, msg)
         return
