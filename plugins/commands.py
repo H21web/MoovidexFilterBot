@@ -1511,7 +1511,7 @@ async def close_help_callback(client, callback_query):
     await callback_query.message.delete()
 
 
-async def invite_handler(client: Client, message: Message):
+def invite_handler(client: Client, message: Message):
     bot_username = (await client.get_me()).username
     user_id = message.from_user.id
 
@@ -1535,4 +1535,5 @@ async def invite_handler(client: Client, message: Message):
         "Invite friends to unlock premium! 🚀",
         reply_markup=buttons
     )
+
 
