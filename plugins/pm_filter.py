@@ -2623,6 +2623,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     else:
         # For spoll case, we need to get user_id differently
         user_id = msg.from_user.id
+        message = msg.message
     
     # Simple referral check - both conditions must be satisfied
     num_referrals = await get_referal_users_count(user_id)
@@ -2630,7 +2631,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     # If user hasn't satisfied referral requirement OR premium time is not active, don't proceed
     if num_referrals < REFERAL_COUNT or not REFERAL_PREMEIUM_TIME:
         if not spoll:  # Only show message for regular messages, not callback queries
-            await invite_handler(client, msg)
+            await invite_handler(client, message)
         return
     
     if not spoll:
@@ -3400,6 +3401,7 @@ async def global_filters(client, message, text=False):
                 break
     else:
         return False
+
 
 
 
