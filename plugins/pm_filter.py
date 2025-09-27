@@ -2621,6 +2621,12 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         #if message.text.startswith("/"): return  # ignore commands
         #if re.findall("((^\/|^,|^!|^\.|^[\U0001F600-\U000E007F]).*)", message.text):
             #return
+        num_referrals = await get_referal_users_count(user_id)
+        
+        # If user hasn't satisfied referral requirement OR premium time is not active, don't proceed
+        if num_referrals < REFERAL_COUNT or not REFERAL_PREMEIUM_TIME:
+            return
+        
         text = message.caption or message.text or ""
         if len(text) < 50:
             search = name
@@ -3384,6 +3390,7 @@ async def global_filters(client, message, text=False):
                 break
     else:
         return False
+
 
 
 
