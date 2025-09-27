@@ -87,3 +87,13 @@ async def delete_user_referrals_handler(client: Client, message: Message):
             f"❌ <b>Error deleting user referrals:</b>\n"
             f"<code>{str(e)}</code>"
         )
+
+# For deleting all referrals
+@Client.on_message(filters.command("clearreferrals"))
+async def clear_all_referrals(client, message):
+    await delete_referrals_handler(client, message)
+
+# For deleting specific user's referrals  
+@Client.on_message(filters.command("delreferrals"))
+async def del_user_referrals(client, message):
+    await delete_user_referrals_handler(client, message)
