@@ -2618,7 +2618,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     curr_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
     vj = await referal_add_user(user_id, message.from_user.id)
     if vj and PREMIUM_AND_REFERAL_MODE == True:
-        await invite_handler(client: Client, message: Message)
+        await invite_handler(client, msg)
         return
     if not spoll:
         message = msg
@@ -3388,4 +3388,5 @@ async def global_filters(client, message, text=False):
                 break
     else:
         return False
+
 
