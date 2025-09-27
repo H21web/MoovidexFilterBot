@@ -14,7 +14,7 @@ from database.join_reqs import JoinReqs
 from info import STREAM_FILES_CHANNEL,OTHER_DB_URI, CLONE_MODE, OWNER_LNK, REACTIONS, CHANNELS, REQUEST_TO_JOIN_MODE, TRY_AGAIN_BTN, ADMINS, SHORTLINK_MODE, PREMIUM_AND_REFERAL_MODE, STREAM_MODE, AUTH_CHANNEL, REFERAL_PREMEIUM_TIME, REFERAL_COUNT, PAYMENT_TEXT, PAYMENT_QR, LOG_CHANNEL, PICS, BATCH_FILE_CAPTION, CUSTOM_FILE_CAPTION, PROTECT_CONTENT, CHNL_LNK, GRP_LNK, REQST_CHANNEL, SUPPORT_CHAT, MAX_B_TN, VERIFY, SHORTLINK_API, SHORTLINK_URL, TUTORIAL, VERIFY_TUTORIAL, IS_TUTORIAL, URL
 from utils import get_wish, get_settings, pub_is_subscribed, get_size, is_subscribed, save_group_settings, temp, verify_user, check_token, check_verification, get_token, get_shortlink, get_tutorial, get_seconds
 from database.connections_mdb import active_connection
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus,quote
 from database.config_db import mdb
 from database.topdb import JsTopDB
 from plugins.Extra.latest import latest_movies_command
@@ -1511,6 +1511,7 @@ Type the series name followed by season and episode.
 @Client.on_callback_query(filters.regex("close_help"))
 async def close_help_callback(client, callback_query):
     await callback_query.message.delete()
+
 
 
 
