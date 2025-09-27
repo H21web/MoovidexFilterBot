@@ -17,7 +17,7 @@ from database.ia_filterdb import col, sec_col, db as vjdb, sec_db, get_file_deta
 from database.filters_mdb import del_all, find_filter, get_filters
 from database.connections_mdb import mydb, active_connection, all_connections, delete_connection, if_active, make_active, make_inactive
 from database.gfilters_mdb import find_gfilter, get_gfilters, del_allg
-from urllib.parse import quote, quote_plus
+from urllib.parse import quote_plus
 from TechVJ.util.file_properties import get_name, get_hash, get_media_file_size
 from database.config_db import mdb
 from plugins.referal import invite_handler
@@ -1734,7 +1734,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
         try:
             log_msg = await client.send_cached_media(chat_id=STREAM_FILES_CHANNEL, file_id=file_id)
             fileName = {quote_plus(get_name(log_msg))}
-            stream = f"{URL}watch/{str(log_msg.id)}/{quote(get_name(log_msg))}?hash={get_hash(log_msg)}"
+            stream = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
             download = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
             button = [[
                 InlineKeyboardButton("📥 Download ", url=download),
@@ -3388,6 +3388,7 @@ async def global_filters(client, message, text=False):
                 break
     else:
         return False
+
 
 
 
