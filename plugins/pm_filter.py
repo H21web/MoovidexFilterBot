@@ -1738,7 +1738,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             download = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
             button = [[
                 InlineKeyboardButton("📥 Download ", url=download),
-                InlineKeyboardButton('📤 Share', url=f'Download {fileName} https://t.me/share/url?url={stream}')
+                InlineKeyboardButton('📤 Share', url=f'https://t.me/share/url?url={stream}')
             ],[
                 InlineKeyboardButton("📱 Open in Telegram", web_app=WebAppInfo(url=stream))
             ]]
@@ -3388,6 +3388,7 @@ async def global_filters(client, message, text=False):
                 break
     else:
         return False
+
 
 
 
