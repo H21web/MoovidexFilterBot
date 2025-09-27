@@ -14,7 +14,7 @@ from database.join_reqs import JoinReqs
 from info import STREAM_FILES_CHANNEL,OTHER_DB_URI, CLONE_MODE, OWNER_LNK, REACTIONS, CHANNELS, REQUEST_TO_JOIN_MODE, TRY_AGAIN_BTN, ADMINS, SHORTLINK_MODE, PREMIUM_AND_REFERAL_MODE, STREAM_MODE, AUTH_CHANNEL, REFERAL_PREMEIUM_TIME, REFERAL_COUNT, PAYMENT_TEXT, PAYMENT_QR, LOG_CHANNEL, PICS, BATCH_FILE_CAPTION, CUSTOM_FILE_CAPTION, PROTECT_CONTENT, CHNL_LNK, GRP_LNK, REQST_CHANNEL, SUPPORT_CHAT, MAX_B_TN, VERIFY, SHORTLINK_API, SHORTLINK_URL, TUTORIAL, VERIFY_TUTORIAL, IS_TUTORIAL, URL
 from utils import get_wish, get_settings, pub_is_subscribed, get_size, is_subscribed, save_group_settings, temp, verify_user, check_token, check_verification, get_token, get_shortlink, get_tutorial, get_seconds
 from database.connections_mdb import active_connection
-from urllib.parse import quote_plus,quote
+from urllib.parse import quote
 from database.config_db import mdb
 from database.topdb import JsTopDB
 from plugins.Extra.latest import latest_movies_command
@@ -243,10 +243,10 @@ async def start(client, message):
             try:
                 if STREAM_MODE == True:
                     log_msg = await client.send_cached_media(chat_id=STREAM_FILES_CHANNEL, file_id=msg.get("file_id"))
-                    fileName = {quote_plus(get_name(log_msg))}
-                    stream = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
+                    fileName = {quote(get_name(log_msg))}
+                    stream = f"{URL}watch/{str(log_msg.id)}/{quote(get_name(log_msg))}?hash={get_hash(log_msg)}"
                     encoded_stream = quote(stream, safe=":/?=&") 
-                    download = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
+                    download = f"{URL}watch/{str(log_msg.id)}/{quote(get_name(log_msg))}?hash={get_hash(log_msg)}"
 
                 if STREAM_MODE == True:
                     button = [[
@@ -326,10 +326,10 @@ async def start(client, message):
                 file_id = file.file_id
                 if STREAM_MODE == True:
                     log_msg = await client.send_cached_media(chat_id=STREAM_FILES_CHANNEL, file_id=file_id)
-                    fileName = {quote_plus(get_name(log_msg))}
-                    stream = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
+                    fileName = {quote(get_name(log_msg))}
+                    stream = f"{URL}watch/{str(log_msg.id)}/{quote(get_name(log_msg))}?hash={get_hash(log_msg)}"
                     encoded_stream = quote(stream, safe=":/?=&") 
-                    download = f"{URL}watch/{str(log_msg.id)}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
+                    download = f"{URL}watch/{str(log_msg.id)}/{quote(get_name(log_msg))}?hash={get_hash(log_msg)}"
  
                 if STREAM_MODE == True:
                     button = [[
