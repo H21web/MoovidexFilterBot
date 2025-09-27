@@ -1514,6 +1514,17 @@ async def close_help_callback(client, callback_query):
 
 
 
+@Client.on_message(filters.command("reset_referrals") & filters.private)
+async def reset_referrals(client: Client, message: Message):
+    user_id = message.from_user.id
+
+    if user_id not in ADMINS:
+        await message.reply("❌ You are not authorized to perform this action.")
+        return
+
+    await delete_all_referal_users()  # Deletes all referral users
+    await message.reply("✅ All referral data has been cleared by the admin.")
+
 
 
 
