@@ -2616,22 +2616,24 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
 async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     curr_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
+    
     if not spoll:
-        message = msg
-        # User has satisfied referral requirement, proceed with auto filter
         message = msg
         user_id = message.from_user.id
     else:
         # For spoll case, we need to get user_id differently
         user_id = msg.from_user.id
     
-        # Simple referral check - both conditions must be satisfied
-        num_referrals = await get_referal_users_count(user_id)
-        
-        # If user hasn't satisfied referral requirement OR premium time is not active, don't proceed
-        if num_referrals < REFERAL_COUNT or not REFERAL_PREMEIUM_TIME:
+    # Simple referral check - both conditions must be satisfied
+    num_referrals = await get_referal_users_count(user_id)
+    
+    # If user hasn't satisfied referral requirement OR premium time is not active, don't proceed
+    if num_referrals < REFERAL_COUNT or not REFERAL_PREMEIUM_TIME:
         return
-        
+    
+    if not spoll:
+        message = msg
+        # User has satisfied referral requirement, proceed with auto filter
         text = message.caption or message.text or ""
         if len(text) < 50:
             search = name
@@ -2663,6 +2665,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         search, files, offset, total_results = spoll
         settings = await get_settings(message.chat.id)
         await msg.message.delete()
+        
     pre = 'filep' if settings['file_secure'] else 'file'
     key = f"{message.chat.id}-{message.id}"
     req = message.from_user.id if message.from_user else 0
@@ -2837,7 +2840,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             await asyncio.sleep(300)
             await fuk.delete()
             await message.delete()
-
+            
 async def handle_no_results(client, reply_msg, mv_rqst, reqstr):
     try:
         reqst_gle = mv_rqst.replace(" ", "+")
@@ -3395,6 +3398,7 @@ async def global_filters(client, message, text=False):
                 break
     else:
         return False
+
 
 
 
