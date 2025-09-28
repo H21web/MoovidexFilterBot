@@ -4,22 +4,24 @@ from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from info import REFERAL_COUNT
 
+
+# --- Invite handler (command) ---
 async def invite_handler(client: Client, message: Message):
-    bot_username = (await client.get_me()).username
     user_id = message.from_user.id
     await update_invite_message(client, message, user_id)
 
 
+# --- Show invite message when referral required ---
 async def referral_required_message(client: Client, message: Message):
-    bot_username = (await client.get_me()).username
     user_id = message.from_user.id
-    await update_invite_message(client, message, user_id, required=True)
+    await update_invite_message(client, message, user_id)
 
 
-async def update_invite_message(client: Client, message: Message, user_id: int, required: bool = False):
-    """Render or refresh the invite message"""
+# --- Update or Refresh invite message ---
+async def update_invite_message(client: Client, message, user_id: int):
     bot_username = (await client.get_me()).username
     referral_link = f"https://t.me/{bot_username}?start=MVDEX-{user_id}"
+
     num_referrals = await get_referal_users_count(user_id)
     remaining = max(0, REFERAL_COUNT - num_referrals)
     progress = "🟢" * min(num_referrals, REFERAL_COUNT) + "⚪" * remaining
@@ -51,9 +53,11 @@ async def update_invite_message(client: Client, message: Message, user_id: int, 
     )
 
     try:
-        if message.from_user:  # Initial send
+        if isinstance(message, Message):  
+            # First time (command) → reply
             await message.reply(text, reply_markup=buttons)
-        else:  # Refresh update
+        else:  
+            # Refresh button → edit existing
             await message.edit_text(text, reply_markup=buttons)
     except:
         pass
@@ -70,7 +74,11 @@ async def refresh_referrals_callback(client: Client, callback_query: CallbackQue
 
 
 # --- Register callback handler ---
-def register_referral_callbacks(app: Client):
-    @app.on_callback_query(filters.regex("^refresh_"))
-    async def handle_refresh(client: Client, callback_query: CallbackQuery):
-        await refresh_referrals_callback(client, callback_query)
+@Client.on_callback_query(filters.regex("^refresh_"))
+async def refresh_referrals_callback(client: Client, callback_query: CallbackQuery):
+    try:
+        user_id = int(callback_query.data.split('_')[1])
+        await update_invite_message(client, callback_query.message, user_id)
+        await callback_query.answer("✅ Refreshed!", show_alert=False)
+    except Exception:
+        await callback_query.answer("❌ Can't refresh right now. Try again!", show_alert=True)
