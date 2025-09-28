@@ -1,8 +1,7 @@
 from urllib.parse import quote_plus
 from database.users_chats_db import db, delete_all_referal_users, get_referal_users_count, get_referal_all_users, referal_add_user
 from pyrogram import Client
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from info import REFERAL_COUNT, REFERAL_PREMEIUM_TIME
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
 async def invite_handler(client: Client, message: Message):
     bot_username = (await client.get_me()).username
@@ -10,100 +9,162 @@ async def invite_handler(client: Client, message: Message):
     referral_link = f"https://t.me/{bot_username}?start=MVDEX-{user_id}"
     num_referrals = await get_referal_users_count(user_id)
 
-    # Encode text for share URL
-    share_text = quote_plus("🎬 Join me on this amazing movie bot! Get premium access and search unlimited movies!")
+    # Simple share text
+    share_text = quote_plus("🎬 Amazing movie bot! Join me and search unlimited movies!")
     share_url = f"https://t.me/share/url?url={referral_link}&text={share_text}"
 
-    # Progress bar
-    progress_percentage = (num_referrals / REFERAL_COUNT) * 100
-    progress_bar = "🟢" * int(progress_percentage // 10) + "⚪" * (10 - int(progress_percentage // 10))
+    # Simple progress visualization
+    remaining = max(0, REFERAL_COUNT - num_referrals)
+    progress = "🟢" * min(num_referrals, REFERAL_COUNT) + "⚪" * remaining
 
     buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📤 Share with Friends", url=share_url)],
-        [InlineKeyboardButton("📋 Copy Link", callback_data=f"copy_link_{user_id}")],
-        [InlineKeyboardButton("👥 My Referrals", callback_data=f"my_referrals_{user_id}")]
+        [InlineKeyboardButton("📤 Share Link", url=share_url)],
+        [InlineKeyboardButton("📋 Copy Link", callback_data=f"copy_{user_id}")],
+        [InlineKeyboardButton("🔄 Refresh", callback_data=f"refresh_{user_id}")]
     ])
     
-    # Different messages based on referral progress
+    # Simple status message
     if num_referrals >= REFERAL_COUNT:
-        status_emoji = "✅"
-        status_text = "Congratulations! You've unlocked Premium!"
-    elif num_referrals >= REFERAL_COUNT * 0.8:
-        status_emoji = "🔥"
-        status_text = f"Almost there! Just {REFERAL_COUNT - num_referrals} more friends needed!"
-    elif num_referrals >= REFERAL_COUNT * 0.5:
-        status_emoji = "⚡"
-        status_text = f"Great progress! {REFERAL_COUNT - num_referrals} more invites to go!"
+        status = "🎉 Awesome! You can search unlimited movies!"
     else:
-        status_emoji = "🚀"
-        status_text = f"Start inviting! {REFERAL_COUNT - num_referrals} friends needed for premium!"
+        status = f"📢 Invite {remaining} friends to unlock unlimited movie search!"
     
     await message.reply(
-        f"<b>{status_emoji} Invite Friends & Get Premium!</b>\n\n"
-        f"📊 Progress: {num_referrals}/{REFERAL_COUNT}\n"
-        f"{progress_bar} {progress_percentage:.0f}%\n\n"
-        f"🎁 <b>Reward:</b> Premium for {REFERAL_PREMEIUM_TIME}\n"
-        f"🔗 <b>Your Link:</b> <code>{referral_link}</code>\n\n"
-        f"<i>{status_text}</i>\n\n"
-        "💡 <b>Why invite friends?</b>\n"
-        "• 🎬 Unlimited movie searches\n"
-        "• 🚀 Faster responses\n"
-        "• 🔥 Premium features access\n"
-        "• 📱 No daily limits",
+        f"<b>🚀 Invite Friends</b>\n\n"
+        f"{status}\n\n"
+        f"📊 Friends joined: {num_referrals}/{REFERAL_COUNT}\n"
+        f"{progress[:10]}\n\n"
+        f"🔗 Your link:\n<code>{referral_link}</code>\n\n"
+        f"💡 <b>How it works:</b>\n"
+        f"• Share your link with friends\n"
+        f"• They join the bot using your link\n"
+        f"• You get unlimited movie searches!\n\n"
+        f"<i>Simple and fair! 😊</i>",
         reply_markup=buttons
     )
 
 async def referral_required_message(client: Client, message: Message):
-    """Show this when user needs to refer friends to continue"""
+    """Simple message when user needs more referrals"""
     bot_username = (await client.get_me()).username
     user_id = message.from_user.id
     referral_link = f"https://t.me/{bot_username}?start=MVDEX-{user_id}"
     num_referrals = await get_referal_users_count(user_id)
+    remaining = REFERAL_COUNT - num_referrals
+    
+    # Simple share text
+    share_text = quote_plus("🎬 Found an amazing movie bot! Join me!")
+    share_url = f"https://t.me/share/url?url={referral_link}&text={share_text}"
     
     buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📤 Invite Friends Now", url=f"https://t.me/share/url?url={referral_link}&text=🎬 Join me on this amazing movie bot!")],
-        [InlineKeyboardButton("🔄 Check My Progress", callback_data=f"check_referrals_{user_id}")]
+        [InlineKeyboardButton("📤 Share with Friends", url=share_url)],
+        [InlineKeyboardButton("🔄 Check Status", callback_data=f"refresh_{user_id}")]
     ])
     
     await message.reply(
-        "🔒 <b>Oops! You've reached your daily limit</b>\n\n"
-        f"📊 Your Referrals: {num_referrals}/{REFERAL_COUNT}\n"
-        f"⏳ Need: {REFERAL_COUNT - num_referrals} more friends\n\n"
-        "🎯 <b>To continue searching movies:</b>\n"
-        f"• Invite {REFERAL_COUNT - num_referrals} friends using your link\n"
-        f"• Get Premium for {REFERAL_PREMEIUM_TIME}\n"
-        "• Enjoy unlimited searches! 🎬\n\n"
-        f"🔗 <b>Share this link:</b>\n<code>{referral_link}</code>\n\n"
-        "💬 <b>Tell your friends:</b>\n"
-        "<i>\"Hey! I found this amazing movie bot that has everything! Join me and let's watch movies together! 🍿\"</i>",
+        f"🎬 <b>Hey! Quick favor needed</b>\n\n"
+        f"To keep searching movies, just invite <b>{remaining} friends</b> to join!\n\n"
+        f"📊 Progress: {num_referrals}/{REFERAL_COUNT} friends\n\n"
+        f"🔗 <b>Your magic link:</b>\n<code>{referral_link}</code>\n\n"
+        f"💬 <b>Just tell them:</b>\n"
+        f"<i>\"Found a cool movie bot! Check it out: {referral_link}\"</i>\n\n"
+        f"✨ <b>Once {remaining} friends join = Unlimited searches!</b>",
         reply_markup=buttons
     )
 
-async def copy_link_callback(client: Client, callback_query):
-    """Handle copy link button press"""
-    user_id = callback_query.from_user.id
-    bot_username = (await client.get_me()).username
-    referral_link = f"https://t.me/{bot_username}?start=MVDEX-{user_id}"
-    
-    await callback_query.answer(
-        f"📋 Link copied!\n{referral_link}",
-        show_alert=True
-    )
+async def copy_link_callback(client: Client, callback_query: CallbackQuery):
+    """Handle copy link button - Fixed version"""
+    try:
+        # Extract user_id from callback data
+        callback_data = callback_query.data
+        user_id = int(callback_data.split('_')[1])
+        
+        bot_username = (await client.get_me()).username
+        referral_link = f"https://t.me/{bot_username}?start=MVDEX-{user_id}"
+        
+        await callback_query.answer(
+            f"📋 Link ready to share!\n{referral_link}",
+            show_alert=True
+        )
+    except Exception as e:
+        await callback_query.answer("❌ Something went wrong. Try again!", show_alert=True)
 
-async def check_referrals_callback(client: Client, callback_query):
-    """Handle check referrals button press"""
-    user_id = callback_query.from_user.id
-    num_referrals = await get_referal_users_count(user_id)
-    
-    if num_referrals >= REFERAL_COUNT:
-        message = f"🎉 Congratulations! You have {num_referrals} referrals and Premium access!"
-    else:
-        remaining = REFERAL_COUNT - num_referrals
-        message = f"📊 Current: {num_referrals}/{REFERAL_COUNT}\n⏳ Need {remaining} more friends for Premium!"
-    
-    await callback_query.answer(message, show_alert=True)
+async def refresh_referrals_callback(client: Client, callback_query: CallbackQuery):
+    """Handle refresh/check referrals button - Fixed version"""
+    try:
+        # Extract user_id from callback data
+        callback_data = callback_query.data
+        user_id = int(callback_data.split('_')[1])
+        
+        num_referrals = await get_referal_users_count(user_id)
+        remaining = max(0, REFERAL_COUNT - num_referrals)
+        
+        if num_referrals >= REFERAL_COUNT:
+            message = "🎉 Perfect! You can now search unlimited movies!"
+        else:
+            message = f"📊 {num_referrals}/{REFERAL_COUNT} friends joined\n⏳ Need {remaining} more for unlimited search!"
+        
+        await callback_query.answer(message, show_alert=True)
+        
+        # Optionally update the message with new stats
+        if callback_query.message:
+            await update_invite_message(client, callback_query.message, user_id)
+            
+    except Exception as e:
+        await callback_query.answer("❌ Can't check right now. Try again!", show_alert=True)
 
-# Usage examples:
-# Call invite_handler() when user clicks "Invite Friends" button
-# Call referral_required_message() when user hits daily limit and needs to refer
-# Add copy_link_callback and check_referrals_callback to your callback handlers
+async def update_invite_message(client: Client, message: Message, user_id: int):
+    """Update the invite message with current stats"""
+    try:
+        bot_username = (await client.get_me()).username
+        referral_link = f"https://t.me/{bot_username}?start=MVDEX-{user_id}"
+        num_referrals = await get_referal_users_count(user_id)
+        remaining = max(0, REFERAL_COUNT - num_referrals)
+        progress = "🟢" * min(num_referrals, REFERAL_COUNT) + "⚪" * remaining
+        
+        share_text = quote_plus("🎬 Amazing movie bot! Join me and search unlimited movies!")
+        share_url = f"https://t.me/share/url?url={referral_link}&text={share_text}"
+        
+        buttons = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📤 Share Link", url=share_url)],
+            [InlineKeyboardButton("📋 Copy Link", callback_data=f"copy_{user_id}")],
+            [InlineKeyboardButton("🔄 Refresh", callback_data=f"refresh_{user_id}")]
+        ])
+        
+        if num_referrals >= REFERAL_COUNT:
+            status = "🎉 Awesome! You can search unlimited movies!"
+        else:
+            status = f"📢 Invite {remaining} friends to unlock unlimited movie search!"
+        
+        await message.edit_text(
+            f"<b>🚀 Invite Friends</b>\n\n"
+            f"{status}\n\n"
+            f"📊 Friends joined: {num_referrals}/{REFERAL_COUNT}\n"
+            f"{progress[:10]}\n\n"
+            f"🔗 Your link:\n<code>{referral_link}</code>\n\n"
+            f"💡 <b>How it works:</b>\n"
+            f"• Share your link with friends\n"
+            f"• They join the bot using your link\n"
+            f"• You get unlimited movie searches!\n\n"
+            f"<i>Simple and fair! 😊</i>",
+            reply_markup=buttons
+        )
+    except:
+        pass  # Ignore if message can't be updated
+
+# Callback handler registration helper
+def register_referral_callbacks(app: Client):
+    """Register all callback handlers"""
+    
+    @app.on_callback_query()
+    async def handle_callbacks(client: Client, callback_query: CallbackQuery):
+        data = callback_query.data
+        
+        if data.startswith("copy_"):
+            await copy_link_callback(client, callback_query)
+        elif data.startswith("refresh_"):
+            await refresh_referrals_callback(client, callback_query)
+
+# Usage:
+# 1. Call register_referral_callbacks(app) when starting your bot
+# 2. Use invite_handler() for invite command
+# 3. Use referral_required_message() when user hits limits
