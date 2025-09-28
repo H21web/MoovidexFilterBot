@@ -2614,26 +2614,27 @@ async def cb_handler(client: Client, query: CallbackQuery):
             await query.message.edit_reply_markup(reply_markup)
     await query.answer(MSG_ALRT)
 
+# --- auto_filter fix ---
 async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     curr_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
-    
+
     if not spoll:
         message = msg
         user_id = message.from_user.id
     else:
-        # For spoll case, we need to get user_id differently
         user_id = msg.from_user.id
         message = msg.message
-    
-    # Simple referral check - both conditions must be satisfied
+
     num_referrals = await get_referal_users_count(user_id)
-    
-    # If user hasn't satisfied referral requirement OR premium time is not active, don't proceed
-    if num_referrals < REFERAL_COUNT or not REFERAL_PREMEIUM_TIME:
-        if not spoll:  # Only show message for regular messages, not callback queries
-            await invite_handler(client, message)
-        return
-    
+
+    # ✅ Logic fix
+    if REFERAL_PREMEIUM_TIME:  # Premium mode ON → referrals required
+        if num_referrals < REFERAL_COUNT:
+            if not spoll:  # only send invite message for normal msg
+                await invite_handler(client, message)
+            return
+    # else: premium mode OFF → always allow
+
     if not spoll:
         message = msg
         # User has satisfied referral requirement, proceed with auto filter
@@ -3401,6 +3402,7 @@ async def global_filters(client, message, text=False):
                 break
     else:
         return False
+
 
 
 
