@@ -1,3 +1,4 @@
+from urllib.parse import quote_plus
 from database.users_chats_db import db, delete_all_referal_users, get_referal_users_count, get_referal_all_users, referal_add_user
 from pyrogram import Client
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
@@ -8,13 +9,17 @@ async def invite_handler(client: Client, message: Message):
     user_id = message.from_user.id
     referral_link = f"https://t.me/{bot_username}?start=MVDEX-{user_id}"
     num_referrals = await get_referal_users_count(user_id)
-    
-    # Calculate progress
+
+    # Encode text for share URL
+    share_text = quote_plus("🎬 Join me on this amazing movie bot! Get premium access and search unlimited movies!")
+    share_url = f"https://t.me/share/url?url={referral_link}&text={share_text}"
+
+    # Progress bar
     progress_percentage = (num_referrals / REFERAL_COUNT) * 100
     progress_bar = "🟢" * int(progress_percentage // 10) + "⚪" * (10 - int(progress_percentage // 10))
-    
+
     buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📤 Share with Friends", url=f"https://t.me/share/url?url={referral_link}&text=🎬 Join me on this amazing movie bot! Get premium access and search unlimited movies!")],
+        [InlineKeyboardButton("📤 Share with Friends", url=share_url)],
         [InlineKeyboardButton("📋 Copy Link", callback_data=f"copy_link_{user_id}")],
         [InlineKeyboardButton("👥 My Referrals", callback_data=f"my_referrals_{user_id}")]
     ])
