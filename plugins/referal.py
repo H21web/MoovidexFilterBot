@@ -1,7 +1,8 @@
-from urllib.parse import quote_plus
-from database.users_chats_db import db, delete_all_referal_users, get_referal_users_count, get_referal_all_users, referal_add_user
+from urllib.parse import quote_plus 
+from database.users_chats_db import db, delete_all_referal_users, get_referal_users_count, get_referal_all_users, referal_add_user 
 from pyrogram import Client
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton 
+from info import REFERAL_COUNT, REFERAL_PREMEIUM_TIME
 
 async def invite_handler(client: Client, message: Message):
     bot_username = (await client.get_me()).username
