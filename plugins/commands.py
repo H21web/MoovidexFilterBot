@@ -181,7 +181,7 @@ async def start(client, message):
                     user_data = {"id": user_id, "expiry_time": expiry_time} 
                     await db.update_user(user_data)  # Use the update_user method to update or insert user data
                     await delete_all_referal_users(user_id)
-                    await client.send_message(chat_id = user_id, text = "<b>🎊 Congratulations!\n\nYou've unlocked Premium!\n\nYour referral goal is complete. Enjoy your benefits!</b>"))
+                    await client.send_message(chat_id = user_id, text = "<b>🎊 Congratulations!\n\nYou've unlocked Premium!\n\nYour referral goal is complete. Enjoy your benefits!</b>")
                     return
         else:
             if PREMIUM_AND_REFERAL_MODE == True:
@@ -1509,6 +1509,7 @@ Type the series name followed by season and episode.
 @Client.on_callback_query(filters.regex("close_help"))
 async def close_help_callback(client, callback_query):
     await callback_query.message.delete()
+
 
 
 
