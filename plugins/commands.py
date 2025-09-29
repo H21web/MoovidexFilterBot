@@ -288,12 +288,9 @@ async def start(client, message):
             await x.delete()
         await k.edit_text("<b>🗑 Your file is successfully deleted</b>")  
         return
+
+    
     elif data.split("-", 1)[0] == "refer":
-        if len(message.text.split()) > 1:
-        parameter = message.text.split(maxsplit=1)[1]
-        
-        # If parameter is "refer", trigger invite handler
-        if parameter == "refer":
             await invite_handler(client, message)
             return
             
@@ -1518,6 +1515,7 @@ Type the series name followed by season and episode.
 @Client.on_callback_query(filters.regex("close_help"))
 async def close_help_callback(client, callback_query):
     await callback_query.message.delete()
+
 
 
 
