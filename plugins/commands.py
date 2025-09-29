@@ -291,8 +291,8 @@ async def start(client, message):
 
     
     elif data.split("-", 1)[0] == "refer":
-            await invite_handler(client, message)
-            return
+        await invite_handler(client, message)
+        return
             
     elif data.split("_", 1)[0] == "Search":
         data = data.split("_", 1)[1]
@@ -1515,6 +1515,7 @@ Type the series name followed by season and episode.
 @Client.on_callback_query(filters.regex("close_help"))
 async def close_help_callback(client, callback_query):
     await callback_query.message.delete()
+
 
 
 
