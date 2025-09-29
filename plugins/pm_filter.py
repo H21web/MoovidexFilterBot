@@ -2625,11 +2625,9 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         user_id = msg.from_user.id
         message = msg.message
 
-    num_referrals = await get_referal_users_count(user_id)
-
     # ✅ Logic fix
     if REFERAL_PREMEIUM_TIME:  # Premium mode ON → referrals required
-        if num_referrals < REFERAL_COUNT:
+        if not await db.has_premium_access(user_id): 
             if not spoll:  # only send invite message for normal msg
                 await invite_handler(client, message)
             return
@@ -3402,6 +3400,7 @@ async def global_filters(client, message, text=False):
                 break
     else:
         return False
+
 
 
 
