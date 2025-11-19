@@ -238,7 +238,7 @@ def build_released_message(movie_data, bot_username):
     msg += f">\n"
     msg += f">__Plot:__\n"
     msg += f">{plot}**\n"
-    msg += f"**@MooviDex**"
+    msg += f" **@MooviDex** "
     
     return msg, image
 
