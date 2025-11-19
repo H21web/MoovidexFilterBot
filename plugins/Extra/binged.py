@@ -137,7 +137,7 @@ def build_released_message(movie_data, bot_username):
     msg = f"✅ **{title}** · {year} · `{movie_type}`\n\n"
     msg += f"**>🉑 {lang_tags}\n"
     msg += f">🎭 {genre_str} · 📺 {platform_str}\n"
-    msg += f">⏱️ {runtime} · 🔞 {censor}\n"
+    msg += f">⏱️ {runtime} · ®️ {censor}\n"
     msg += f">📅 {release_date}\n"
     msg += f">👥 {cast_str}\n"
     msg += f">\n"
