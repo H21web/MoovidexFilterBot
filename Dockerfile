@@ -1,12 +1,12 @@
-# Use Debian 12 (Bookworm) or Debian 11 (Bullseye)
-FROM python:3.9-bookworm
-# OR
-FROM python:3.9-bullseye
+FROM python:3.10.8-slim-buster
 
-# Install system dependencies including ffmpeg
-RUN apt update && apt upgrade -y && \
-    apt install -y git ffmpeg && \
-    apt clean
+RUN apt update && apt upgrade -y
+RUN apt install git -y
+COPY requirements.txt /requirements.txt
 
-
-
+RUN cd /
+RUN pip3 install -U pip && pip3 install -U -r requirements.txt
+RUN mkdir /VJ-FILTER-BOT
+WORKDIR /VJ-FILTER-BOT
+COPY . /VJ-FILTER-BOT
+CMD ["python", "bot.py"]
