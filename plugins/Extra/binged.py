@@ -14,6 +14,9 @@ ADMIN_IDS = [1011394081, 7191327005]
 SEARCH_URL = "https://www.binged.com/wp-json/binged-api/v1/movies"
 DETAIL_URL = "https://www.binged.com/wp-json/binged-api/v1/movie"
 
+# OTTPlay API for backdrop images
+OTTPLAY_API = "https://api2.ottplay.com/api/search-service/v1.1/universal-autocomplete"
+
 # Anti-403 Headers
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
@@ -92,6 +95,98 @@ def get_platform_name(platform_data):
         return "Disney+"
     else:
         return "OTT"
+
+# Fetch backdrop image from OTTPlay API
+def get_ottplay_backdrop(movie_title, release_year=None):
+    """
+    Fetch backdrop image from OTTPlay API based on movie title
+    Returns backdrop URL or None
+    """
+    try:
+        # Clean title for search query
+        search_query = clean_text(movie_title).lower()
+        
+        # Make API request
+        params = {
+            'query': search_query,
+            'limit': 12,
+            'is_parental': 'off',
+            'state': '1'
+        }
+        
+        response = requests.get(OTTPLAY_API, params=params, timeout=8)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("message") == "Success" and data.get("result"):
+            results = data["result"]
+            
+            # Filter for movies only
+            for item in results:
+                if item.get("content_type") == "movie":
+                    item_name = item.get("name", "").lower()
+                    item_year = item.get("release_year")
+                    
+                    # Match by title and optionally year
+                    title_match = search_query in item_name or item_name in search_query
+                    year_match = True if not release_year else (str(release_year) == str(item_year))
+                    
+                    if title_match and year_match:
+                        # Get backdrop image
+                        backdrops = item.get("backdrops", [])
+                        if backdrops and len(backdrops) > 0:
+                            backdrop_url = backdrops[0].get("url")
+                            if backdrop_url:
+                                return backdrop_url
+                        
+                        # Fallback to poster if no backdrop
+                        posters = item.get("posters", [])
+                        if posters and len(posters) > 0:
+                            return posters[0]
+                        
+                        # Fallback to imageurl
+                        imageurl = item.get("imageurl")
+                        if imageurl:
+                            return imageurl
+        
+        return None
+    except Exception as e:
+        print(f"OTTPlay API Error: {e}")
+        return None
+
+# Get similar movies with better logic
+def get_similar_movies(movie_data, count=3):
+    """
+    Get similar movies, ensuring they are different from the current movie
+    Returns list of similar movie titles
+    """
+    similar = movie_data.get("similar", [])
+    current_title = clean_text(movie_data.get("post_title", "")).lower()
+    current_id = str(movie_data.get("ID", ""))
+    
+    unique_similar = []
+    seen_titles = set()
+    
+    for sim in similar:
+        sim_title = clean_text(sim.get("title", ""))
+        sim_id = str(sim.get("id", ""))
+        sim_title_lower = sim_title.lower()
+        
+        # Skip if it's the same movie (by title or ID)
+        if sim_title_lower == current_title or sim_id == current_id:
+            continue
+        
+        # Skip if we've already added this title
+        if sim_title_lower in seen_titles:
+            continue
+        
+        seen_titles.add(sim_title_lower)
+        unique_similar.append(sim)
+        
+        if len(unique_similar) >= count:
+            break
+    
+    return unique_similar
 
 # Build message for released movie
 def build_released_message(movie_data, bot_username):
@@ -247,6 +342,10 @@ async def binged_detail(client, cq):
     else:
         msg, image = build_released_message(movie_data, temp.U_NAME)
     
+    # Try to get backdrop from OTTPlay API
+    backdrop_image = get_ottplay_backdrop(title, year)
+    final_image = backdrop_image if backdrop_image else image
+    
     # Build buttons based on movie status
     buttons = []
     
@@ -275,9 +374,10 @@ async def binged_detail(client, cq):
                 trailer_url = f"https://www.youtube.com/watch?v={video_url}"
                 second_row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
         
-        similar = movie_data.get("similar", [])
-        if similar and len(similar) > 0:
-            similar_title = clean_text(similar[0].get("title", ""))
+        # Get unique similar movies
+        similar_movies = get_similar_movies(movie_data, count=1)
+        if similar_movies:
+            similar_title = clean_text(similar_movies[0].get("title", ""))
             safe_similar = re.sub(r'[^a-zA-Z0-9]', '_', similar_title)
             second_row.append(InlineKeyboardButton(
                 "🔄 More like this", 
@@ -296,9 +396,9 @@ async def binged_detail(client, cq):
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
     
     # Send with image
-    if image:
+    if final_image:
         await cq.message.reply_photo(
-            photo=image,
+            photo=final_image,
             caption=msg,
             reply_markup=InlineKeyboardMarkup(buttons)
         )
@@ -331,6 +431,10 @@ async def binged_post(client, cq):
     else:
         msg, image = build_released_message(movie_data, temp.U_NAME)
     
+    # Try to get backdrop from OTTPlay API
+    backdrop_image = get_ottplay_backdrop(title, year)
+    final_image = backdrop_image if backdrop_image else image
+    
     # Build buttons based on movie status
     buttons = []
     
@@ -357,9 +461,10 @@ async def binged_post(client, cq):
                 trailer_url = f"https://www.youtube.com/watch?v={video_url}"
                 second_row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
         
-        similar = movie_data.get("similar", [])
-        if similar and len(similar) > 0:
-            similar_title = clean_text(similar[0].get("title", ""))
+        # Get unique similar movies
+        similar_movies = get_similar_movies(movie_data, count=1)
+        if similar_movies:
+            similar_title = clean_text(similar_movies[0].get("title", ""))
             safe_similar = re.sub(r'[^a-zA-Z0-9]', '_', similar_title)
             second_row.append(InlineKeyboardButton(
                 "🔄 More like this", 
@@ -370,10 +475,10 @@ async def binged_post(client, cq):
             buttons.append(second_row)
     
     # Send to channel
-    if image:
+    if final_image:
         await client.send_photo(
             chat_id=-1001680629032,
-            photo=image,
+            photo=final_image,
             caption=msg,
             reply_markup=InlineKeyboardMarkup(buttons)
         )
@@ -420,6 +525,10 @@ async def receive_custom_search(client, message):
     else:
         msg, image = build_released_message(movie_data, temp.U_NAME)
 
+    # Try to get backdrop from OTTPlay API
+    backdrop_image = get_ottplay_backdrop(title, year)
+    final_image = backdrop_image if backdrop_image else image
+
     # Build buttons based on movie status
     buttons = []
     
@@ -450,9 +559,10 @@ async def receive_custom_search(client, message):
                 trailer_url = f"https://www.youtube.com/watch?v={video_url}"
                 second_row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
         
-        similar = movie_data.get("similar", [])
-        if similar and len(similar) > 0:
-            similar_title = clean_text(similar[0].get("title", ""))
+        # Get unique similar movies
+        similar_movies = get_similar_movies(movie_data, count=1)
+        if similar_movies:
+            similar_title = clean_text(similar_movies[0].get("title", ""))
             safe_similar = re.sub(r'[^a-zA-Z0-9]', '_', similar_title)
             second_row.append(InlineKeyboardButton(
                 "🔄 More like this", 
@@ -463,10 +573,10 @@ async def receive_custom_search(client, message):
             buttons.append(second_row)
 
     # Send to channel
-    if image:
+    if final_image:
         await client.send_photo(
             chat_id=-1001680629032,
-            photo=image,
+            photo=final_image,
             caption=msg,
             reply_markup=InlineKeyboardMarkup(buttons)
         )
