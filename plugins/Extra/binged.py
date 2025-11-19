@@ -70,6 +70,8 @@ def get_platform_name(platform_data):
         return "Netflix"
     elif "zee5" in ref_url or "zee5" in logo_url:
         return "Zee5"
+    elif "sunnxt" in ref_url or "sunnxt" in logo_url:
+        return "SunNXT"
     elif "sonyliv" in ref_url or "sonyliv" in logo_url:
         return "SonyLIV"
     elif "jiocinema" in ref_url or "jiocinema" in logo_url:
@@ -132,14 +134,15 @@ def build_released_message(movie_data, bot_username):
     plot = clean_text(movie_data.get("post_content", "No description available."))
     
     # Message construction with collapsible blockquote
-    msg = f"**{title}** · {year} · `{movie_type}`\n\n"
-    msg += f"**>🉑 {lang_tags}\n"
+    msg = f"✅ **{title}** · {year} · `{movie_type}`\n\n"
+    msg += f">🉑 {lang_tags}\n"
     msg += f">🎭 {genre_str} · 📺 {platform_str}\n"
-    msg += f">⏱️ {runtime} · 📅 {release_date} · 🔞 {censor}\n"
+    msg += f">⏱️ {runtime} · 🔞 {censor}\n"
+    msg += f">📅 {release_date}\n"
     msg += f">👥 {cast_str}\n"
     msg += f">\n"
     msg += f">__Plot:__\n"
-    msg += f">{plot}**\n\n"
+    msg += f">{plot}\n"
     msg += f"**@MooviDex**"
     
     return msg, image
@@ -166,15 +169,11 @@ def build_upcoming_message(movie_data, bot_username):
     plot = clean_text(movie_data.get("post_content", "No description available."))
     
     # Distinct upcoming format with collapsible blockquote
-    msg = f"**{title}** · {year} · `{movie_type}`\n\n"
-    msg += f"**>🚀 COMING SOON\n"
-    msg += f">\n"
-    msg += f">🗓️ Releases: {release_date}\n"
-    msg += f">🉑 {lang_str}\n"
-    msg += f">🎭 {genre_str}\n"
-    msg += f">\n"
-    msg += f">__Synopsis:__\n"
-    msg += f">{plot}**\n\n"
+    msg = f"🔔 **{title}** · {year} · `{movie_type}`\n\n"
+    msg += f">**🚀 COMING SOON**\n"
+    msg += f"🗓️ Releases : {release_date}\n"
+    msg += f"🉑 {lang_str}\n"
+    msg += f"🎭 {genre_str}\n\n"
     msg += f"**@MooviDex**"
     
     return msg, image
