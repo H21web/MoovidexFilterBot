@@ -1,20 +1,23 @@
-FROM python:3.10.8-slim-buster
+# Use a more recent Python base image
+FROM python:3.10-slim-bullseye
 
 # Install system dependencies including ffmpeg
-RUN apt update && apt upgrade -y && \
-    apt install -y git ffmpeg && \
-    apt clean
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y git ffmpeg && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt /requirements.txt
-RUN pip3 install -U pip && pip3 install -U -r /requirements.txt
+# Set working directory
+WORKDIR /app
 
-# Create app directory and set it as working dir
-RUN mkdir /VJ-FILTER-BOT
-WORKDIR /VJ-FILTER-BOT
+# Copy requirements first for better caching
+COPY requirements.txt .
 
-# Copy all project files
-COPY . /VJ-FILTER-BOT
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Run the bot
+# Copy application files
+COPY . .
+
+# Command to run the application
 CMD ["python", "bot.py"]
