@@ -55,6 +55,42 @@ def is_upcoming(release_unix):
     except:
         return False
 
+# Extract platform name from URL or logo
+def get_platform_name(platform_data):
+    """Extract proper platform name from platform data"""
+    ref_url = platform_data.get("ref_url", "").lower()
+    logo_url = platform_data.get("logo_url", "").lower()
+    
+    # Check ref_url and logo_url for platform identification
+    if "hotstar" in ref_url or "hotstar" in logo_url:
+        return "Hotstar"
+    elif "primevideo" in ref_url or "prime" in ref_url or "primevideo" in logo_url or "prime" in logo_url:
+        return "Prime Video"
+    elif "netflix" in ref_url or "netflix" in logo_url:
+        return "Netflix"
+    elif "zee5" in ref_url or "zee5" in logo_url:
+        return "Zee5"
+    elif "sonyliv" in ref_url or "sonyliv" in logo_url:
+        return "SonyLIV"
+    elif "jiocinema" in ref_url or "jiocinema" in logo_url:
+        return "JioCinema"
+    elif "voot" in ref_url or "voot" in logo_url:
+        return "Voot"
+    elif "mxplayer" in ref_url or "mxplayer" in logo_url:
+        return "MX Player"
+    elif "aha" in ref_url or "aha" in logo_url:
+        return "Aha"
+    elif "apple" in ref_url or "appletv" in logo_url:
+        return "Apple TV+"
+    elif "hulu" in ref_url or "hulu" in logo_url:
+        return "Hulu"
+    elif "hbo" in ref_url or "hbo" in logo_url:
+        return "HBO Max"
+    elif "disney" in ref_url or "disney" in logo_url:
+        return "Disney+"
+    else:
+        return "OTT"
+
 # Build message for released movie
 def build_released_message(movie_data, bot_username):
     title = clean_text(movie_data.get("post_title", "Unknown"))
@@ -70,22 +106,15 @@ def build_released_message(movie_data, bot_username):
     genres = movie_data.get("genre", [])
     genre_str = ", ".join(genres) if genres else "N/A"
     
-    # Platform with hyperlink
+    # Platform - ONLY FIRST streaming platform
     platforms = movie_data.get("platform_logos", [])
-    platform_links = []
+    platform_str = "N/A"
     for p in platforms:
         if p.get("rent_and_buy") == "0":  # Only streaming platforms
             ref_url = p.get("ref_url", "")
-            # Extract platform name from logo URL or use generic name
-            platform_name = "Stream"
-            if "hotstar" in p.get("logo_url", "").lower():
-                platform_name = "Hotstar"
-            elif "primevideo" in p.get("logo_url", "").lower() or "prime" in ref_url.lower():
-                platform_name = "Prime Video"
-            elif "netflix" in p.get("logo_url", "").lower():
-                platform_name = "Netflix"
-            platform_links.append(f"[{platform_name}]({ref_url})")
-    platform_str = " · ".join(platform_links) if platform_links else "N/A"
+            platform_name = get_platform_name(p)
+            platform_str = f"[{platform_name}]({ref_url})"
+            break  # Take only the first platform
     
     # Runtime, Release Date, Censor
     runtime = movie_data.get("run_time", movie_data.get("duration", "N/A"))
@@ -102,13 +131,15 @@ def build_released_message(movie_data, bot_username):
     # Plot
     plot = clean_text(movie_data.get("post_content", "No description available."))
     
-    # Message construction
+    # Message construction with collapsible blockquote
     msg = f"**{title}** · {year} · `{movie_type}`\n\n"
-    msg += f"**>||🉑 {lang_tags}\n"
-    msg += f"🎭 {genre_str} · 📺 {platform_str}\n"
-    msg += f"⏱️ {runtime} · 📅 {release_date} · 🔞 {censor}\n"
-    msg += f"👥 {cast_str}\n\n"
-    msg += f"__Plot:__\n{plot}||**\n\n"
+    msg += f"**>🉑 {lang_tags}\n"
+    msg += f">🎭 {genre_str} · 📺 {platform_str}\n"
+    msg += f">⏱️ {runtime} · 📅 {release_date} · 🔞 {censor}\n"
+    msg += f">👥 {cast_str}\n"
+    msg += f">\n"
+    msg += f">__Plot:__\n"
+    msg += f">{plot}**\n\n"
     msg += f"**@MooviDex**"
     
     return msg, image
@@ -134,14 +165,16 @@ def build_upcoming_message(movie_data, bot_username):
     # Plot
     plot = clean_text(movie_data.get("post_content", "No description available."))
     
-    # Minimal upcoming message
-    msg = f"🎬 **UPCOMING**\n\n"
-    msg += f"**{title}**\n"
-    msg += f"`{year} · {movie_type}`\n\n"
-    msg += f"🗓️ **Releases:** {release_date}\n"
-    msg += f"🉑 {lang_str}\n"
-    msg += f"🎭 {genre_str}\n\n"
-    msg += f"__Synopsis:__\n{plot[:200]}{'...' if len(plot) > 200 else ''}\n\n"
+    # Distinct upcoming format with collapsible blockquote
+    msg = f"**{title}** · {year} · `{movie_type}`\n\n"
+    msg += f"**>🚀 COMING SOON\n"
+    msg += f">\n"
+    msg += f">🗓️ Releases: {release_date}\n"
+    msg += f">🉑 {lang_str}\n"
+    msg += f">🎭 {genre_str}\n"
+    msg += f">\n"
+    msg += f">__Synopsis:__\n"
+    msg += f">{plot}**\n\n"
     msg += f"**@MooviDex**"
     
     return msg, image
@@ -215,35 +248,45 @@ async def binged_detail(client, cq):
     else:
         msg, image = build_released_message(movie_data, temp.U_NAME)
     
-    # Build buttons
+    # Build buttons based on movie status
     buttons = []
     
-    # First row: Movie name · Year button
-    buttons.append([InlineKeyboardButton(
-        f"{title} · {year}", 
-        url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
-    )])
-    
-    # Second row: Trailer and More like this
-    second_row = []
-    videos = movie_data.get("videos", [])
-    if videos and len(videos) > 0:
-        video_url = videos[0].get("url", "")
-        if video_url:
-            trailer_url = f"https://www.youtube.com/watch?v={video_url}"
-            second_row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
-    
-    similar = movie_data.get("similar", [])
-    if similar and len(similar) > 0:
-        similar_title = clean_text(similar[0].get("title", ""))
-        safe_similar = re.sub(r'[^a-zA-Z0-9]', '_', similar_title)
-        second_row.append(InlineKeyboardButton(
-            "🔄 More like this", 
-            url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
-        ))
-    
-    if second_row:
-        buttons.append(second_row)
+    if upcoming:
+        # For upcoming: Only trailer button (no search, no more like this)
+        videos = movie_data.get("videos", [])
+        if videos and len(videos) > 0:
+            video_url = videos[0].get("url", "")
+            if video_url:
+                trailer_url = f"https://www.youtube.com/watch?v={video_url}"
+                buttons.append([InlineKeyboardButton("🎬 Trailer", url=trailer_url)])
+    else:
+        # For released: All buttons
+        # First row: Movie name · Year button
+        buttons.append([InlineKeyboardButton(
+            f"{title} · {year}", 
+            url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
+        )])
+        
+        # Second row: Trailer and More like this
+        second_row = []
+        videos = movie_data.get("videos", [])
+        if videos and len(videos) > 0:
+            video_url = videos[0].get("url", "")
+            if video_url:
+                trailer_url = f"https://www.youtube.com/watch?v={video_url}"
+                second_row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
+        
+        similar = movie_data.get("similar", [])
+        if similar and len(similar) > 0:
+            similar_title = clean_text(similar[0].get("title", ""))
+            safe_similar = re.sub(r'[^a-zA-Z0-9]', '_', similar_title)
+            second_row.append(InlineKeyboardButton(
+                "🔄 More like this", 
+                url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
+            ))
+        
+        if second_row:
+            buttons.append(second_row)
     
     # Admin buttons
     if user_id in ADMIN_IDS:
@@ -289,32 +332,43 @@ async def binged_post(client, cq):
     else:
         msg, image = build_released_message(movie_data, temp.U_NAME)
     
-    # Build buttons
+    # Build buttons based on movie status
     buttons = []
-    buttons.append([InlineKeyboardButton(
-        f"{title} · {year}", 
-        url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
-    )])
     
-    second_row = []
-    videos = movie_data.get("videos", [])
-    if videos and len(videos) > 0:
-        video_url = videos[0].get("url", "")
-        if video_url:
-            trailer_url = f"https://www.youtube.com/watch?v={video_url}"
-            second_row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
-    
-    similar = movie_data.get("similar", [])
-    if similar and len(similar) > 0:
-        similar_title = clean_text(similar[0].get("title", ""))
-        safe_similar = re.sub(r'[^a-zA-Z0-9]', '_', similar_title)
-        second_row.append(InlineKeyboardButton(
-            "🔄 More like this", 
-            url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
-        ))
-    
-    if second_row:
-        buttons.append(second_row)
+    if upcoming:
+        # For upcoming: Only trailer
+        videos = movie_data.get("videos", [])
+        if videos and len(videos) > 0:
+            video_url = videos[0].get("url", "")
+            if video_url:
+                trailer_url = f"https://www.youtube.com/watch?v={video_url}"
+                buttons.append([InlineKeyboardButton("🎬 Trailer", url=trailer_url)])
+    else:
+        # For released: All buttons
+        buttons.append([InlineKeyboardButton(
+            f"{title} · {year}", 
+            url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
+        )])
+        
+        second_row = []
+        videos = movie_data.get("videos", [])
+        if videos and len(videos) > 0:
+            video_url = videos[0].get("url", "")
+            if video_url:
+                trailer_url = f"https://www.youtube.com/watch?v={video_url}"
+                second_row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
+        
+        similar = movie_data.get("similar", [])
+        if similar and len(similar) > 0:
+            similar_title = clean_text(similar[0].get("title", ""))
+            safe_similar = re.sub(r'[^a-zA-Z0-9]', '_', similar_title)
+            second_row.append(InlineKeyboardButton(
+                "🔄 More like this", 
+                url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
+            ))
+        
+        if second_row:
+            buttons.append(second_row)
     
     # Send to channel
     if image:
@@ -367,36 +421,47 @@ async def receive_custom_search(client, message):
     else:
         msg, image = build_released_message(movie_data, temp.U_NAME)
 
-    # Decide URL for first button
-    if custom_input.startswith("http://") or custom_input.startswith("https://"):
-        button_url = custom_input
-    else:
-        keyword = re.sub(r'[^a-zA-Z0-9]', '_', custom_input)
-        button_url = f"https://t.me/{temp.U_NAME}?start=Search_{keyword}"
-
-    # Build buttons
+    # Build buttons based on movie status
     buttons = []
-    buttons.append([InlineKeyboardButton(f"{title} · {year}", url=button_url)])
     
-    second_row = []
-    videos = movie_data.get("videos", [])
-    if videos and len(videos) > 0:
-        video_url = videos[0].get("url", "")
-        if video_url:
-            trailer_url = f"https://www.youtube.com/watch?v={video_url}"
-            second_row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
-    
-    similar = movie_data.get("similar", [])
-    if similar and len(similar) > 0:
-        similar_title = clean_text(similar[0].get("title", ""))
-        safe_similar = re.sub(r'[^a-zA-Z0-9]', '_', similar_title)
-        second_row.append(InlineKeyboardButton(
-            "🔄 More like this", 
-            url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
-        ))
-    
-    if second_row:
-        buttons.append(second_row)
+    if upcoming:
+        # For upcoming: Only trailer
+        videos = movie_data.get("videos", [])
+        if videos and len(videos) > 0:
+            video_url = videos[0].get("url", "")
+            if video_url:
+                trailer_url = f"https://www.youtube.com/watch?v={video_url}"
+                buttons.append([InlineKeyboardButton("🎬 Trailer", url=trailer_url)])
+    else:
+        # For released: Custom button + trailer + more like this
+        # Decide URL for first button
+        if custom_input.startswith("http://") or custom_input.startswith("https://"):
+            button_url = custom_input
+        else:
+            keyword = re.sub(r'[^a-zA-Z0-9]', '_', custom_input)
+            button_url = f"https://t.me/{temp.U_NAME}?start=Search_{keyword}"
+
+        buttons.append([InlineKeyboardButton(f"{title} · {year}", url=button_url)])
+        
+        second_row = []
+        videos = movie_data.get("videos", [])
+        if videos and len(videos) > 0:
+            video_url = videos[0].get("url", "")
+            if video_url:
+                trailer_url = f"https://www.youtube.com/watch?v={video_url}"
+                second_row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
+        
+        similar = movie_data.get("similar", [])
+        if similar and len(similar) > 0:
+            similar_title = clean_text(similar[0].get("title", ""))
+            safe_similar = re.sub(r'[^a-zA-Z0-9]', '_', similar_title)
+            second_row.append(InlineKeyboardButton(
+                "🔄 More like this", 
+                url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
+            ))
+        
+        if second_row:
+            buttons.append(second_row)
 
     # Send to channel
     if image:
