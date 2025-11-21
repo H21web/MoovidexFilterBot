@@ -141,13 +141,18 @@ def get_imdbpy_details(title, imdb_id=None):
     """
     Fetch movie details from IMDb using IMDbPY (Cinemagoer)
     Returns dictionary with movie details or None
+    Note: IMDb IDs should be passed WITHOUT the 'tt' prefix
     """
     if not IMDBPY_AVAILABLE:
         return None
     
     try:
         if imdb_id:
-            # If we have IMDb ID, use it directly
+            # Strip 'tt' prefix if present
+            if imdb_id.startswith('tt'):
+                imdb_id = imdb_id[2:]
+            
+            # Use IMDb ID directly (without 'tt' prefix)
             movie = ia.get_movie(imdb_id)
         else:
             # Search by title
