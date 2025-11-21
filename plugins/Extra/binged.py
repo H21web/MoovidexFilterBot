@@ -10,12 +10,16 @@ from info import *
 # List of Admin IDs
 ADMIN_IDS = [1011394081, 7191327005]
 
-# Search API
+# Search APIs
 SEARCH_URL = "https://www.binged.com/wp-json/binged-api/v1/movies"
 DETAIL_URL = "https://www.binged.com/wp-json/binged-api/v1/movie"
 
-# OTTPlay API for backdrop images
-OTTPLAY_API = "https://api2.ottplay.com/api/search-service/v1.1/universal-autocomplete"
+# JustWatch API for backdrop images
+JUSTWATCH_API = "https://imdb.iamidiotareyoutoo.com/justwatch"
+
+# IMDB API
+IMDB_SEARCH_API = "https://imdb.iamidiotareyoutoo.com/search"
+IMDB_DETAIL_API = "https://imdb.iamidiotareyoutoo.com/justwatch"
 
 # Anti-403 Headers
 HEADERS = {
@@ -27,7 +31,9 @@ HEADERS = {
 
 # Temporary Data Stores
 temp.BINGED_RESULTS = {}   # user_id -> {movie_id: movie_data}
-temp.EDITING_POST = {}     # admin_id -> movie_id
+temp.IMDB_RESULTS = {}     # user_id -> {movie_id: movie_data}
+temp.EDITING_POST = {}     # admin_id -> {movie_id, source}
+temp.MOVIE_STATUS = {}     # movie_id -> 'upcoming' or 'released'
 
 # Clean HTML entities and unicode
 def clean_text(text):
@@ -49,14 +55,6 @@ def unix_to_date(unix_ts):
         return datetime.fromtimestamp(int(unix_ts)).strftime("%d-%m-%Y")
     except:
         return "N/A"
-
-# Check if movie is upcoming (release date in future)
-def is_upcoming(release_unix):
-    try:
-        release_date = datetime.fromtimestamp(int(release_unix))
-        return release_date > datetime.now()
-    except:
-        return False
 
 # Extract platform name from URL or logo
 def get_platform_name(platform_data):
@@ -96,62 +94,29 @@ def get_platform_name(platform_data):
     else:
         return "OTT"
 
-# Fetch backdrop image from OTTPlay API
-def get_ottplay_backdrop(movie_title, release_year=None):
+# Fetch backdrop image from JustWatch API
+def get_justwatch_backdrop(movie_title):
     """
-    Fetch backdrop image from OTTPlay API based on movie title
+    Fetch backdrop image from JustWatch API based on movie title
     Returns backdrop URL or None
     """
     try:
-        # Clean title for search query
-        search_query = clean_text(movie_title).lower()
-        
-        # Make API request
-        params = {
-            'query': search_query,
-            'limit': 12,
-            'is_parental': 'off',
-            'state': '1'
-        }
-        
-        response = requests.get(OTTPLAY_API, params=params, timeout=8)
+        params = {'q': movie_title}
+        response = requests.get(JUSTWATCH_API, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
         
-        if data.get("message") == "Success" and data.get("result"):
-            results = data["result"]
-            
-            # Filter for movies only
-            for item in results:
-                if item.get("content_type") == "movie":
-                    item_name = item.get("name", "").lower()
-                    item_year = item.get("release_year")
-                    
-                    # Match by title and optionally year
-                    title_match = search_query in item_name or item_name in search_query
-                    year_match = True if not release_year else (str(release_year) == str(item_year))
-                    
-                    if title_match and year_match:
-                        # Get backdrop image
-                        backdrops = item.get("backdrops", [])
-                        if backdrops and len(backdrops) > 0:
-                            backdrop_url = backdrops[0].get("url")
-                            if backdrop_url:
-                                return backdrop_url
-                        
-                        # Fallback to poster if no backdrop
-                        posters = item.get("posters", [])
-                        if posters and len(posters) > 0:
-                            return posters[0]
-                        
-                        # Fallback to imageurl
-                        imageurl = item.get("imageurl")
-                        if imageurl:
-                            return imageurl
+        # Check if we have description with image
+        if data.get("short"):
+            description = data["short"]
+            if description.get("image"):
+                backdrop_url = description["image"].get("url")
+                if backdrop_url:
+                    return backdrop_url
         
         return None
     except Exception as e:
-        print(f"OTTPlay API Error: {e}")
+        print(f"JustWatch API Error: {e}")
         return None
 
 # Get similar movies with better logic
@@ -189,89 +154,158 @@ def get_similar_movies(movie_data, count=3):
     return unique_similar
 
 # Build message for released movie
-def build_released_message(movie_data, bot_username):
-    title = clean_text(movie_data.get("post_title", "Unknown"))
-    year = movie_data.get("release_year", "N/A")
-    movie_type = movie_data.get("category", "N/A")
-    image = movie_data.get("image", "")
+def build_released_message(movie_data, bot_username, source='binged'):
+    if source == 'imdb':
+        title = clean_text(movie_data.get("title", "Unknown"))
+        year = movie_data.get("year", "N/A")
+        movie_type = movie_data.get("type", "Movie").capitalize()
+        
+        # Languages with hashtags
+        lang_tags = "#English"  # Default for IMDB
+        
+        # Genres
+        genres = movie_data.get("genres", [])
+        genre_str = ", ".join(genres) if genres else "N/A"
+        
+        # Platform
+        platform_str = "N/A"
+        
+        # Runtime, Rating
+        runtime = movie_data.get("runtime", "N/A")
+        if runtime and runtime != "N/A":
+            runtime = f"{runtime}m"
+        rating = movie_data.get("rating", "N/A")
+        
+        # Cast
+        cast = movie_data.get("cast", [])
+        cast_str = ", ".join(cast[:5]) if cast else "N/A"
+        
+        # Plot
+        plot = clean_text(movie_data.get("description", "No description available."))
+        
+        # Message construction with collapsible blockquote
+        msg = f"✅ **{title}** · {year} · `{movie_type}`\n\n"
+        msg += f"**>🉑 {lang_tags}\n"
+        msg += f">🎭 {genre_str} · 📺 {platform_str}\n"
+        msg += f">⏱️ {runtime} · ⭐ {rating}\n"
+        msg += f">👥 {cast_str}\n"
+        msg += f">\n"
+        msg += f">__Plot:__\n"
+        msg += f">{plot}**\n"
+        msg += f" **@MooviDex** "
+        
+        image = movie_data.get("image", "")
+        return msg, image
     
-    # Languages with hashtags
-    langs = movie_data.get("lang", [])
-    lang_tags = " ".join([f"#{lang.strip().replace(' ', '')}" for lang in langs]) if langs else "#Unknown"
-    
-    # Genres
-    genres = movie_data.get("genre", [])
-    genre_str = ", ".join(genres) if genres else "N/A"
-    
-    # Platform - ONLY FIRST streaming platform
-    platforms = movie_data.get("platform_logos", [])
-    platform_str = "N/A"
-    for p in platforms:
-        if p.get("rent_and_buy") == "0":  # Only streaming platforms
-            ref_url = p.get("ref_url", "")
-            platform_name = get_platform_name(p)
-            platform_str = f"[{platform_name}]({ref_url})"
-            break  # Take only the first platform
-    
-    # Runtime, Release Date, Censor
-    runtime = movie_data.get("run_time", movie_data.get("duration", "N/A"))
-    if runtime != "N/A" and not runtime.endswith("m"):
-        runtime = f"{runtime}m"
-    release_date = unix_to_date(movie_data.get("release_date"))
-    censor = movie_data.get("censor", "NR")
-    
-    # Cast
-    actors = movie_data.get("actors", [])
-    cast_names = [actor[1] for actor in actors[:5] if len(actor) > 1]  # Top 5 cast
-    cast_str = ", ".join(cast_names) if cast_names else "N/A"
-    
-    # Plot
-    plot = clean_text(movie_data.get("post_content", "No description available."))
-    
-    # Message construction with collapsible blockquote
-    msg = f"✅ **{title}** · {year} · `{movie_type}`\n\n"
-    msg += f"**>🉑 {lang_tags}\n"
-    msg += f">🎭 {genre_str} · 📺 {platform_str}\n"
-    msg += f">⏱️ {runtime} · ®️ {censor}\n"
-    msg += f">📅 {release_date}\n"
-    msg += f">👥 {cast_str}\n"
-    msg += f">\n"
-    msg += f">__Plot:__\n"
-    msg += f">{plot}**\n"
-    msg += f" **@MooviDex** "
-    
-    return msg, image
+    else:  # binged
+        title = clean_text(movie_data.get("post_title", "Unknown"))
+        year = movie_data.get("release_year", "N/A")
+        movie_type = movie_data.get("category", "N/A")
+        image = movie_data.get("image", "")
+        
+        # Languages with hashtags
+        langs = movie_data.get("lang", [])
+        lang_tags = " ".join([f"#{lang.strip().replace(' ', '')}" for lang in langs]) if langs else "#Unknown"
+        
+        # Genres
+        genres = movie_data.get("genre", [])
+        genre_str = ", ".join(genres) if genres else "N/A"
+        
+        # Platform - ONLY FIRST streaming platform
+        platforms = movie_data.get("platform_logos", [])
+        platform_str = "N/A"
+        for p in platforms:
+            if p.get("rent_and_buy") == "0":  # Only streaming platforms
+                ref_url = p.get("ref_url", "")
+                platform_name = get_platform_name(p)
+                platform_str = f"[{platform_name}]({ref_url})"
+                break  # Take only the first platform
+        
+        # Runtime, Release Date, Censor
+        runtime = movie_data.get("run_time", movie_data.get("duration", "N/A"))
+        if runtime != "N/A" and not runtime.endswith("m"):
+            runtime = f"{runtime}m"
+        release_date = unix_to_date(movie_data.get("release_date"))
+        censor = movie_data.get("censor", "NR")
+        
+        # Cast
+        actors = movie_data.get("actors", [])
+        cast_names = [actor[1] for actor in actors[:5] if len(actor) > 1]  # Top 5 cast
+        cast_str = ", ".join(cast_names) if cast_names else "N/A"
+        
+        # Plot
+        plot = clean_text(movie_data.get("post_content", "No description available."))
+        
+        # Message construction with collapsible blockquote
+        msg = f"✅ **{title}** · {year} · `{movie_type}`\n\n"
+        msg += f"**>🉑 {lang_tags}\n"
+        msg += f">🎭 {genre_str} · 📺 {platform_str}\n"
+        msg += f">⏱️ {runtime} · ®️ {censor}\n"
+        msg += f">📅 {release_date}\n"
+        msg += f">👥 {cast_str}\n"
+        msg += f">\n"
+        msg += f">__Plot:__\n"
+        msg += f">{plot}**\n"
+        msg += f" **@MooviDex** "
+        
+        return msg, image
 
 # Build message for upcoming movie
-def build_upcoming_message(movie_data, bot_username):
-    title = clean_text(movie_data.get("post_title", "Unknown"))
-    year = movie_data.get("release_year", "N/A")
-    movie_type = movie_data.get("category", "N/A")
-    image = movie_data.get("image", "")
+def build_upcoming_message(movie_data, bot_username, source='binged'):
+    if source == 'imdb':
+        title = clean_text(movie_data.get("title", "Unknown"))
+        year = movie_data.get("year", "N/A")
+        movie_type = movie_data.get("type", "Movie").capitalize()
+        
+        # Languages
+        lang_str = "English"  # Default for IMDB
+        
+        # Genres
+        genres = movie_data.get("genres", [])
+        genre_str = ", ".join(genres) if genres else "N/A"
+        
+        # Plot
+        plot = clean_text(movie_data.get("description", "No description available."))
+        
+        # Distinct upcoming format with collapsible blockquote
+        msg = f"🔔 **{title}** · {year} · `{movie_type}`\n\n"
+        msg += f">**🚀 COMING SOON**\n"
+        msg += f"🉑 {lang_str}\n"
+        msg += f"🎭 {genre_str}\n\n"
+        msg += f"**@MooviDex**"
+        
+        image = movie_data.get("image", "")
+        return msg, image
     
-    # Languages
-    langs = movie_data.get("lang", [])
-    lang_str = ", ".join(langs) if langs else "Unknown"
-    
-    # Release Date
-    release_date = unix_to_date(movie_data.get("release_date"))
-    
-    # Genres
-    genres = movie_data.get("genre", [])
-    genre_str = ", ".join(genres) if genres else "N/A"
-    
-    # Plot
-    plot = clean_text(movie_data.get("post_content", "No description available."))
-    
-    # Distinct upcoming format with collapsible blockquote
-    msg = f"🔔 **{title}** · {year} · `{movie_type}`\n\n"
-    msg += f">**🚀 COMING SOON**\n"
-    msg += f"🗓️ Releases : {release_date}\n"
-    msg += f"🉑 {lang_str}\n"
-    msg += f"🎭 {genre_str}\n\n"
-    msg += f"**@MooviDex**"
-    
-    return msg, image
+    else:  # binged
+        title = clean_text(movie_data.get("post_title", "Unknown"))
+        year = movie_data.get("release_year", "N/A")
+        movie_type = movie_data.get("category", "N/A")
+        image = movie_data.get("image", "")
+        
+        # Languages
+        langs = movie_data.get("lang", [])
+        lang_str = ", ".join(langs) if langs else "Unknown"
+        
+        # Release Date
+        release_date = unix_to_date(movie_data.get("release_date"))
+        
+        # Genres
+        genres = movie_data.get("genre", [])
+        genre_str = ", ".join(genres) if genres else "N/A"
+        
+        # Plot
+        plot = clean_text(movie_data.get("post_content", "No description available."))
+        
+        # Distinct upcoming format with collapsible blockquote
+        msg = f"🔔 **{title}** · {year} · `{movie_type}`\n\n"
+        msg += f">**🚀 COMING SOON**\n"
+        msg += f"🗓️ Releases : {release_date}\n"
+        msg += f"🉑 {lang_str}\n"
+        msg += f"🎭 {genre_str}\n\n"
+        msg += f"**@MooviDex**"
+        
+        return msg, image
 
 # /binged command
 @Client.on_message(filters.command("binged"))
@@ -309,7 +343,204 @@ async def binged_search(client, message):
         disable_web_page_preview=True
     )
 
-# Show movie detail
+# /imdbpost command
+@Client.on_message(filters.command("imdbpost"))
+async def imdb_search(client, message):
+    if message.from_user.id not in ADMIN_IDS:
+        return await message.reply_text("🚫 This command is for admins only.")
+    if len(message.command) < 2:
+        return await message.reply_text("Usage: /imdbpost <movie name>")
+
+    query = " ".join(message.command[1:]).strip()
+
+    try:
+        resp = requests.get(f"{IMDB_SEARCH_API}?query={query}", timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.RequestException as e:
+        return await message.reply_text(f"IMDB API error: {e}")
+
+    results = data.get("description", [])
+    if not results:
+        return await message.reply_text("No results found.")
+
+    temp.IMDB_RESULTS[message.from_user.id] = {}
+    buttons = []
+    
+    for idx, movie in enumerate(results[:10]):  # Limit to 10 results
+        movie_id = movie.get("#IMDB_ID", str(idx))
+        title = movie.get("#TITLE", "Unknown")
+        year = movie.get("#YEAR", "N/A")
+        btn_text = f"{title} ({year})"
+        temp.IMDB_RESULTS[message.from_user.id][movie_id] = movie
+        buttons.append([InlineKeyboardButton(btn_text, callback_data=f"imdb_detail_{movie_id}")])
+    
+    buttons.append([InlineKeyboardButton("Close ❌", callback_data="close_message")])
+    await message.reply_text(
+        f"IMDB Search results for: <b>{query}</b>",
+        reply_markup=InlineKeyboardMarkup(buttons),
+        disable_web_page_preview=True
+    )
+
+# Show IMDB movie detail
+@Client.on_callback_query(filters.regex(r"^imdb_detail_(.+)$"))
+async def imdb_detail(client, cq):
+    movie_id = cq.data.replace("imdb_detail_", "")
+    user_id = cq.from_user.id
+    
+    # Get basic movie data from search results
+    basic_data = temp.IMDB_RESULTS.get(user_id, {}).get(movie_id)
+    if not basic_data:
+        return await cq.answer("Movie data not found.", show_alert=True)
+    
+    title = basic_data.get("#TITLE", "Unknown")
+    
+    # Fetch detailed data from JustWatch API
+    try:
+        resp = requests.get(f"{JUSTWATCH_API}?q={title}", timeout=10)
+        resp.raise_for_status()
+        justwatch_data = resp.json()
+    except:
+        justwatch_data = {}
+    
+    # Merge data
+    movie_data = {
+        "title": title,
+        "year": basic_data.get("#YEAR", "N/A"),
+        "type": basic_data.get("#IMG_POSTER", "").split("/")[-2] if "#IMG_POSTER" in basic_data else "Movie",
+        "image": basic_data.get("#IMG_POSTER", ""),
+        "genres": [],
+        "runtime": "N/A",
+        "rating": "N/A",
+        "cast": [],
+        "description": "No description available."
+    }
+    
+    # Extract data from JustWatch if available
+    if justwatch_data.get("short"):
+        short = justwatch_data["short"]
+        movie_data["description"] = short.get("description", movie_data["description"])
+        
+        # Get image from JustWatch
+        if short.get("image"):
+            jw_image = short["image"].get("url")
+            if jw_image:
+                movie_data["image"] = jw_image
+        
+        # Get genres
+        if short.get("genre"):
+            movie_data["genres"] = short["genre"]
+        
+        # Get runtime (convert from minutes)
+        if short.get("@type") == "Movie" and short.get("duration"):
+            duration = short["duration"]
+            # Duration is in ISO 8601 format like "PT120M"
+            import re
+            match = re.search(r'PT(\d+)M', duration)
+            if match:
+                movie_data["runtime"] = match.group(1)
+        
+        # Get rating
+        if short.get("aggregateRating"):
+            rating = short["aggregateRating"].get("ratingValue")
+            if rating:
+                movie_data["rating"] = f"{rating}/10"
+        
+        # Get cast
+        if short.get("actor"):
+            actors = short["actor"]
+            if isinstance(actors, list):
+                movie_data["cast"] = [actor.get("name", "") for actor in actors]
+    
+    # Store full movie data
+    temp.IMDB_RESULTS[user_id][movie_id] = movie_data
+    
+    safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
+    year = movie_data.get("year", "N/A")
+    
+    # Ask admin to choose status
+    buttons = [
+        [
+            InlineKeyboardButton("✅ Released", callback_data=f"imdb_status_released_{movie_id}"),
+            InlineKeyboardButton("🔔 Upcoming", callback_data=f"imdb_status_upcoming_{movie_id}")
+        ],
+        [InlineKeyboardButton("❌ Close", callback_data="close_message")]
+    ]
+    
+    preview_msg = f"**{title}** ({year})\n\nChoose movie status:"
+    
+    if movie_data["image"]:
+        await cq.message.reply_photo(
+            photo=movie_data["image"],
+            caption=preview_msg,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    else:
+        await cq.message.reply_text(
+            preview_msg,
+            reply_markup=InlineKeyboardMarkup(buttons),
+            disable_web_page_preview=True
+        )
+    await cq.answer()
+
+# Handle IMDB movie status selection
+@Client.on_callback_query(filters.regex(r"^imdb_status_(released|upcoming)_(.+)$"))
+async def imdb_status_select(client, cq):
+    match = re.match(r"^imdb_status_(released|upcoming)_(.+)$", cq.data)
+    status = match.group(1)
+    movie_id = match.group(2)
+    user_id = cq.from_user.id
+    
+    movie_data = temp.IMDB_RESULTS.get(user_id, {}).get(movie_id)
+    if not movie_data:
+        return await cq.answer("Movie data not found.", show_alert=True)
+    
+    # Store status
+    temp.MOVIE_STATUS[movie_id] = status
+    
+    title = clean_text(movie_data.get("title", "Unknown"))
+    safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
+    year = movie_data.get("year", "N/A")
+    
+    # Build message based on status
+    if status == "upcoming":
+        msg, image = build_upcoming_message(movie_data, temp.U_NAME, source='imdb')
+    else:
+        msg, image = build_released_message(movie_data, temp.U_NAME, source='imdb')
+    
+    # Build buttons based on status
+    buttons = []
+    
+    if status == "released":
+        # For released: Movie name button + more like this
+        buttons.append([InlineKeyboardButton(
+            f"{title} · {year}", 
+            url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
+        )])
+    
+    # Admin buttons
+    buttons.append([
+        InlineKeyboardButton("✏️ Edit & Post", callback_data=f"imdb_edit_post_{movie_id}"),
+        InlineKeyboardButton("📣 Post Default", callback_data=f"imdb_post_{movie_id}")
+    ])
+    buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
+    
+    # Send with image
+    if image:
+        await cq.message.reply_photo(
+            photo=image,
+            caption=msg,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    else:
+        await cq.message.reply_text(
+            msg,
+            reply_markup=InlineKeyboardMarkup(buttons),
+            disable_web_page_preview=True
+        )
+    await cq.answer()
+
+# Show Binged movie detail
 @Client.on_callback_query(filters.regex(r"^binged_detail_(\d+)$"))
 async def binged_detail(client, cq):
     movie_id = cq.data.split("_")[-1]
@@ -334,23 +565,69 @@ async def binged_detail(client, cq):
     safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
     year = movie_data.get("release_year", "N/A")
     
-    # Check if upcoming
-    upcoming = is_upcoming(movie_data.get("release_date", 0))
+    # Ask admin to choose status
+    buttons = [
+        [
+            InlineKeyboardButton("✅ Released", callback_data=f"binged_status_released_{movie_id}"),
+            InlineKeyboardButton("🔔 Upcoming", callback_data=f"binged_status_upcoming_{movie_id}")
+        ],
+        [InlineKeyboardButton("❌ Close", callback_data="close_message")]
+    ]
     
-    if upcoming:
-        msg, image = build_upcoming_message(movie_data, temp.U_NAME)
+    preview_msg = f"**{title}** ({year})\n\nChoose movie status:"
+    
+    # Try to get backdrop from JustWatch API
+    backdrop_image = get_justwatch_backdrop(title)
+    final_image = backdrop_image if backdrop_image else movie_data.get("image", "")
+    
+    if final_image:
+        await cq.message.reply_photo(
+            photo=final_image,
+            caption=preview_msg,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
     else:
-        msg, image = build_released_message(movie_data, temp.U_NAME)
+        await cq.message.reply_text(
+            preview_msg,
+            reply_markup=InlineKeyboardMarkup(buttons),
+            disable_web_page_preview=True
+        )
+    await cq.answer()
+
+# Handle Binged movie status selection
+@Client.on_callback_query(filters.regex(r"^binged_status_(released|upcoming)_(\d+)$"))
+async def binged_status_select(client, cq):
+    match = re.match(r"^binged_status_(released|upcoming)_(\d+)$", cq.data)
+    status = match.group(1)
+    movie_id = match.group(2)
+    user_id = cq.from_user.id
     
-    # Try to get backdrop from OTTPlay API
-    backdrop_image = get_ottplay_backdrop(title, year)
+    movie_data = temp.BINGED_RESULTS.get(user_id, {}).get(movie_id)
+    if not movie_data:
+        return await cq.answer("Movie data not found.", show_alert=True)
+    
+    # Store status
+    temp.MOVIE_STATUS[movie_id] = status
+    
+    title = clean_text(movie_data.get("post_title", "Unknown"))
+    safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
+    year = movie_data.get("release_year", "N/A")
+    
+    # Build message based on status
+    if status == "upcoming":
+        msg, image = build_upcoming_message(movie_data, temp.U_NAME, source='binged')
+    else:
+        msg, image = build_released_message(movie_data, temp.U_NAME, source='binged')
+    
+    # Try to get backdrop from JustWatch API
+    backdrop_image = get_justwatch_backdrop(title)
     final_image = backdrop_image if backdrop_image else image
     
-    # Build buttons based on movie status
+    # Build buttons based on status
     buttons = []
     
-    if upcoming:
-        # For upcoming: Only trailer button (no search, no more like this)
+    if status == "upcoming":
+        # For upcoming: Only trailer button
         videos = movie_data.get("videos", [])
         if videos and len(videos) > 0:
             video_url = videos[0].get("url", "")
@@ -359,13 +636,11 @@ async def binged_detail(client, cq):
                 buttons.append([InlineKeyboardButton("🎬 Trailer", url=trailer_url)])
     else:
         # For released: All buttons
-        # First row: Movie name · Year button
         buttons.append([InlineKeyboardButton(
             f"{title} · {year}", 
             url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
         )])
         
-        # Second row: Trailer and More like this
         second_row = []
         videos = movie_data.get("videos", [])
         if videos and len(videos) > 0:
@@ -410,7 +685,7 @@ async def binged_detail(client, cq):
         )
     await cq.answer()
 
-# Post directly to channel
+# Post Binged movie directly to channel
 @Client.on_callback_query(filters.regex(r"^binged_post_(\d+)$"))
 async def binged_post(client, cq):
     if cq.from_user.id not in ADMIN_IDS:
@@ -424,21 +699,22 @@ async def binged_post(client, cq):
     safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
     year = movie_data.get("release_year", "N/A")
     
-    upcoming = is_upcoming(movie_data.get("release_date", 0))
+    # Get status from temp storage
+    status = temp.MOVIE_STATUS.get(movie_id, "released")
     
-    if upcoming:
-        msg, image = build_upcoming_message(movie_data, temp.U_NAME)
+    if status == "upcoming":
+        msg, image = build_upcoming_message(movie_data, temp.U_NAME, source='binged')
     else:
-        msg, image = build_released_message(movie_data, temp.U_NAME)
+        msg, image = build_released_message(movie_data, temp.U_NAME, source='binged')
     
-    # Try to get backdrop from OTTPlay API
-    backdrop_image = get_ottplay_backdrop(title, year)
+    # Try to get backdrop from JustWatch API
+    backdrop_image = get_justwatch_backdrop(title)
     final_image = backdrop_image if backdrop_image else image
     
-    # Build buttons based on movie status
+    # Build buttons based on status
     buttons = []
     
-    if upcoming:
+    if status == "upcoming":
         # For upcoming: Only trailer
         videos = movie_data.get("videos", [])
         if videos and len(videos) > 0:
@@ -475,28 +751,92 @@ async def binged_post(client, cq):
             buttons.append(second_row)
     
     # Send to channel
-    if final_image:
-        await client.send_photo(
-            chat_id=-1001680629032,
-            photo=final_image,
-            caption=msg,
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-    else:
-        await client.send_message(
-            chat_id=-1001680629032,
-            text=msg,
-            reply_markup=InlineKeyboardMarkup(buttons),
-            disable_web_page_preview=True
-        )
-    await cq.answer("✅ Posted to channel.")
+    try:
+        if final_image:
+            await client.send_photo(
+                chat_id=-1001680629032,
+                photo=final_image,
+                caption=msg,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        else:
+            await client.send_message(
+                chat_id=-1001680629032,
+                text=msg,
+                reply_markup=InlineKeyboardMarkup(buttons),
+                disable_web_page_preview=True
+            )
+        await cq.answer("✅ Posted to channel.")
+    except Exception as e:
+        await cq.answer(f"❌ Error posting: {e}", show_alert=True)
 
-# Prompt for custom button input
+# Post IMDB movie directly to channel
+@Client.on_callback_query(filters.regex(r"^imdb_post_(.+)$"))
+async def imdb_post(client, cq):
+    if cq.from_user.id not in ADMIN_IDS:
+        return await cq.answer("You're not authorized.", show_alert=True)
+    movie_id = cq.data.replace("imdb_post_", "")
+    movie_data = temp.IMDB_RESULTS.get(cq.from_user.id, {}).get(movie_id)
+    if not movie_data:
+        return await cq.answer("Movie data not found.", show_alert=True)
+
+    title = clean_text(movie_data.get("title", "Unknown"))
+    safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
+    year = movie_data.get("year", "N/A")
+    
+    # Get status from temp storage
+    status = temp.MOVIE_STATUS.get(movie_id, "released")
+    
+    if status == "upcoming":
+        msg, image = build_upcoming_message(movie_data, temp.U_NAME, source='imdb')
+    else:
+        msg, image = build_released_message(movie_data, temp.U_NAME, source='imdb')
+    
+    # Build buttons based on status
+    buttons = []
+    
+    if status == "released":
+        buttons.append([InlineKeyboardButton(
+            f"{title} · {year}", 
+            url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
+        )])
+    
+    # Send to channel
+    try:
+        if image:
+            await client.send_photo(
+                chat_id=-1001680629032,
+                photo=image,
+                caption=msg,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        else:
+            await client.send_message(
+                chat_id=-1001680629032,
+                text=msg,
+                reply_markup=InlineKeyboardMarkup(buttons),
+                disable_web_page_preview=True
+            )
+        await cq.answer("✅ Posted to channel.")
+    except Exception as e:
+        await cq.answer(f"❌ Error posting: {e}", show_alert=True)
+
+# Prompt for custom button input (Binged)
 @Client.on_callback_query(filters.regex(r"^binged_edit_post_(\d+)$"))
-async def edit_post_prompt(client, cq):
+async def binged_edit_post_prompt(client, cq):
     movie_id = cq.data.split("_")[-1]
     user_id = cq.from_user.id
-    temp.EDITING_POST[user_id] = movie_id
+    temp.EDITING_POST[user_id] = {"movie_id": movie_id, "source": "binged"}
+
+    await cq.message.reply_text("✏️ Send the **new search keyword** or **full URL** to use in the search button.", quote=True)
+    await cq.answer()
+
+# Prompt for custom button input (IMDB)
+@Client.on_callback_query(filters.regex(r"^imdb_edit_post_(.+)$"))
+async def imdb_edit_post_prompt(client, cq):
+    movie_id = cq.data.replace("imdb_edit_post_", "")
+    user_id = cq.from_user.id
+    temp.EDITING_POST[user_id] = {"movie_id": movie_id, "source": "imdb"}
 
     await cq.message.reply_text("✏️ Send the **new search keyword** or **full URL** to use in the search button.", quote=True)
     await cq.answer()
@@ -510,36 +850,54 @@ async def receive_custom_search(client, message):
     if user_id not in temp.EDITING_POST:
         return
 
-    movie_id = temp.EDITING_POST.pop(user_id)
-    movie_data = temp.BINGED_RESULTS.get(user_id, {}).get(movie_id)
+    edit_data = temp.EDITING_POST.pop(user_id)
+    movie_id = edit_data["movie_id"]
+    source = edit_data["source"]
+    
+    # Get movie data based on source
+    if source == "binged":
+        movie_data = temp.BINGED_RESULTS.get(user_id, {}).get(movie_id)
+    else:  # imdb
+        movie_data = temp.IMDB_RESULTS.get(user_id, {}).get(movie_id)
+    
     if not movie_data:
         return await message.reply("❌ Movie session expired. Please search again.")
 
-    title = clean_text(movie_data.get("post_title", "Unknown"))
-    year = movie_data.get("release_year", "N/A")
+    # Get title based on source
+    if source == "binged":
+        title = clean_text(movie_data.get("post_title", "Unknown"))
+        year = movie_data.get("release_year", "N/A")
+    else:  # imdb
+        title = clean_text(movie_data.get("title", "Unknown"))
+        year = movie_data.get("year", "N/A")
     
-    upcoming = is_upcoming(movie_data.get("release_date", 0))
+    # Get status from temp storage
+    status = temp.MOVIE_STATUS.get(movie_id, "released")
     
-    if upcoming:
-        msg, image = build_upcoming_message(movie_data, temp.U_NAME)
+    if status == "upcoming":
+        msg, image = build_upcoming_message(movie_data, temp.U_NAME, source=source)
     else:
-        msg, image = build_released_message(movie_data, temp.U_NAME)
+        msg, image = build_released_message(movie_data, temp.U_NAME, source=source)
 
-    # Try to get backdrop from OTTPlay API
-    backdrop_image = get_ottplay_backdrop(title, year)
-    final_image = backdrop_image if backdrop_image else image
+    # Try to get backdrop from JustWatch API
+    if source == "binged":
+        backdrop_image = get_justwatch_backdrop(title)
+        final_image = backdrop_image if backdrop_image else image
+    else:  # imdb already has image from justwatch
+        final_image = image
 
-    # Build buttons based on movie status
+    # Build buttons based on status
     buttons = []
     
-    if upcoming:
-        # For upcoming: Only trailer
-        videos = movie_data.get("videos", [])
-        if videos and len(videos) > 0:
-            video_url = videos[0].get("url", "")
-            if video_url:
-                trailer_url = f"https://www.youtube.com/watch?v={video_url}"
-                buttons.append([InlineKeyboardButton("🎬 Trailer", url=trailer_url)])
+    if status == "upcoming":
+        # For upcoming: Only trailer (binged only)
+        if source == "binged":
+            videos = movie_data.get("videos", [])
+            if videos and len(videos) > 0:
+                video_url = videos[0].get("url", "")
+                if video_url:
+                    trailer_url = f"https://www.youtube.com/watch?v={video_url}"
+                    buttons.append([InlineKeyboardButton("🎬 Trailer", url=trailer_url)])
     else:
         # For released: Custom button + trailer + more like this
         # Decide URL for first button
@@ -551,43 +909,47 @@ async def receive_custom_search(client, message):
 
         buttons.append([InlineKeyboardButton(f"{title} · {year}", url=button_url)])
         
-        second_row = []
-        videos = movie_data.get("videos", [])
-        if videos and len(videos) > 0:
-            video_url = videos[0].get("url", "")
-            if video_url:
-                trailer_url = f"https://www.youtube.com/watch?v={video_url}"
-                second_row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
-        
-        # Get unique similar movies
-        similar_movies = get_similar_movies(movie_data, count=1)
-        if similar_movies:
-            similar_title = clean_text(similar_movies[0].get("title", ""))
-            safe_similar = re.sub(r'[^a-zA-Z0-9]', '_', similar_title)
-            second_row.append(InlineKeyboardButton(
-                "🔄 More like this", 
-                url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
-            ))
-        
-        if second_row:
-            buttons.append(second_row)
+        if source == "binged":
+            second_row = []
+            videos = movie_data.get("videos", [])
+            if videos and len(videos) > 0:
+                video_url = videos[0].get("url", "")
+                if video_url:
+                    trailer_url = f"https://www.youtube.com/watch?v={video_url}"
+                    second_row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
+            
+            # Get unique similar movies
+            similar_movies = get_similar_movies(movie_data, count=1)
+            if similar_movies:
+                similar_title = clean_text(similar_movies[0].get("title", ""))
+                safe_similar = re.sub(r'[^a-zA-Z0-9]', '_', similar_title)
+                second_row.append(InlineKeyboardButton(
+                    "🔄 More like this", 
+                    url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
+                ))
+            
+            if second_row:
+                buttons.append(second_row)
 
     # Send to channel
-    if final_image:
-        await client.send_photo(
-            chat_id=-1001680629032,
-            photo=final_image,
-            caption=msg,
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-    else:
-        await client.send_message(
-            chat_id=-1001680629032,
-            text=msg,
-            reply_markup=InlineKeyboardMarkup(buttons),
-            disable_web_page_preview=True
-        )
-    await message.reply("✅ Posted to channel with custom button.")
+    try:
+        if final_image:
+            await client.send_photo(
+                chat_id=-1001680629032,
+                photo=final_image,
+                caption=msg,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        else:
+            await client.send_message(
+                chat_id=-1001680629032,
+                text=msg,
+                reply_markup=InlineKeyboardMarkup(buttons),
+                disable_web_page_preview=True
+            )
+        await message.reply("✅ Posted to channel with custom button.")
+    except Exception as e:
+        await message.reply(f"❌ Error posting: {e}")
 
 # Close message handler
 @Client.on_callback_query(filters.regex(r"^close_message$"))
