@@ -7,6 +7,15 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
 from info import *
 
+# IMDbPY (Cinemagoer) for fetching movie details
+try:
+    from imdb import Cinemagoer
+    ia = Cinemagoer()
+    IMDBPY_AVAILABLE = True
+except ImportError:
+    IMDBPY_AVAILABLE = False
+    print("Warning: IMDbPY not installed. Install with: pip install cinemagoer")
+
 # List of Admin IDs
 ADMIN_IDS = [1011394081, 7191327005]
 
@@ -56,11 +65,19 @@ def unix_to_date(unix_ts):
     except:
         return "N/A"
 
-# Extract platform name from URL or logo
+# Extract platform name from URL or logo with proper None handling
 def get_platform_name(platform_data):
     """Extract proper platform name from platform data"""
-    ref_url = platform_data.get("ref_url", "").lower()
-    logo_url = platform_data.get("logo_url", "").lower()
+    if not platform_data:
+        return "OTT"
+    
+    # Get ref_url and logo_url with None checks
+    ref_url = platform_data.get("ref_url") or ""
+    logo_url = platform_data.get("logo_url") or ""
+    
+    # Convert to lowercase safely
+    ref_url = ref_url.lower() if ref_url else ""
+    logo_url = logo_url.lower() if logo_url else ""
     
     # Check ref_url and logo_url for platform identification
     if "hotstar" in ref_url or "hotstar" in logo_url:
@@ -117,6 +134,44 @@ def get_justwatch_backdrop(movie_title):
         return None
     except Exception as e:
         print(f"JustWatch API Error: {e}")
+        return None
+
+# Fetch movie details from IMDbPY
+def get_imdbpy_details(title, imdb_id=None):
+    """
+    Fetch movie details from IMDb using IMDbPY (Cinemagoer)
+    Returns dictionary with movie details or None
+    """
+    if not IMDBPY_AVAILABLE:
+        return None
+    
+    try:
+        if imdb_id:
+            # If we have IMDb ID, use it directly
+            movie = ia.get_movie(imdb_id)
+        else:
+            # Search by title
+            results = ia.search_movie(title)
+            if not results:
+                return None
+            movie = ia.get_movie(results[0].movieID)
+        
+        # Extract details
+        details = {
+            "title": movie.get('title', 'Unknown'),
+            "year": movie.get('year', 'N/A'),
+            "plot": movie.get('plot outline') or (movie.get('plot')[0] if movie.get('plot') else 'No description available.'),
+            "rating": f"{movie.get('rating', 'N/A')}/10" if movie.get('rating') else 'N/A',
+            "genres": movie.get('genres', []),
+            "cast": [person['name'] for person in movie.get('cast', [])[:5]],
+            "runtime": f"{movie.get('runtime')[0]}" if movie.get('runtime') else 'N/A',
+            "poster": movie.get('full-size cover url'),
+            "type": movie.get('kind', 'movie').capitalize()
+        }
+        
+        return details
+    except Exception as e:
+        print(f"IMDbPY Error: {e}")
         return None
 
 # Get similar movies with better logic
@@ -211,15 +266,19 @@ def build_released_message(movie_data, bot_username, source='binged'):
         genres = movie_data.get("genre", [])
         genre_str = ", ".join(genres) if genres else "N/A"
         
-        # Platform - ONLY FIRST streaming platform
+        # Platform - ONLY FIRST streaming platform with None checks
         platforms = movie_data.get("platform_logos", [])
         platform_str = "N/A"
-        for p in platforms:
-            if p.get("rent_and_buy") == "0":  # Only streaming platforms
-                ref_url = p.get("ref_url", "")
-                platform_name = get_platform_name(p)
-                platform_str = f"[{platform_name}]({ref_url})"
-                break  # Take only the first platform
+        if platforms:
+            for p in platforms:
+                if p and p.get("rent_and_buy") == "0":  # Only streaming platforms
+                    ref_url = p.get("ref_url") or ""
+                    platform_name = get_platform_name(p)
+                    if ref_url:
+                        platform_str = f"[{platform_name}]({ref_url})"
+                    else:
+                        platform_str = platform_name
+                    break  # Take only the first platform
         
         # Runtime, Release Date, Censor
         runtime = movie_data.get("run_time", movie_data.get("duration", "N/A"))
@@ -354,7 +413,7 @@ async def imdb_search(client, message):
     query = " ".join(message.command[1:]).strip()
 
     try:
-        params = {'q': query}  # Changed from 'query' to 'q'
+        params = {'q': query}
         resp = requests.get(IMDB_SEARCH_API, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
@@ -383,10 +442,10 @@ async def imdb_search(client, message):
         disable_web_page_preview=True
     )
 
-# Show IMDB movie detail
+# Show IMDB movie detail with IMDbPY integration
 @Client.on_callback_query(filters.regex(r"^imdb_detail_(.+)$"))
 async def imdb_detail(client, cq):
-    import re as regex_module  # Import with alias to avoid conflicts
+    import re as regex_module
     
     movie_id = cq.data.replace("imdb_detail_", "")
     user_id = cq.from_user.id
@@ -397,62 +456,84 @@ async def imdb_detail(client, cq):
         return await cq.answer("Movie data not found.", show_alert=True)
     
     title = basic_data.get("#TITLE", "Unknown")
+    imdb_id = movie_id if movie_id.startswith("tt") else None
     
-    # Fetch detailed data from JustWatch API
-    try:
-        resp = requests.get(f"{JUSTWATCH_API}?q={title}", timeout=10)
-        resp.raise_for_status()
-        justwatch_data = resp.json()
-    except:
-        justwatch_data = {}
+    # Try to fetch from IMDbPY first for complete details
+    imdbpy_data = get_imdbpy_details(title, imdb_id)
     
-    # Merge data
-    movie_data = {
-        "title": title,
-        "year": basic_data.get("#YEAR", "N/A"),
-        "type": basic_data.get("#IMG_POSTER", "").split("/")[-2] if "#IMG_POSTER" in basic_data else "Movie",
-        "image": basic_data.get("#IMG_POSTER", ""),
-        "genres": [],
-        "runtime": "N/A",
-        "rating": "N/A",
-        "cast": [],
-        "description": "No description available."
-    }
+    if imdbpy_data:
+        # Use IMDbPY data
+        movie_data = {
+            "title": imdbpy_data["title"],
+            "year": imdbpy_data["year"],
+            "type": imdbpy_data["type"],
+            "image": imdbpy_data["poster"],
+            "genres": imdbpy_data["genres"],
+            "runtime": imdbpy_data["runtime"],
+            "rating": imdbpy_data["rating"],
+            "cast": imdbpy_data["cast"],
+            "description": imdbpy_data["plot"]
+        }
+    else:
+        # Fallback to JustWatch API
+        try:
+            resp = requests.get(f"{JUSTWATCH_API}?q={title}", timeout=10)
+            resp.raise_for_status()
+            justwatch_data = resp.json()
+        except:
+            justwatch_data = {}
+        
+        # Merge data
+        movie_data = {
+            "title": title,
+            "year": basic_data.get("#YEAR", "N/A"),
+            "type": basic_data.get("#IMG_POSTER", "").split("/")[-2] if "#IMG_POSTER" in basic_data else "Movie",
+            "image": basic_data.get("#IMG_POSTER", ""),
+            "genres": [],
+            "runtime": "N/A",
+            "rating": "N/A",
+            "cast": [],
+            "description": "No description available."
+        }
+        
+        # Extract data from JustWatch if available
+        if justwatch_data.get("short"):
+            short = justwatch_data["short"]
+            movie_data["description"] = short.get("description", movie_data["description"])
+            
+            # Get image from JustWatch
+            if short.get("image"):
+                jw_image = short["image"].get("url")
+                if jw_image:
+                    movie_data["image"] = jw_image
+            
+            # Get genres
+            if short.get("genre"):
+                movie_data["genres"] = short["genre"]
+            
+            # Get runtime
+            if short.get("@type") == "Movie" and short.get("duration"):
+                duration = short["duration"]
+                match = regex_module.search(r'PT(\d+)M', duration)
+                if match:
+                    movie_data["runtime"] = match.group(1)
+            
+            # Get rating
+            if short.get("aggregateRating"):
+                rating = short["aggregateRating"].get("ratingValue")
+                if rating:
+                    movie_data["rating"] = f"{rating}/10"
+            
+            # Get cast
+            if short.get("actor"):
+                actors = short["actor"]
+                if isinstance(actors, list):
+                    movie_data["cast"] = [actor.get("name", "") for actor in actors]
     
-    # Extract data from JustWatch if available
-    if justwatch_data.get("short"):
-        short = justwatch_data["short"]
-        movie_data["description"] = short.get("description", movie_data["description"])
-        
-        # Get image from JustWatch
-        if short.get("image"):
-            jw_image = short["image"].get("url")
-            if jw_image:
-                movie_data["image"] = jw_image
-        
-        # Get genres
-        if short.get("genre"):
-            movie_data["genres"] = short["genre"]
-        
-        # Get runtime (convert from minutes)
-        if short.get("@type") == "Movie" and short.get("duration"):
-            duration = short["duration"]
-            # Duration is in ISO 8601 format like "PT120M"
-            match = regex_module.search(r'PT(\d+)M', duration)
-            if match:
-                movie_data["runtime"] = match.group(1)
-        
-        # Get rating
-        if short.get("aggregateRating"):
-            rating = short["aggregateRating"].get("ratingValue")
-            if rating:
-                movie_data["rating"] = f"{rating}/10"
-        
-        # Get cast
-        if short.get("actor"):
-            actors = short["actor"]
-            if isinstance(actors, list):
-                movie_data["cast"] = [actor.get("name", "") for actor in actors]
+    # Try to get backdrop from JustWatch
+    backdrop_image = get_justwatch_backdrop(title)
+    if backdrop_image:
+        movie_data["image"] = backdrop_image
     
     # Store full movie data
     temp.IMDB_RESULTS[user_id][movie_id] = movie_data
@@ -488,7 +569,7 @@ async def imdb_detail(client, cq):
 # Handle IMDB movie status selection
 @Client.on_callback_query(filters.regex(r"^imdb_status_(released|upcoming)_(.+)$"))
 async def imdb_status_select(client, cq):
-    import re as regex_module  # Import with alias
+    import re as regex_module
     
     match = regex_module.match(r"^imdb_status_(released|upcoming)_(.+)$", cq.data)
     status = match.group(1)
@@ -516,7 +597,6 @@ async def imdb_status_select(client, cq):
     buttons = []
     
     if status == "released":
-        # For released: Movie name button + more like this
         buttons.append([InlineKeyboardButton(
             f"{title} · {year}", 
             url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
@@ -547,7 +627,7 @@ async def imdb_status_select(client, cq):
 # Show Binged movie detail
 @Client.on_callback_query(filters.regex(r"^binged_detail_(\d+)$"))
 async def binged_detail(client, cq):
-    import re as regex_module  # Import with alias
+    import re as regex_module
     
     movie_id = cq.data.split("_")[-1]
     user_id = cq.from_user.id
@@ -603,7 +683,7 @@ async def binged_detail(client, cq):
 # Handle Binged movie status selection
 @Client.on_callback_query(filters.regex(r"^binged_status_(released|upcoming)_(\d+)$"))
 async def binged_status_select(client, cq):
-    import re as regex_module  # Import with alias
+    import re as regex_module
     
     match = regex_module.match(r"^binged_status_(released|upcoming)_(\d+)$", cq.data)
     status = match.group(1)
@@ -696,7 +776,7 @@ async def binged_status_select(client, cq):
 # Post Binged movie directly to channel
 @Client.on_callback_query(filters.regex(r"^binged_post_(\d+)$"))
 async def binged_post(client, cq):
-    import re as regex_module  # Import with alias
+    import re as regex_module
     
     if cq.from_user.id not in ADMIN_IDS:
         return await cq.answer("You're not authorized.", show_alert=True)
@@ -783,7 +863,7 @@ async def binged_post(client, cq):
 # Post IMDB movie directly to channel
 @Client.on_callback_query(filters.regex(r"^imdb_post_(.+)$"))
 async def imdb_post(client, cq):
-    import re as regex_module  # Import with alias
+    import re as regex_module
     
     if cq.from_user.id not in ADMIN_IDS:
         return await cq.answer("You're not authorized.", show_alert=True)
@@ -856,7 +936,7 @@ async def imdb_edit_post_prompt(client, cq):
 # Handle admin reply with custom button
 @Client.on_message(filters.private & filters.text & filters.user(ADMIN_IDS) & filters.create(lambda _, __, msg: msg.from_user.id in temp.EDITING_POST))
 async def receive_custom_search(client, message):
-    import re as regex_module  # Import with alias
+    import re as regex_module
     
     user_id = message.from_user.id
     custom_input = message.text.strip()
