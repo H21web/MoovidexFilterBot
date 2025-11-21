@@ -344,6 +344,8 @@ async def binged_search(client, message):
     )
 
 # /imdbpost command
+
+# Replace the imdb_search function
 @Client.on_message(filters.command("imdbpost"))
 async def imdb_search(client, message):
     if message.from_user.id not in ADMIN_IDS:
@@ -354,7 +356,8 @@ async def imdb_search(client, message):
     query = " ".join(message.command[1:]).strip()
 
     try:
-        resp = requests.get(f"{IMDB_SEARCH_API}?query={query}", timeout=10)
+        params = {'q': query}  # Changed from 'query' to 'q'
+        resp = requests.get(IMDB_SEARCH_API, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
     except requests.RequestException as e:
