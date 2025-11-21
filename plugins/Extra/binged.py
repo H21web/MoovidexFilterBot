@@ -344,8 +344,6 @@ async def binged_search(client, message):
     )
 
 # /imdbpost command
-
-# Replace the imdb_search function
 @Client.on_message(filters.command("imdbpost"))
 async def imdb_search(client, message):
     if message.from_user.id not in ADMIN_IDS:
@@ -388,6 +386,8 @@ async def imdb_search(client, message):
 # Show IMDB movie detail
 @Client.on_callback_query(filters.regex(r"^imdb_detail_(.+)$"))
 async def imdb_detail(client, cq):
+    import re as regex_module  # Import with alias to avoid conflicts
+    
     movie_id = cq.data.replace("imdb_detail_", "")
     user_id = cq.from_user.id
     
@@ -438,8 +438,7 @@ async def imdb_detail(client, cq):
         if short.get("@type") == "Movie" and short.get("duration"):
             duration = short["duration"]
             # Duration is in ISO 8601 format like "PT120M"
-            import re
-            match = re.search(r'PT(\d+)M', duration)
+            match = regex_module.search(r'PT(\d+)M', duration)
             if match:
                 movie_data["runtime"] = match.group(1)
         
@@ -458,7 +457,7 @@ async def imdb_detail(client, cq):
     # Store full movie data
     temp.IMDB_RESULTS[user_id][movie_id] = movie_data
     
-    safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
+    safe_title = regex_module.sub(r'[^a-zA-Z0-9]', '_', title)
     year = movie_data.get("year", "N/A")
     
     # Ask admin to choose status
@@ -489,7 +488,9 @@ async def imdb_detail(client, cq):
 # Handle IMDB movie status selection
 @Client.on_callback_query(filters.regex(r"^imdb_status_(released|upcoming)_(.+)$"))
 async def imdb_status_select(client, cq):
-    match = re.match(r"^imdb_status_(released|upcoming)_(.+)$", cq.data)
+    import re as regex_module  # Import with alias
+    
+    match = regex_module.match(r"^imdb_status_(released|upcoming)_(.+)$", cq.data)
     status = match.group(1)
     movie_id = match.group(2)
     user_id = cq.from_user.id
@@ -502,7 +503,7 @@ async def imdb_status_select(client, cq):
     temp.MOVIE_STATUS[movie_id] = status
     
     title = clean_text(movie_data.get("title", "Unknown"))
-    safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
+    safe_title = regex_module.sub(r'[^a-zA-Z0-9]', '_', title)
     year = movie_data.get("year", "N/A")
     
     # Build message based on status
@@ -546,6 +547,8 @@ async def imdb_status_select(client, cq):
 # Show Binged movie detail
 @Client.on_callback_query(filters.regex(r"^binged_detail_(\d+)$"))
 async def binged_detail(client, cq):
+    import re as regex_module  # Import with alias
+    
     movie_id = cq.data.split("_")[-1]
     user_id = cq.from_user.id
     
@@ -565,7 +568,7 @@ async def binged_detail(client, cq):
     temp.BINGED_RESULTS[user_id][movie_id] = movie_data
     
     title = clean_text(movie_data.get("post_title", "Unknown"))
-    safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
+    safe_title = regex_module.sub(r'[^a-zA-Z0-9]', '_', title)
     year = movie_data.get("release_year", "N/A")
     
     # Ask admin to choose status
@@ -600,7 +603,9 @@ async def binged_detail(client, cq):
 # Handle Binged movie status selection
 @Client.on_callback_query(filters.regex(r"^binged_status_(released|upcoming)_(\d+)$"))
 async def binged_status_select(client, cq):
-    match = re.match(r"^binged_status_(released|upcoming)_(\d+)$", cq.data)
+    import re as regex_module  # Import with alias
+    
+    match = regex_module.match(r"^binged_status_(released|upcoming)_(\d+)$", cq.data)
     status = match.group(1)
     movie_id = match.group(2)
     user_id = cq.from_user.id
@@ -613,7 +618,7 @@ async def binged_status_select(client, cq):
     temp.MOVIE_STATUS[movie_id] = status
     
     title = clean_text(movie_data.get("post_title", "Unknown"))
-    safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
+    safe_title = regex_module.sub(r'[^a-zA-Z0-9]', '_', title)
     year = movie_data.get("release_year", "N/A")
     
     # Build message based on status
@@ -656,7 +661,7 @@ async def binged_status_select(client, cq):
         similar_movies = get_similar_movies(movie_data, count=1)
         if similar_movies:
             similar_title = clean_text(similar_movies[0].get("title", ""))
-            safe_similar = re.sub(r'[^a-zA-Z0-9]', '_', similar_title)
+            safe_similar = regex_module.sub(r'[^a-zA-Z0-9]', '_', similar_title)
             second_row.append(InlineKeyboardButton(
                 "🔄 More like this", 
                 url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
@@ -691,6 +696,8 @@ async def binged_status_select(client, cq):
 # Post Binged movie directly to channel
 @Client.on_callback_query(filters.regex(r"^binged_post_(\d+)$"))
 async def binged_post(client, cq):
+    import re as regex_module  # Import with alias
+    
     if cq.from_user.id not in ADMIN_IDS:
         return await cq.answer("You're not authorized.", show_alert=True)
     movie_id = cq.data.split("_")[-1]
@@ -699,7 +706,7 @@ async def binged_post(client, cq):
         return await cq.answer("Movie data not found.", show_alert=True)
 
     title = clean_text(movie_data.get("post_title", "Unknown"))
-    safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
+    safe_title = regex_module.sub(r'[^a-zA-Z0-9]', '_', title)
     year = movie_data.get("release_year", "N/A")
     
     # Get status from temp storage
@@ -744,7 +751,7 @@ async def binged_post(client, cq):
         similar_movies = get_similar_movies(movie_data, count=1)
         if similar_movies:
             similar_title = clean_text(similar_movies[0].get("title", ""))
-            safe_similar = re.sub(r'[^a-zA-Z0-9]', '_', similar_title)
+            safe_similar = regex_module.sub(r'[^a-zA-Z0-9]', '_', similar_title)
             second_row.append(InlineKeyboardButton(
                 "🔄 More like this", 
                 url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
@@ -776,6 +783,8 @@ async def binged_post(client, cq):
 # Post IMDB movie directly to channel
 @Client.on_callback_query(filters.regex(r"^imdb_post_(.+)$"))
 async def imdb_post(client, cq):
+    import re as regex_module  # Import with alias
+    
     if cq.from_user.id not in ADMIN_IDS:
         return await cq.answer("You're not authorized.", show_alert=True)
     movie_id = cq.data.replace("imdb_post_", "")
@@ -784,7 +793,7 @@ async def imdb_post(client, cq):
         return await cq.answer("Movie data not found.", show_alert=True)
 
     title = clean_text(movie_data.get("title", "Unknown"))
-    safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
+    safe_title = regex_module.sub(r'[^a-zA-Z0-9]', '_', title)
     year = movie_data.get("year", "N/A")
     
     # Get status from temp storage
@@ -847,6 +856,8 @@ async def imdb_edit_post_prompt(client, cq):
 # Handle admin reply with custom button
 @Client.on_message(filters.private & filters.text & filters.user(ADMIN_IDS) & filters.create(lambda _, __, msg: msg.from_user.id in temp.EDITING_POST))
 async def receive_custom_search(client, message):
+    import re as regex_module  # Import with alias
+    
     user_id = message.from_user.id
     custom_input = message.text.strip()
 
@@ -907,7 +918,7 @@ async def receive_custom_search(client, message):
         if custom_input.startswith("http://") or custom_input.startswith("https://"):
             button_url = custom_input
         else:
-            keyword = re.sub(r'[^a-zA-Z0-9]', '_', custom_input)
+            keyword = regex_module.sub(r'[^a-zA-Z0-9]', '_', custom_input)
             button_url = f"https://t.me/{temp.U_NAME}?start=Search_{keyword}"
 
         buttons.append([InlineKeyboardButton(f"{title} · {year}", url=button_url)])
@@ -925,7 +936,7 @@ async def receive_custom_search(client, message):
             similar_movies = get_similar_movies(movie_data, count=1)
             if similar_movies:
                 similar_title = clean_text(similar_movies[0].get("title", ""))
-                safe_similar = re.sub(r'[^a-zA-Z0-9]', '_', similar_title)
+                safe_similar = regex_module.sub(r'[^a-zA-Z0-9]', '_', similar_title)
                 second_row.append(InlineKeyboardButton(
                     "🔄 More like this", 
                     url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
