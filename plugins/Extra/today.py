@@ -5,35 +5,13 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
 from info import *
-
-# List of Admin IDs
-ADMIN_IDS = [1011394081, 7191327005]  # Replace with actual admin user IDs
-
-# Function to decode HTML entities and clean text
-def clean_text(text):
-    if not text:
-        return text
-    # Decode HTML entities like &amp; &#8217; etc.
-    text = html.unescape(text)
-    # Additional cleanup for common problematic characters
-    text = text.replace('\u2019', "'")  # Right single quotation mark
-    text = text.replace('\u2018', "'")  # Left single quotation mark
-    text = text.replace('\u201c', '"')  # Left double quotation mark
-    text = text.replace('\u201d', '"')  # Right double quotation mark
-    text = text.replace('\u2013', '-')  # En dash
-    text = text.replace('\u2014', '-')  # Em dash
-    text = text.replace('\u2026', '...')  # Horizontal ellipsis
-    return text
+from plugins.Extra.binged import HEADERS, DETAIL_URL, ADMIN_IDS, clean_text, build_released_message, get_tmdb_backdrop
 
 # Function to fetch today's movies
 def fetch_today_movies():
     url = "https://www.binged.com/wp-json/binged-api/v1/movies?mode=streaming-today"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36',
-        'Referer': 'https://www.binged.com/'
-    }
-
-    response = requests.get(url, headers=headers)
+    
+    response = requests.get(url, headers=HEADERS)
 
     if response.status_code == 200:
         try:
@@ -64,8 +42,10 @@ async def send_movie_buttons(client, message):
         buttons = []
         for movie in movies_data:  # No reverse here
             title = movie.get('title', 'No title available')
+            movie_id = str(movie.get("id"))
             clean_title = clean_text(title)
-            callback_data = f"movie_detail_{title}"
+            # Use same callback pattern but distinct prefix to fetch details
+            callback_data = f"today_detail_{movie_id}"
             buttons.append([InlineKeyboardButton(clean_title, callback_data=callback_data)])
 
         buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
@@ -77,91 +57,82 @@ async def send_movie_buttons(client, message):
 
 
 # When a movie title button is clicked
-@Client.on_callback_query(filters.regex(r"movie_detail_"))
-async def show_movie_detail(client, callback_query):
-    movie_title = callback_query.data.split("movie_detail_")[1]
-    movies_data = fetch_today_movies()
+@Client.on_callback_query(filters.regex(r"today_detail_(\d+)"))
+async def show_movie_detail(client, cq):
+    movie_id = cq.data.split("_")[-1]
+    user_id = cq.from_user.id
+    import re as regex_module
 
-    if movies_data and isinstance(movies_data, list):
-        for movie in movies_data:
-            if movie.get('title') == movie_title:
-                title = clean_text(movie.get('title', 'No title available'))
-                #language = ', '.join([clean_text(lang) for lang in movie.get('languages', ['No language specified'])])
-                platform = ', '.join([clean_text(p.get('name', 'No platform')) for p in movie.get('platforms', [])])
-                movie_type = clean_text(movie.get('type', 'No type specified'))
-                genres = ', '.join([clean_text(genre) for genre in movie.get('genres', ['No Data'])])
-                year = movie.get('theatrical-year', 'N/A')
-                languages = [clean_text(l) for l in movie.get('languages', ['No Audio'])]
-                language = ', '.join(languages)
-                lang_tag = ', '.join(f"#{l.strip().title()}" for l in languages)
+    # Fetch detailed movie data using Binged API (same as binged.py)
+    try:
+        resp = requests.get(f"{DETAIL_URL}/{movie_id}", headers=HEADERS, timeout=10)
+        resp.raise_for_status()
+        movie_data = resp.json()
+    except requests.RequestException as e:
+        return await cq.answer(f"Failed to fetch movie details: {e}", show_alert=True)
+    
+    if not movie_data or "ID" not in movie_data:
+        return await cq.answer("Movie data not found.", show_alert=True)
+    
+    # Store full movie data in temp.BINGED_RESULTS (Reusing binged.py storage)
+    temp.BINGED_RESULTS[user_id] = temp.BINGED_RESULTS.get(user_id, {})
+    temp.BINGED_RESULTS[user_id][movie_id] = movie_data
+    
+    # Force status to released since it is "today streaming"
+    temp.MOVIE_STATUS[movie_id] = "released"
 
-                formatted_title = format_title_for_url(title) 
-            
-                
-                movie_details = (
-                    f"✅ **{title}** · ({year}) · `{movie_type}`\n\n"
-                    f"🉑 {lang_tag}\n"
-                    f"🎭 {genres} · 📺 {platform}\n"
-                )
+    title = clean_text(movie_data.get("post_title", "Unknown"))
+    safe_title = regex_module.sub(r'[^a-zA-Z0-9]', '_', title)
+    year = movie_data.get("release_year", "N/A")
+    
+    # Build message using shared function
+    msg, image = build_released_message(movie_data, temp.U_NAME, source='binged')
 
+    # Try to get backdrop from TMDB
+    backdrop_image = get_tmdb_backdrop(title, year)
+    final_image = backdrop_image if backdrop_image else image
+    
+    # Build buttons
+    buttons = []
+    
+    # Search Button
+    buttons.append([InlineKeyboardButton(
+        f"{title} · {year}", 
+        url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
+    )])
 
-                buttons = [
-                    [InlineKeyboardButton("🔍 Click to Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{formatted_title}")]
-                ]
+    # Trailer Button
+    videos = movie_data.get("videos", [])
+    if videos and len(videos) > 0:
+        video_url = videos[0].get("url", "")
+        if video_url:
+            trailer_url = f"https://www.youtube.com/watch?v={video_url}"
+            buttons.append([InlineKeyboardButton("🎬 Trailer", url=trailer_url)])
 
-                if callback_query.from_user.id in ADMIN_IDS:
-                    buttons.append([InlineKeyboardButton("📣 Post to Channel", callback_data=f"post_movie_{movie_title}")])  # Use original title
+    # Admin buttons (Reusing binged.py callbacks)
+    if user_id in ADMIN_IDS:
+        buttons.append([
+            InlineKeyboardButton("✏️ Edit & Post", callback_data=f"binged_edit_post_{movie_id}"),
+            InlineKeyboardButton("📣 Post Default", callback_data=f"binged_post_{movie_id}")
+        ])
 
-                buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
-                reply_markup = InlineKeyboardMarkup(buttons)
+    buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
+    reply_markup = InlineKeyboardMarkup(buttons)
 
-                await callback_query.message.reply_text(movie_details, reply_markup=reply_markup)
-                await callback_query.answer()
-                break
+    # Send with image
+    if final_image:
+        await cq.message.reply_photo(
+            photo=final_image,
+            caption=msg,
+            reply_markup=reply_markup
+        )
     else:
-        await callback_query.answer("⚠️ Could not fetch movie details.")
-
-# Post to channel if admin clicks the button
-@Client.on_callback_query(filters.regex(r"post_movie_"))
-async def post_movie_to_channel(client, callback_query):
-    movie_title = callback_query.data.split("post_movie_")[1]
-    movies_data = fetch_today_movies()
-
-    if movies_data and isinstance(movies_data, list):
-        for movie in movies_data:
-            if movie.get('title') == movie_title:
-                title = clean_text(movie.get('title', 'No title available'))
-                #language = ', '.join([clean_text(lang) for lang in movie.get('languages', ['No language specified'])])
-                platform = ', '.join([clean_text(p.get('name', 'No platform specified')) for p in movie.get('platforms', [])])
-                movie_type = clean_text(movie.get('type', 'No type specified'))
-                genres = ', '.join([clean_text(genre) for genre in movie.get('genres', ['No Data'])])
-                year = movie.get('theatrical-year', 'N/A')
-                languages = [clean_text(l) for l in movie.get('languages', ['No language specified'])]
-                language = ', '.join(languages)
-                lang_tag = ', '.join(f"#{l.strip().title()}" for l in languages)
-
-                formatted_title = format_title_for_url(title)
-                
-                
-                movie_details = (
-                    f"✅ **{title}** · ({year}) · `{movie_type}`\n\n"
-                    f"🉑 {lang_tag}\n"
-                    f"🎭 {genres} · 📺 {platform}\n\n"
-                    f"**@MooviDex**"
-                )
-
-                search_button = InlineKeyboardButton("🔍 Click To Search", url=f"https://t.me/{temp.U_NAME}?start=Search_{formatted_title}")
-                reply_markup = InlineKeyboardMarkup([[search_button]])
-
-                try:
-                    channel_id = "-1001680629032"  # Replace with your channel ID
-                    await client.send_message(chat_id=channel_id, text=movie_details, reply_markup=reply_markup)
-                    await callback_query.answer("✅ Movie details posted to the channel.")
-                except Exception as e:
-                    await callback_query.answer(f"⚠️ Error posting movie to channel: {str(e)}")
-                break
-    else:
-        await callback_query.answer("⚠️ Failed to fetch movie details. Please try again later.")
+        await cq.message.reply_text(
+            msg,
+            reply_markup=reply_markup,
+            disable_web_page_preview=True
+        )
+    await cq.answer()
 
 # Close button handler
 @Client.on_callback_query(filters.regex(r"close_message"))
