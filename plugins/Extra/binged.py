@@ -7,14 +7,9 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
 from info import *
 
-# IMDbPY (Cinemagoer) for fetching movie details
-try:
-    from imdb import Cinemagoer
-    ia = Cinemagoer()
-    IMDBPY_AVAILABLE = True
-except ImportError:
-    IMDBPY_AVAILABLE = False
-    print("Warning: IMDbPY not installed. Install with: pip install cinemagoer")
+# TMDB API
+TMDB_API_URL = "https://api.themoviedb.org/3"
+TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/original"
 
 # List of Admin IDs
 ADMIN_IDS = [1011394081, 7191327005]
@@ -22,13 +17,6 @@ ADMIN_IDS = [1011394081, 7191327005]
 # Search APIs
 SEARCH_URL = "https://www.binged.com/wp-json/binged-api/v1/movies"
 DETAIL_URL = "https://www.binged.com/wp-json/binged-api/v1/movie"
-
-# JustWatch API for backdrop images
-JUSTWATCH_API = "https://imdb.iamidiotareyoutoo.com/justwatch"
-
-# IMDB API
-IMDB_SEARCH_API = "https://imdb.iamidiotareyoutoo.com/search"
-IMDB_DETAIL_API = "https://imdb.iamidiotareyoutoo.com/justwatch"
 
 # Anti-403 Headers
 HEADERS = {
@@ -39,8 +27,9 @@ HEADERS = {
 }
 
 # Temporary Data Stores
+# Temporary Data Stores
 temp.BINGED_RESULTS = {}   # user_id -> {movie_id: movie_data}
-temp.IMDB_RESULTS = {}     # user_id -> {movie_id: movie_data}
+temp.TMDB_RESULTS = {}     # user_id -> {movie_id: movie_data}
 temp.EDITING_POST = {}     # admin_id -> {movie_id, source}
 temp.MOVIE_STATUS = {}     # movie_id -> 'upcoming' or 'released'
 
@@ -111,72 +100,131 @@ def get_platform_name(platform_data):
     else:
         return "OTT"
 
-# Fetch backdrop image from JustWatch API
-def get_justwatch_backdrop(movie_title):
-    """
-    Fetch backdrop image from JustWatch API based on movie title
-    Returns backdrop URL or None
-    """
+# Search TMDB
+def search_tmdb(query):
     try:
-        params = {'q': movie_title}
-        response = requests.get(JUSTWATCH_API, params=params, timeout=10)
-        response.raise_for_status()
-        data = response.json()
+        url = f"{TMDB_API_URL}/search/multi"
+        params = {
+            "api_key": TMDB_API_KEY,
+            "query": query,
+            "language": "en-US",
+            "page": 1,
+            "include_adult": "true"
+        }
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
         
-        # Check if we have description with image
-        if data.get("short"):
-            description = data["short"]
-            if description.get("image"):
-                backdrop_url = description["image"].get("url")
-                if backdrop_url:
-                    return backdrop_url
-        
-        return None
+        results = []
+        for item in data.get("results", []):
+            if item.get("media_type") not in ["movie", "tv"]:
+                continue
+            results.append(item)
+        return results
     except Exception as e:
-        print(f"JustWatch API Error: {e}")
+        print(f"TMDB Search Error: {e}")
+        return []
+
+# Get TMDB Details
+def get_tmdb_details(tmdb_id, media_type="movie"):
+    try:
+        url = f"{TMDB_API_URL}/{media_type}/{tmdb_id}"
+        params = {
+            "api_key": TMDB_API_KEY,
+            "language": "en-US",
+            "append_to_response": "credits,videos,images,recommendations,similar"
+        }
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        
+        # Process data
+        title = data.get("title") or data.get("name") or "Unknown"
+        release_date = data.get("release_date") or data.get("first_air_date") or "N/A"
+        year = release_date.split("-")[0] if release_date != "N/A" else "N/A"
+        
+        # Genres
+        genres = [g["name"] for g in data.get("genres", [])]
+        
+        # Cast
+        cast = [c["name"] for c in data.get("credits", {}).get("cast", [])[:5]]
+        
+        # Runtime
+        runtime = data.get("runtime") or (data.get("episode_run_time")[0] if data.get("episode_run_time") else None)
+        runtime_str = f"{runtime}m" if runtime else "N/A"
+        
+        # Rating
+        rating = f"{round(data.get('vote_average', 0), 1)}/10"
+        
+        # Images (Backdrop preference)
+        backdrop_path = data.get("backdrop_path")
+        poster_path = data.get("poster_path")
+        
+        # Try to find best landscape image from images
+        images = data.get("images", {})
+        backdrops = images.get("backdrops", [])
+        if backdrops:
+            # Sort by vote count or width to get best quality
+            backdrops.sort(key=lambda x: x.get("vote_count", 0), reverse=True)
+            backdrop_path = backdrops[0].get("file_path")
+            
+        image_url = f"{TMDB_IMAGE_URL}{backdrop_path}" if backdrop_path else (f"{TMDB_IMAGE_URL}{poster_path}" if poster_path else "")
+        
+        # Similar
+        similar = []
+        recommendations = data.get("recommendations", {}).get("results", []) or data.get("similar", {}).get("results", [])
+        for item in recommendations:
+            if item.get("backdrop_path") or item.get("poster_path"):
+                similar.append({
+                    "id": item.get("id"),
+                    "title": item.get("title") or item.get("name"),
+                    "media_type": media_type # Assuming similar are same type
+                })
+                
+        # Videos
+        videos = []
+        for v in data.get("videos", {}).get("results", []):
+            if v.get("site") == "YouTube" and v.get("type") == "Trailer":
+                videos.append(v)
+                
+        return {
+            "id": data.get("id"),
+            "title": title,
+            "year": year,
+            "plot": data.get("overview", "No description available."),
+            "rating": rating,
+            "genres": genres,
+            "cast": cast,
+            "runtime": runtime_str,
+            "image": image_url,
+            "type": "Movie" if media_type == "movie" else "Series",
+            "release_date": release_date,
+            "videos": videos,
+            "similar": similar,
+            "media_type": media_type
+        }
+    except Exception as e:
+        print(f"TMDB Details Error: {e}")
         return None
 
-# Fetch movie details from IMDbPY
-def get_imdbpy_details(title, imdb_id=None):
-    """
-    Fetch movie details from IMDb using IMDbPY (Cinemagoer)
-    Returns dictionary with movie details or None
-    Note: IMDb IDs should be passed WITHOUT the 'tt' prefix
-    """
-    if not IMDBPY_AVAILABLE:
-        return None
-    
+# Fetch TMDB backdrop by title (for Binged fallback)
+def get_tmdb_backdrop(title, year=None):
     try:
-        if imdb_id:
-            # Strip 'tt' prefix if present
-            if imdb_id.startswith('tt'):
-                imdb_id = imdb_id[2:]
+        results = search_tmdb(title)
+        if not results:
+            return None
             
-            # Use IMDb ID directly (without 'tt' prefix)
-            movie = ia.get_movie(imdb_id)
-        else:
-            # Search by title
-            results = ia.search_movie(title)
-            if not results:
-                return None
-            movie = ia.get_movie(results[0].movieID)
-        
-        # Extract details
-        details = {
-            "title": movie.get('title', 'Unknown'),
-            "year": movie.get('year', 'N/A'),
-            "plot": movie.get('plot outline') or (movie.get('plot')[0] if movie.get('plot') else 'No description available.'),
-            "rating": f"{movie.get('rating', 'N/A')}/10" if movie.get('rating') else 'N/A',
-            "genres": movie.get('genres', []),
-            "cast": [person['name'] for person in movie.get('cast', [])[:5]],
-            "runtime": f"{movie.get('runtime')[0]}" if movie.get('runtime') else 'N/A',
-            "poster": movie.get('full-size cover url'),
-            "type": movie.get('kind', 'movie').capitalize()
-        }
-        
-        return details
-    except Exception as e:
-        print(f"IMDbPY Error: {e}")
+        # Try to match year if provided
+        best_match = results[0]
+        if year:
+            for res in results:
+                res_date = res.get("release_date") or res.get("first_air_date") or ""
+                if str(year) in res_date:
+                    best_match = res
+                    break
+                    
+        return get_tmdb_details(best_match["id"], best_match.get("media_type", "movie")).get("image")
+    except:
         return None
 
 # Get similar movies with better logic
@@ -186,8 +234,8 @@ def get_similar_movies(movie_data, count=3):
     Returns list of similar movie titles
     """
     similar = movie_data.get("similar", [])
-    current_title = clean_text(movie_data.get("post_title", "")).lower()
-    current_id = str(movie_data.get("ID", ""))
+    current_title = clean_text(movie_data.get("post_title", movie_data.get("title", ""))).lower()
+    current_id = str(movie_data.get("ID", movie_data.get("id", "")))
     
     unique_similar = []
     seen_titles = set()
@@ -407,7 +455,7 @@ async def binged_search(client, message):
         disable_web_page_preview=True
     )
 
-# /imdbpost command
+# /imdbpost command (Now uses TMDB)
 @Client.on_message(filters.command("imdbpost"))
 async def imdb_search(client, message):
     if message.from_user.id not in ADMIN_IDS:
@@ -416,141 +464,63 @@ async def imdb_search(client, message):
         return await message.reply_text("Usage: /imdbpost <movie name>")
 
     query = " ".join(message.command[1:]).strip()
-
-    try:
-        params = {'q': query}
-        resp = requests.get(IMDB_SEARCH_API, params=params, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-    except requests.RequestException as e:
-        return await message.reply_text(f"IMDB API error: {e}")
-
-    results = data.get("description", [])
+    
+    results = search_tmdb(query)
     if not results:
-        return await message.reply_text("No results found.")
+        return await message.reply_text("No results found on TMDB.")
 
-    temp.IMDB_RESULTS[message.from_user.id] = {}
+    temp.TMDB_RESULTS[message.from_user.id] = {}
     buttons = []
     
-    for idx, movie in enumerate(results[:10]):  # Limit to 10 results
-        movie_id = movie.get("#IMDB_ID", str(idx))
-        title = movie.get("#TITLE", "Unknown")
-        year = movie.get("#YEAR", "N/A")
-        btn_text = f"{title} ({year})"
-        temp.IMDB_RESULTS[message.from_user.id][movie_id] = movie
-        buttons.append([InlineKeyboardButton(btn_text, callback_data=f"imdb_detail_{movie_id}")])
+    for item in results[:10]:
+        tmdb_id = str(item.get("id"))
+        title = item.get("title") or item.get("name") or "Unknown"
+        date = item.get("release_date") or item.get("first_air_date") or "N/A"
+        year = date.split("-")[0] if date != "N/A" else "N/A"
+        media_type = item.get("media_type", "movie")
+        
+        btn_text = f"{title} ({year}) - {media_type.upper()}"
+        temp.TMDB_RESULTS[message.from_user.id][tmdb_id] = item
+        buttons.append([InlineKeyboardButton(btn_text, callback_data=f"imdb_detail_{tmdb_id}_{media_type}")])
     
     buttons.append([InlineKeyboardButton("Close ❌", callback_data="close_message")])
     await message.reply_text(
-        f"IMDB Search results for: <b>{query}</b>",
+        f"TMDB Search results for: <b>{query}</b>",
         reply_markup=InlineKeyboardMarkup(buttons),
         disable_web_page_preview=True
     )
 
-# Show IMDB movie detail with IMDbPY integration
-@Client.on_callback_query(filters.regex(r"^imdb_detail_(.+)$"))
+# Show TMDB movie detail
+@Client.on_callback_query(filters.regex(r"^imdb_detail_(\d+)_(.+)$"))
 async def imdb_detail(client, cq):
     import re as regex_module
     
-    movie_id = cq.data.replace("imdb_detail_", "")
+    match = regex_module.match(r"^imdb_detail_(\d+)_(.+)$", cq.data)
+    tmdb_id = match.group(1)
+    media_type = match.group(2)
     user_id = cq.from_user.id
     
-    # Get basic movie data from search results
-    basic_data = temp.IMDB_RESULTS.get(user_id, {}).get(movie_id)
-    if not basic_data:
-        return await cq.answer("Movie data not found.", show_alert=True)
+    # Get details
+    movie_data = get_tmdb_details(tmdb_id, media_type)
     
-    title = basic_data.get("#TITLE", "Unknown")
-    imdb_id = movie_id if movie_id.startswith("tt") else None
+    if not movie_data:
+        return await cq.answer("Failed to fetch details from TMDB.", show_alert=True)
     
-    # Try to fetch from IMDbPY first for complete details
-    imdbpy_data = get_imdbpy_details(title, imdb_id)
-    
-    if imdbpy_data:
-        # Use IMDbPY data
-        movie_data = {
-            "title": imdbpy_data["title"],
-            "year": imdbpy_data["year"],
-            "type": imdbpy_data["type"],
-            "image": imdbpy_data["poster"],
-            "genres": imdbpy_data["genres"],
-            "runtime": imdbpy_data["runtime"],
-            "rating": imdbpy_data["rating"],
-            "cast": imdbpy_data["cast"],
-            "description": imdbpy_data["plot"]
-        }
-    else:
-        # Fallback to JustWatch API
-        try:
-            resp = requests.get(f"{JUSTWATCH_API}?q={title}", timeout=10)
-            resp.raise_for_status()
-            justwatch_data = resp.json()
-        except:
-            justwatch_data = {}
-        
-        # Merge data
-        movie_data = {
-            "title": title,
-            "year": basic_data.get("#YEAR", "N/A"),
-            "type": basic_data.get("#IMG_POSTER", "").split("/")[-2] if "#IMG_POSTER" in basic_data else "Movie",
-            "image": basic_data.get("#IMG_POSTER", ""),
-            "genres": [],
-            "runtime": "N/A",
-            "rating": "N/A",
-            "cast": [],
-            "description": "No description available."
-        }
-        
-        # Extract data from JustWatch if available
-        if justwatch_data.get("short"):
-            short = justwatch_data["short"]
-            movie_data["description"] = short.get("description", movie_data["description"])
-            
-            # Get image from JustWatch
-            if short.get("image"):
-                jw_image = short["image"].get("url")
-                if jw_image:
-                    movie_data["image"] = jw_image
-            
-            # Get genres
-            if short.get("genre"):
-                movie_data["genres"] = short["genre"]
-            
-            # Get runtime
-            if short.get("@type") == "Movie" and short.get("duration"):
-                duration = short["duration"]
-                match = regex_module.search(r'PT(\d+)M', duration)
-                if match:
-                    movie_data["runtime"] = match.group(1)
-            
-            # Get rating
-            if short.get("aggregateRating"):
-                rating = short["aggregateRating"].get("ratingValue")
-                if rating:
-                    movie_data["rating"] = f"{rating}/10"
-            
-            # Get cast
-            if short.get("actor"):
-                actors = short["actor"]
-                if isinstance(actors, list):
-                    movie_data["cast"] = [actor.get("name", "") for actor in actors]
-    
-    # Try to get backdrop from JustWatch
-    backdrop_image = get_justwatch_backdrop(title)
-    if backdrop_image:
-        movie_data["image"] = backdrop_image
+    # Map plot to description for compatibility
+    movie_data["description"] = movie_data.get("plot", "")
     
     # Store full movie data
-    temp.IMDB_RESULTS[user_id][movie_id] = movie_data
+    temp.TMDB_RESULTS[user_id] = temp.TMDB_RESULTS.get(user_id, {}) # Ensure dict exists
+    temp.TMDB_RESULTS[user_id][tmdb_id] = movie_data
     
-    safe_title = regex_module.sub(r'[^a-zA-Z0-9]', '_', title)
+    title = movie_data.get("title", "Unknown")
     year = movie_data.get("year", "N/A")
     
     # Ask admin to choose status
     buttons = [
         [
-            InlineKeyboardButton("✅ Released", callback_data=f"imdb_status_released_{movie_id}"),
-            InlineKeyboardButton("🔔 Upcoming", callback_data=f"imdb_status_upcoming_{movie_id}")
+            InlineKeyboardButton("✅ Released", callback_data=f"imdb_status_released_{tmdb_id}"),
+            InlineKeyboardButton("🔔 Upcoming", callback_data=f"imdb_status_upcoming_{tmdb_id}")
         ],
         [InlineKeyboardButton("❌ Close", callback_data="close_message")]
     ]
@@ -571,22 +541,22 @@ async def imdb_detail(client, cq):
         )
     await cq.answer()
 
-# Handle IMDB movie status selection
+# Handle IMDB/TMDB movie status selection
 @Client.on_callback_query(filters.regex(r"^imdb_status_(released|upcoming)_(.+)$"))
 async def imdb_status_select(client, cq):
     import re as regex_module
     
     match = regex_module.match(r"^imdb_status_(released|upcoming)_(.+)$", cq.data)
     status = match.group(1)
-    movie_id = match.group(2)
+    tmdb_id = match.group(2)
     user_id = cq.from_user.id
     
-    movie_data = temp.IMDB_RESULTS.get(user_id, {}).get(movie_id)
+    movie_data = temp.TMDB_RESULTS.get(user_id, {}).get(tmdb_id)
     if not movie_data:
         return await cq.answer("Movie data not found.", show_alert=True)
     
     # Store status
-    temp.MOVIE_STATUS[movie_id] = status
+    temp.MOVIE_STATUS[tmdb_id] = status
     
     title = clean_text(movie_data.get("title", "Unknown"))
     safe_title = regex_module.sub(r'[^a-zA-Z0-9]', '_', title)
@@ -607,10 +577,21 @@ async def imdb_status_select(client, cq):
             url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
         )])
     
+        # Add Similar Movies Button
+        similar_movies = movie_data.get("similar", [])
+        if similar_movies:
+            # similar is list of dicts {id, title, media_type}
+            similar_title = clean_text(similar_movies[0].get("title", ""))
+            safe_similar = regex_module.sub(r'[^a-zA-Z0-9]', '_', similar_title)
+            buttons.append([InlineKeyboardButton(
+                "🔄 More like this", 
+                url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
+            )])
+
     # Admin buttons
     buttons.append([
-        InlineKeyboardButton("✏️ Edit & Post", callback_data=f"imdb_edit_post_{movie_id}"),
-        InlineKeyboardButton("📣 Post Default", callback_data=f"imdb_post_{movie_id}")
+        InlineKeyboardButton("✏️ Edit & Post", callback_data=f"imdb_edit_post_{tmdb_id}"),
+        InlineKeyboardButton("📣 Post Default", callback_data=f"imdb_post_{tmdb_id}")
     ])
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
     
@@ -667,8 +648,8 @@ async def binged_detail(client, cq):
     
     preview_msg = f"**{title}** ({year})\n\nChoose movie status:"
     
-    # Try to get backdrop from JustWatch API
-    backdrop_image = get_justwatch_backdrop(title)
+    # Try to get backdrop from TMDB
+    backdrop_image = get_tmdb_backdrop(title, year)
     final_image = backdrop_image if backdrop_image else movie_data.get("image", "")
     
     if final_image:
@@ -712,8 +693,8 @@ async def binged_status_select(client, cq):
     else:
         msg, image = build_released_message(movie_data, temp.U_NAME, source='binged')
     
-    # Try to get backdrop from JustWatch API
-    backdrop_image = get_justwatch_backdrop(title)
+    # Try to get backdrop from TMDB
+    backdrop_image = get_tmdb_backdrop(title, year)
     final_image = backdrop_image if backdrop_image else image
     
     # Build buttons based on status
@@ -865,15 +846,15 @@ async def binged_post(client, cq):
     except Exception as e:
         await cq.answer(f"❌ Error posting: {e}", show_alert=True)
 
-# Post IMDB movie directly to channel
+# Post IMDB/TMDB movie directly to channel
 @Client.on_callback_query(filters.regex(r"^imdb_post_(.+)$"))
 async def imdb_post(client, cq):
     import re as regex_module
     
     if cq.from_user.id not in ADMIN_IDS:
         return await cq.answer("You're not authorized.", show_alert=True)
-    movie_id = cq.data.replace("imdb_post_", "")
-    movie_data = temp.IMDB_RESULTS.get(cq.from_user.id, {}).get(movie_id)
+    tmdb_id = cq.data.replace("imdb_post_", "")
+    movie_data = temp.TMDB_RESULTS.get(cq.from_user.id, {}).get(tmdb_id)
     if not movie_data:
         return await cq.answer("Movie data not found.", show_alert=True)
 
@@ -897,6 +878,17 @@ async def imdb_post(client, cq):
             f"{title} · {year}", 
             url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
         )])
+        
+        # Add Similar Movies Button
+        similar_movies = movie_data.get("similar", [])
+        if similar_movies:
+            # similar is list of dicts {id, title, media_type}
+            similar_title = clean_text(similar_movies[0].get("title", ""))
+            safe_similar = regex_module.sub(r'[^a-zA-Z0-9]', '_', similar_title)
+            buttons.append([InlineKeyboardButton(
+                "🔄 More like this", 
+                url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
+            )])
     
     # Send to channel
     try:
@@ -957,7 +949,7 @@ async def receive_custom_search(client, message):
     if source == "binged":
         movie_data = temp.BINGED_RESULTS.get(user_id, {}).get(movie_id)
     else:  # imdb
-        movie_data = temp.IMDB_RESULTS.get(user_id, {}).get(movie_id)
+        movie_data = temp.TMDB_RESULTS.get(user_id, {}).get(movie_id)
     
     if not movie_data:
         return await message.reply("❌ Movie session expired. Please search again.")
@@ -978,11 +970,11 @@ async def receive_custom_search(client, message):
     else:
         msg, image = build_released_message(movie_data, temp.U_NAME, source=source)
 
-    # Try to get backdrop from JustWatch API
+    # Try to get backdrop from TMDB
     if source == "binged":
-        backdrop_image = get_justwatch_backdrop(title)
+        backdrop_image = get_tmdb_backdrop(title, year)
         final_image = backdrop_image if backdrop_image else image
-    else:  # imdb already has image from justwatch
+    else:  # imdb already has image from TMDB
         final_image = image
 
     # Build buttons based on status
