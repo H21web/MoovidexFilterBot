@@ -109,6 +109,28 @@ async def check_releases_loop():
                                 )
                             ]]
                             
+                            row2 = []
+                            # Trailer Button
+                            videos = movie_data.get("videos", [])
+                            if videos and len(videos) > 0:
+                                video_url = videos[0].get("url", "")
+                                if video_url:
+                                    trailer_url = f"https://www.youtube.com/watch?v={video_url}"
+                                    row2.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
+                                    
+                            # More Like This Button
+                            similar_movies = get_similar_movies(movie_data, count=1)
+                            if similar_movies:
+                                similar_title = clean_text(similar_movies[0].get("title", ""))
+                                safe_similar = re.sub(r'[^a-zA-Z0-9]', '_', similar_title)
+                                row2.append(InlineKeyboardButton(
+                                    "🔄 More like this", 
+                                    url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
+                                ))
+                                
+                            if row2:
+                                buttons.append(row2)
+                            
                             # Send to Channel
                             if final_image:
                                 await TechVJBot.send_photo(
