@@ -2,36 +2,17 @@ import requests
 import re
 import html
 import asyncio
-import json
-import os
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
 from info import *
 from plugins.Extra.binged import HEADERS, DETAIL_URL, ADMIN_IDS, clean_text, build_released_message, get_tmdb_backdrop, get_similar_movies
 from database.ia_filterdb import get_search_results
+from database.users_chats_db import db
 from TechVJ.bot import TechVJBot
 
 # Configuration
 UPDATE_CHANNEL_ID = -1001680629032  # Update Channel ID
-POSTED_DB_FILE = "posted_movies.json"
-
-# Load/Save Posted Operations
-def load_posted_movies():
-    if os.path.exists(POSTED_DB_FILE):
-        try:
-            with open(POSTED_DB_FILE, "r") as f:
-                return set(json.load(f))
-        except:
-            return set()
-    return set()
-
-def save_posted_movies(posted_set):
-    try:
-        with open(POSTED_DB_FILE, "w") as f:
-            json.dump(list(posted_set), f)
-    except Exception as e:
-        print(f"Error saving posted movies: {e}")
 
 # Function to fetch today's movies
 def fetch_today_movies():
@@ -65,13 +46,11 @@ async def check_releases_loop():
         try:
             today_movies = fetch_today_movies()
             if today_movies:
-                posted_ids = load_posted_movies()
-                
                 for movie in today_movies:
                     movie_id = str(movie.get("id"))
                     
-                    # Skip if already posted
-                    if movie_id in posted_ids:
+                    # Skip if already posted (DB check)
+                    if await db.is_movie_posted(movie_id):
                         continue
                         
                     title = clean_text(movie.get("title", ""))
@@ -147,9 +126,8 @@ async def check_releases_loop():
                                     disable_web_page_preview=True
                                 )
                                 
-                            # Mark as posted
-                            posted_ids.add(movie_id)
-                            save_posted_movies(posted_ids)
+                            # Mark as posted in DB
+                            await db.add_posted_movie(movie_id)
                             
                             # Avoid spamming
                             await asyncio.sleep(5)

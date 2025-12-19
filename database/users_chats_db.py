@@ -66,6 +66,7 @@ class Database:
         self.grp = self.db.groups
         self.users = self.db.uersz
         self.bot = self.db.clone_bots
+        self.posted = self.db.posted_movies
 
 
     def new_user(self, id, name):
@@ -306,6 +307,17 @@ class Database:
     async def get_save(self, id):
         user = await self.col.find_one({'id': int(id)})
         return user.get('save', False) 
+    
+    async def add_posted_movie(self, movie_id):
+        await self.posted.update_one(
+            {'movie_id': str(movie_id)}, 
+            {'$set': {'movie_id': str(movie_id), 'posted_at': datetime.datetime.now()}}, 
+            upsert=True
+        )
+
+    async def is_movie_posted(self, movie_id):
+        movie = await self.posted.find_one({'movie_id': str(movie_id)})
+        return bool(movie)
     
 
 db = Database(USER_DB_URI, DATABASE_NAME)
