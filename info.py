@@ -14,7 +14,7 @@ SESSION = environ.get('SESSION', 'TechVJBot')
 API_ID = int(environ.get('API_ID', ''))
 API_HASH = environ.get('API_HASH', '')
 BOT_TOKEN = environ.get('BOT_TOKEN', "")
-TMDB_API_KEY = environ.get('TMDB_API_KEY', "b8c4599723ec9d927c8160f29555c82c") # Default key or empty
+TMDB_API_KEY = environ.get('TMDB_API_KEY', "b3d10dab8e82525e3a2ed8ed8bc38874") # Default key or empty
 
 
 DEEPGRAM_API_KEYS = [
@@ -202,3 +202,4 @@ else:
 # Don't Remove Credit @VJ_Botz
 # Subscribe YouTube Channel For Amazing Bot @Tech_VJ
 # Ask Doubt on telegram @KingVJ01
+
