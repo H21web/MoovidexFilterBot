@@ -77,37 +77,58 @@ def is_file_already_saved(file_id, file_name):
             
     return False
 
+# Text Index Creation - REMOVED as per user request for no new indexes
+# col.create_index([("file_name", "text")], background=True)
+# if MULTIPLE_DATABASE:
+#     sec_col.create_index([("file_name", "text")], background=True)
+
+
 async def get_search_results(chat_id, query, file_type=None, max_results=10, offset=0, filter=False):
     """For given query return (results, next_offset)"""
     
     query = query.strip()
+    
     if not query:
-        raw_pattern = '.'
+        # Default to everything if no query
+        filter_criteria = {}
     elif ' ' not in query:
+        # Single word query - standard regex
         raw_pattern = r'(\b|[\.\+\-_])' + query + r'(\b|[\.\+\-_])'
+        try:
+            regex = re.compile(raw_pattern, flags=re.IGNORECASE)
+            filter_criteria = {'file_name': regex}
+        except:
+            filter_criteria = {'file_name': {'$regex': query, '$options': 'i'}}
     else:
-        raw_pattern = query.replace(' ', r'.*[\s\.\+\-_]') 
-    try:
-        regex = re.compile(raw_pattern, flags=re.IGNORECASE)
-    except:
-        regex = query
-    filter = {'file_name': regex}
-    files = []
-    if MULTIPLE_DATABASE:
-        cursor1 = col.find(filter).sort('$natural', -1).skip(offset).limit(max_results)
-        cursor2 = sec_col.find(filter).sort('$natural', -1).skip(offset).limit(max_results)
+        # Multi-word query - Smart Regex Split
+        # Split by space and ensure each word is present
+        words = query.split()
+        regex_list = []
+        for word in words:
+            # Escape the word ensures special chars don't break regex
+            # We match the word anywhere in the string, generally sufficient for "spider man" in "Amazing Spider-Man"
+            regex_list.append({'file_name': {'$regex': re.escape(word), '$options': 'i'}})
         
-        for file in cursor1:
-            files.append(file)
-        for file in cursor2:
-            files.append(file)
-    else:
-        cursor = col.find(filter).sort('$natural', -1).skip(offset).limit(max_results)
-        
-        for file in cursor:
-            files.append(file)
+        filter_criteria = {'$and': regex_list}
 
-    total_results = col.count_documents(filter) if not MULTIPLE_DATABASE else (col.count_documents(filter) + sec_col.count_documents(filter))
+    # Optimization: Projection
+    # Only fetch necessary fields to reduce IO
+    projection = {'file_id': 1, 'file_name': 1, 'file_size': 1, 'caption': 1, '_id': 0}
+
+    files = []
+    
+    if MULTIPLE_DATABASE:
+        cursor1 = col.find(filter_criteria, projection).sort('$natural', -1).skip(offset).limit(max_results)
+        cursor2 = sec_col.find(filter_criteria, projection).sort('$natural', -1).skip(offset).limit(max_results)
+        for file in cursor1: files.append(file)
+        for file in cursor2: files.append(file)
+        # Count needs to use the same filter
+        total_results = col.count_documents(filter_criteria) + sec_col.count_documents(filter_criteria)
+    else:
+        cursor = col.find(filter_criteria, projection).sort('$natural', -1).skip(offset).limit(max_results)
+        for file in cursor: files.append(file)
+        total_results = col.count_documents(filter_criteria)
+
     next_offset = "" if (offset + max_results) >= total_results else (offset + max_results)
 
     return files, next_offset, total_results
