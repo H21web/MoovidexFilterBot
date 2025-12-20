@@ -14,6 +14,10 @@ TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/original"
 # List of Admin IDs
 ADMIN_IDS = [1011394081, 7191327005]
 
+from database.users_chats_db import db
+
+from database.users_chats_db import db
+
 # Search APIs
 SEARCH_URL = "https://www.binged.com/wp-json/binged-api/v1/movies"
 DETAIL_URL = "https://www.binged.com/wp-json/binged-api/v1/movie"
@@ -708,6 +712,9 @@ async def binged_status_select(client, cq):
             if video_url:
                 trailer_url = f"https://www.youtube.com/watch?v={video_url}"
                 buttons.append([InlineKeyboardButton("🎬 Trailer", url=trailer_url)])
+        
+        # Add Notify Button for Upcoming
+        buttons.append([InlineKeyboardButton("🔔 Notify when Released", callback_data=f"notify_release_{movie_id}")])
     else:
         # For released: All buttons
         buttons.append([InlineKeyboardButton(

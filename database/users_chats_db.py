@@ -67,6 +67,7 @@ class Database:
         self.users = self.db.uersz
         self.bot = self.db.clone_bots
         self.posted = self.db.posted_movies
+        self.alerts = self.db.movie_alerts
 
 
     def new_user(self, id, name):
@@ -319,5 +320,28 @@ class Database:
         movie = await self.posted.find_one({'movie_id': str(movie_id)})
         return bool(movie)
     
+    async def add_movie_alert(self, user_id, movie_id):
+        """Add user to alert list for a movie"""
+        await self.alerts.update_one(
+            {'movie_id': str(movie_id)},
+            {'$addToSet': {'user_ids': int(user_id)}},
+            upsert=True
+        )
+
+    async def remove_movie_alert(self, user_id, movie_id):
+        """Remove user from alert list"""
+        await self.alerts.update_one(
+            {'movie_id': str(movie_id)},
+            {'$pull': {'user_ids': int(user_id)}}
+        )
+
+    async def get_movie_alerts(self, movie_id):
+        """Get list of users waiting for this movie"""
+        data = await self.alerts.find_one({'movie_id': str(movie_id)})
+        return data.get('user_ids', []) if data else []
+
+    async def delete_movie_alerts(self, movie_id):
+        """Delete alert entry after notifying"""
+        await self.alerts.delete_one({'movie_id': str(movie_id)})
 
 db = Database(USER_DB_URI, DATABASE_NAME)
