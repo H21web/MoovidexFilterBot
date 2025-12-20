@@ -243,7 +243,9 @@ def get_tmdb_details(tmdb_id, media_type="movie"):
 # Fetch TMDB backdrop by title (for Binged fallback)
 def get_tmdb_backdrop(title, year=None):
     try:
-        results = search_tmdb(title)
+        # Include year in query for better accuracy
+        query = f"{title} {year}" if year and str(year).isdigit() else title
+        results = search_tmdb(query)
         if not results:
             return None
             

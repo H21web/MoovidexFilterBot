@@ -62,10 +62,13 @@ async def check_releases_loop():
                         if not title:
                             continue
                             
+                        year = movie.get("release_year") or movie.get("year") or movie.get("theatrical-year")
+                        
                         # Check if movie exists in our database
                         # get_search_results is async def but uses blocking pymongo.
                         # However, for now we just await it as the impact is minimal.
-                        _, _, total_results = await get_search_results(0, title)
+                        search_query = f"{title} {year}" if year else title
+                        _, _, total_results = await get_search_results(0, search_query)
                         
                         if total_results > 0:
                             print(f"Found match for {title} in DB! Posting...")
