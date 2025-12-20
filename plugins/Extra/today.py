@@ -43,7 +43,7 @@ async def check_releases_loop():
         try:
             # Fetch from both categories to catch all available movies
             week_movies = await fetch_movies("streaming-week") or []
-            soon_movies = await fetch_movies("streaming-soon-week") or []
+            soon_movies = await fetch_movies("streaming-soon") or []
             
             # Combine and remove duplicates based on ID
             all_movies = {str(m.get('id')): m for m in (week_movies + soon_movies)}.values()

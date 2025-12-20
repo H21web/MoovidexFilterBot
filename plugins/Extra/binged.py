@@ -819,8 +819,8 @@ async def binged_post(client, cq):
     else:
         msg, image = build_released_message(movie_data, temp.U_NAME, source='binged')
     
-    # Try to get backdrop from JustWatch API
-    backdrop_image = get_justwatch_backdrop(title)
+    # Try to get backdrop from TMDB
+    backdrop_image = get_tmdb_backdrop(title, year)
     final_image = backdrop_image if backdrop_image else image
     
     # Build buttons based on status
