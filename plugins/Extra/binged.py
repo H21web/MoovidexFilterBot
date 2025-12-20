@@ -7,6 +7,35 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
 from info import *
 
+# Helper to format search title with Season numbering and Year
+def format_search_title(title, year):
+    if not title:
+        return ""
+    
+    # Clean title first
+    title = clean_text(title)
+        
+    # Replace "Season X" with "S0X" case insensitive
+    # Use a lambda to handle the match group padding
+    def season_repl(match):
+        try:
+            num = int(match.group(1))
+            return f"S{num:02d}"
+        except:
+            return match.group(0)
+            
+    title = re.sub(r'(?i)Season\s+(\d+)', season_repl, title)
+    
+    # Replace non-alphanumeric with _
+    safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
+    
+    # Append year if valid
+    if year and str(year).isdigit():
+         safe_title = f"{safe_title}_{year}"
+         
+    return safe_title
+
+
 # TMDB API
 TMDB_API_URL = "https://api.themoviedb.org/3"
 TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/original"
@@ -563,8 +592,8 @@ async def imdb_status_select(client, cq):
     temp.MOVIE_STATUS[tmdb_id] = status
     
     title = clean_text(movie_data.get("title", "Unknown"))
-    safe_title = regex_module.sub(r'[^a-zA-Z0-9]', '_', title)
     year = movie_data.get("year", "N/A")
+    safe_title = format_search_title(title, year)
     
     # Build message based on status
     if status == "upcoming":
@@ -586,7 +615,7 @@ async def imdb_status_select(client, cq):
         if similar_movies:
             # similar is list of dicts {id, title, media_type}
             similar_title = clean_text(similar_movies[0].get("title", ""))
-            safe_similar = regex_module.sub(r'[^a-zA-Z0-9]', '_', similar_title)
+            safe_similar = format_search_title(similar_title, None)
             buttons.append([InlineKeyboardButton(
                 "🔄 More like this", 
                 url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
@@ -688,8 +717,8 @@ async def binged_status_select(client, cq):
     temp.MOVIE_STATUS[movie_id] = status
     
     title = clean_text(movie_data.get("post_title", "Unknown"))
-    safe_title = regex_module.sub(r'[^a-zA-Z0-9]', '_', title)
     year = movie_data.get("release_year", "N/A")
+    safe_title = format_search_title(title, year)
     
     # Build message based on status
     if status == "upcoming":
@@ -734,7 +763,7 @@ async def binged_status_select(client, cq):
         similar_movies = get_similar_movies(movie_data, count=1)
         if similar_movies:
             similar_title = clean_text(similar_movies[0].get("title", ""))
-            safe_similar = regex_module.sub(r'[^a-zA-Z0-9]', '_', similar_title)
+            safe_similar = format_search_title(similar_title, None)
             second_row.append(InlineKeyboardButton(
                 "🔄 More like this", 
                 url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
@@ -779,8 +808,8 @@ async def binged_post(client, cq):
         return await cq.answer("Movie data not found.", show_alert=True)
 
     title = clean_text(movie_data.get("post_title", "Unknown"))
-    safe_title = regex_module.sub(r'[^a-zA-Z0-9]', '_', title)
     year = movie_data.get("release_year", "N/A")
+    safe_title = format_search_title(title, year)
     
     # Get status from temp storage
     status = temp.MOVIE_STATUS.get(movie_id, "released")

@@ -6,7 +6,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
 from info import *
-from plugins.Extra.binged import HEADERS, DETAIL_URL, ADMIN_IDS, clean_text, build_released_message, get_tmdb_backdrop, get_similar_movies
+from plugins.Extra.binged import HEADERS, DETAIL_URL, ADMIN_IDS, clean_text, build_released_message, get_tmdb_backdrop, get_similar_movies, format_search_title
 from database.ia_filterdb import get_search_results
 from database.users_chats_db import db
 from TechVJ.bot import TechVJBot
@@ -24,9 +24,9 @@ async def fetch_url(url):
         print(f"Request Error: {e}")
     return None
 
-# Function to fetch today's movies
-async def fetch_today_movies():
-    url = "https://www.binged.com/wp-json/binged-api/v1/movies?mode=streaming-today"
+# Function to fetch movies
+async def fetch_movies(mode="streaming-today"):
+    url = f"https://www.binged.com/wp-json/binged-api/v1/movies?mode={mode}"
     data = await fetch_url(url)
     if data:
         return data.get('data', [])
@@ -38,11 +38,18 @@ async def check_releases_loop():
     # Wait for bot to be ready
     await asyncio.sleep(10) 
     
+    
     while True:
         try:
-            today_movies = await fetch_today_movies()
-            if today_movies:
-                for movie in today_movies:
+            # Fetch from both categories to catch all available movies
+            week_movies = await fetch_movies("streaming-week") or []
+            soon_movies = await fetch_movies("streaming-soon-week") or []
+            
+            # Combine and remove duplicates based on ID
+            all_movies = {str(m.get('id')): m for m in (week_movies + soon_movies)}.values()
+            
+            if all_movies:
+                for movie in all_movies:
                     try:
                         movie_id = str(movie.get("id"))
                         
@@ -55,29 +62,9 @@ async def check_releases_loop():
                         if not title:
                             continue
                             
-                        # Check if movie exists in our database (Non-blocking)
-                        # get_search_results is blocking (pymongo), so run in thread
-                        # get_search_results returns (files, next_offset, total_results)
-                        _, _, total_results = await asyncio.to_thread(
-                            lambda: asyncio.run(get_search_results(0, title)) 
-                            if asyncio.iscoroutinefunction(get_search_results) else 
-                            print("Warning: get_search_results is likely async, adjusting call") or 
-                            # Wait, get_search_results in ia_filterdb.py IS async def but uses blocking pymongo.
-                            # Calling it directly is fine if it wasn't cpu bound, but pymongo blocks.
-                            # However, since it is async def, we can't simply to_thread it if it has await inside.
-                            # Checking ia_filterdb.py: It seems to use standard MongoClient which IS blocking, 
-                            # BUT the wrapper is `async def`. This is bad design in the original code.
-                            # Since it is `async def`, we CAN await it, but it will block the loop.
-                            # We should ideally fix ia_filterdb, but for now we just await it.
-                            # The impact of one search query is minimal compared to requests.
-                            pass
-                        )
-                        
-                        # Re-reading ia_filterdb.py... `async def get_search_results`... uses `col.find`.
-                        # Standard pymongo `find` returns a cursor, it doesn't block heavily until iteration.
-                        # `count_documents` sends a command.
-                        # We will just await it as is for now, main issue was `requests`.
-                        
+                        # Check if movie exists in our database
+                        # get_search_results is async def but uses blocking pymongo.
+                        # However, for now we just await it as the impact is minimal.
                         _, _, total_results = await get_search_results(0, title)
                         
                         if total_results > 0:
@@ -99,8 +86,9 @@ async def check_releases_loop():
                             backdrop_image = get_tmdb_backdrop(title, year)
                             final_image = backdrop_image if backdrop_image else image
                             
-                            safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
                             
+                            safe_title = format_search_title(title, year)
+                                                        
                             # Buttons
                             buttons = [[
                                 InlineKeyboardButton(
@@ -122,7 +110,7 @@ async def check_releases_loop():
                             similar_movies = get_similar_movies(movie_data, count=1)
                             if similar_movies:
                                 similar_title = clean_text(similar_movies[0].get("title", ""))
-                                safe_similar = re.sub(r'[^a-zA-Z0-9]', '_', similar_title)
+                                safe_similar = format_search_title(similar_title, None)
                                 row2.append(InlineKeyboardButton(
                                     "🔄 More like this", 
                                     url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
@@ -190,7 +178,7 @@ async def check_releases_loop():
 # /today command - show movie buttons
 @Client.on_message(filters.command("today"))
 async def send_movie_buttons(client, message):
-    movies_data = await fetch_today_movies()
+    movies_data = await fetch_movies("streaming-today")
 
     if movies_data and isinstance(movies_data, list):
         if not movies_data:
@@ -235,8 +223,8 @@ async def show_movie_detail(client, cq):
     temp.MOVIE_STATUS[movie_id] = "released"
 
     title = clean_text(movie_data.get("post_title", "Unknown"))
-    safe_title = regex_module.sub(r'[^a-zA-Z0-9]', '_', title)
     year = movie_data.get("release_year", "N/A")
+    safe_title = format_search_title(title, year)
     
     # Build message using shared function
     msg, image = build_released_message(movie_data, temp.U_NAME, source='binged')
@@ -267,7 +255,7 @@ async def show_movie_detail(client, cq):
     similar_movies = get_similar_movies(movie_data, count=1)
     if similar_movies:
         similar_title = clean_text(similar_movies[0].get("title", ""))
-        safe_similar = regex_module.sub(r'[^a-zA-Z0-9]', '_', similar_title)
+        safe_similar = format_search_title(similar_title, None)
         row2.append(InlineKeyboardButton(
             "🔄 More like this", 
             url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
