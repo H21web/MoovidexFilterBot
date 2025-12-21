@@ -728,9 +728,8 @@ async def binged_status_select(client, cq):
     else:
         msg, image = build_released_message(movie_data, temp.U_NAME, source='binged')
     
-    # Try to get backdrop from TMDB
-    backdrop_image = get_tmdb_backdrop(title, year)
-    final_image = backdrop_image if backdrop_image else image
+    # Use Binged poster
+    final_image = image
     
     # Build buttons based on status
     buttons = []
@@ -821,9 +820,8 @@ async def binged_post(client, cq):
     else:
         msg, image = build_released_message(movie_data, temp.U_NAME, source='binged')
     
-    # Try to get backdrop from TMDB
-    backdrop_image = get_tmdb_backdrop(title, year)
-    final_image = backdrop_image if backdrop_image else image
+    # Use Binged poster
+    final_image = image
     
     # Build buttons based on status
     buttons = []
@@ -836,6 +834,9 @@ async def binged_post(client, cq):
             if video_url:
                 trailer_url = f"https://www.youtube.com/watch?v={video_url}"
                 buttons.append([InlineKeyboardButton("🎬 Trailer", url=trailer_url)])
+        
+        # Add Notify Button
+        buttons.append([InlineKeyboardButton("🔔 Notify when Released", callback_data=f"notify_release_{movie_id}")])
     else:
         # For released: All buttons
         buttons.append([InlineKeyboardButton(
@@ -1088,3 +1089,12 @@ async def close_message_callback(client, cq):
     except:
         pass
     await cq.answer()
+
+# Handle Notify when Released
+@Client.on_callback_query(filters.regex(r"^notify_release_(\d+)$"))
+async def notify_release_callback(client, cq):
+    movie_id = cq.data.split("_")[-1]
+    user_id = cq.from_user.id
+    
+    await db.add_movie_alert(user_id, movie_id)
+    await cq.answer("✅ Notification set! You will be notified when this movie releases.", show_alert=True)

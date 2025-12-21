@@ -67,6 +67,7 @@ class Database:
         self.users = self.db.uersz
         self.bot = self.db.clone_bots
         self.posted = self.db.posted_movies
+        self.upcoming = self.db.upcoming_movies
         self.alerts = self.db.movie_alerts
 
 
@@ -318,6 +319,17 @@ class Database:
 
     async def is_movie_posted(self, movie_id):
         movie = await self.posted.find_one({'movie_id': str(movie_id)})
+        return bool(movie)
+
+    async def add_upcoming_posted(self, movie_id):
+        await self.upcoming.update_one(
+            {'movie_id': str(movie_id)}, 
+            {'$set': {'movie_id': str(movie_id), 'posted_at': datetime.datetime.now()}}, 
+            upsert=True
+        )
+
+    async def is_upcoming_posted(self, movie_id):
+        movie = await self.upcoming.find_one({'movie_id': str(movie_id)})
         return bool(movie)
     
     async def add_movie_alert(self, user_id, movie_id):

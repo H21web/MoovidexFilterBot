@@ -6,7 +6,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
 from info import *
-from plugins.Extra.binged import HEADERS, DETAIL_URL, ADMIN_IDS, clean_text, build_released_message, get_tmdb_backdrop, get_similar_movies, format_search_title
+from plugins.Extra.binged import HEADERS, DETAIL_URL, ADMIN_IDS, clean_text, build_released_message, build_upcoming_message, get_tmdb_backdrop, get_similar_movies, format_search_title
 from database.ia_filterdb import get_search_results
 from database.users_chats_db import db
 from TechVJ.bot import TechVJBot
@@ -53,11 +53,6 @@ async def check_releases_loop():
                     try:
                         movie_id = str(movie.get("id"))
                         
-                        # Non-blocking DB Check
-                        is_posted = await db.is_movie_posted(movie_id)
-                        if is_posted:
-                            continue
-                            
                         title = clean_text(movie.get("title", ""))
                         if not title:
                             continue
@@ -65,13 +60,16 @@ async def check_releases_loop():
                         year = movie.get("release_year") or movie.get("year") or movie.get("theatrical-year")
                         
                         # Check if movie exists in our database
-                        # get_search_results is async def but uses blocking pymongo.
-                        # However, for now we just await it as the impact is minimal.
                         search_query = f"{title} {year}" if year else title
                         _, _, total_results = await get_search_results(0, search_query)
                         
                         if total_results > 0:
-                            print(f"Found match for {title} in DB! Posting...")
+                            # --- RELEASED ---
+                            is_posted = await db.is_movie_posted(movie_id)
+                            if is_posted:
+                                continue
+
+                            print(f"Found match for {title} in DB! Posting as Released...")
                             
                             # Fetch full details
                             movie_data = await fetch_url(f"{DETAIL_URL}/{movie_id}")
@@ -81,14 +79,10 @@ async def check_releases_loop():
                             # Build Message
                             msg, image = build_released_message(movie_data, temp.U_NAME, source='binged')
                             
-                            # Backdrop
-                            year = movie_data.get("release_year", "N/A")
-                            # get_tmdb_backdrop uses requests, need to be careful. 
-                            # Ideally we should make it async too, but let's wrap it for now logic-wise or skip if complex.
-                            # We will skip wrapping get_tmdb_backdrop for now as it's just one call.
-                            backdrop_image = get_tmdb_backdrop(title, year)
-                            final_image = backdrop_image if backdrop_image else image
+                            # Use Binged poster (User Request)
+                            final_image = image
                             
+                            # Backdrop as fallback? No, user requested Binged poster.
                             
                             safe_title = format_search_title(title, year)
                                                         
@@ -166,9 +160,65 @@ async def check_releases_loop():
                                 
                             # Mark as posted in DB
                             await db.add_posted_movie(movie_id)
+
+                        else:
+                            # --- UPCOMING ---
+                            if await db.is_upcoming_posted(movie_id):
+                                continue
+
+                            print(f"Movie {title} not in DB. Posting as Upcoming...")
                             
-                            # Avoid spamming
-                            await asyncio.sleep(5)
+                            # Fetch full details
+                            movie_data = await fetch_url(f"{DETAIL_URL}/{movie_id}")
+                            if not movie_data:
+                                continue
+
+                            # Build Upcoming Message
+                            msg, image = build_upcoming_message(movie_data, temp.U_NAME, source='binged')
+                            final_image = image
+
+                            # Buttons
+                            buttons = []
+                            row1 = []
+                            
+                            # Trailer
+                            videos = movie_data.get("videos", [])
+                            if videos and len(videos) > 0:
+                                video_url = videos[0].get("url", "")
+                                if video_url:
+                                    trailer_url = f"https://www.youtube.com/watch?v={video_url}"
+                                    row1.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
+                            
+                            if row1:
+                                buttons.append(row1)
+                                
+                            # Notify Button
+                            buttons.append([InlineKeyboardButton("🔔 Notify when Released", callback_data=f"notify_release_{movie_id}")])
+
+                            # Post
+                            try:
+                                if final_image:
+                                    await TechVJBot.send_photo(
+                                        chat_id=UPDATE_CHANNEL_ID,
+                                        photo=final_image,
+                                        caption=msg,
+                                        reply_markup=InlineKeyboardMarkup(buttons)
+                                    )
+                                else:
+                                    await TechVJBot.send_message(
+                                        chat_id=UPDATE_CHANNEL_ID,
+                                        text=msg,
+                                        reply_markup=InlineKeyboardMarkup(buttons),
+                                        disable_web_page_preview=True
+                                    )
+                            except Exception as e:
+                                print(f"Error sending upcoming to channel: {e}")
+                                
+                            # Mark as upcoming posted
+                            await db.add_upcoming_posted(movie_id)
+                            
+                        # Avoid spamming
+                        await asyncio.sleep(5)
                     except Exception as e:
                         print(f"Error processing movie {movie.get('title')}: {e}")
             
@@ -232,9 +282,8 @@ async def show_movie_detail(client, cq):
     # Build message using shared function
     msg, image = build_released_message(movie_data, temp.U_NAME, source='binged')
 
-    # Try to get backdrop from TMDB
-    backdrop_image = get_tmdb_backdrop(title, year)
-    final_image = backdrop_image if backdrop_image else image
+    # Use Binged poster (User Request)
+    final_image = image
     
     # Build buttons
     buttons = []
