@@ -240,27 +240,7 @@ def get_tmdb_details(tmdb_id, media_type="movie"):
         print(f"TMDB Details Error: {e}")
         return None
 
-# Fetch TMDB backdrop by title (for Binged fallback)
-def get_tmdb_backdrop(title, year=None):
-    try:
-        # Include year in query for better accuracy
-        query = f"{title} {year}" if year and str(year).isdigit() else title
-        results = search_tmdb(query)
-        if not results:
-            return None
-            
-        # Try to match year if provided
-        best_match = results[0]
-        if year:
-            for res in results:
-                res_date = res.get("release_date") or res.get("first_air_date") or ""
-                if str(year) in res_date:
-                    best_match = res
-                    break
-                    
-        return get_tmdb_details(best_match["id"], best_match.get("media_type", "movie")).get("image")
-    except:
-        return None
+
 
 # Get similar movies with better logic
 def get_similar_movies(movie_data, count=3):
