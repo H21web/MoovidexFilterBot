@@ -6,7 +6,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
 from info import *
-from plugins.Extra.binged import HEADERS, DETAIL_URL, ADMIN_IDS, clean_text, build_released_message, build_upcoming_message, get_tmdb_backdrop, get_similar_movies, format_search_title
+from plugins.Extra.binged import HEADERS, DETAIL_URL, ADMIN_IDS, clean_text, build_released_message, build_upcoming_message, get_similar_movies, format_search_title
 from database.ia_filterdb import get_search_results
 from database.users_chats_db import db
 from TechVJ.bot import TechVJBot
@@ -161,64 +161,10 @@ async def check_releases_loop():
                             # Mark as posted in DB
                             await db.add_posted_movie(movie_id)
 
-                        else:
-                            # --- UPCOMING ---
-                            if await db.is_upcoming_posted(movie_id):
-                                continue
-
-                            print(f"Movie {title} not in DB. Posting as Upcoming...")
-                            
-                            # Fetch full details
-                            movie_data = await fetch_url(f"{DETAIL_URL}/{movie_id}")
-                            if not movie_data:
-                                continue
-
-                            # Build Upcoming Message
-                            msg, image = build_upcoming_message(movie_data, temp.U_NAME, source='binged')
-                            final_image = image
-
-                            # Buttons
-                            buttons = []
-                            row1 = []
-                            
-                            # Trailer
-                            videos = movie_data.get("videos", [])
-                            if videos and len(videos) > 0:
-                                video_url = videos[0].get("url", "")
-                                if video_url:
-                                    trailer_url = f"https://www.youtube.com/watch?v={video_url}"
-                                    row1.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
-                            
-                            if row1:
-                                buttons.append(row1)
-                                
-                            # Notify Button
-                            buttons.append([InlineKeyboardButton("🔔 Notify when Released", callback_data=f"notify_release_{movie_id}")])
-
-                            # Post
-                            try:
-                                if final_image:
-                                    await TechVJBot.send_photo(
-                                        chat_id=UPDATE_CHANNEL_ID,
-                                        photo=final_image,
-                                        caption=msg,
-                                        reply_markup=InlineKeyboardMarkup(buttons)
-                                    )
-                                else:
-                                    await TechVJBot.send_message(
-                                        chat_id=UPDATE_CHANNEL_ID,
-                                        text=msg,
-                                        reply_markup=InlineKeyboardMarkup(buttons),
-                                        disable_web_page_preview=True
-                                    )
-                            except Exception as e:
-                                print(f"Error sending upcoming to channel: {e}")
-                                
-                            # Mark as upcoming posted
-                            await db.add_upcoming_posted(movie_id)
-                            
                         # Avoid spamming
                         await asyncio.sleep(5)
+                            
+
                     except Exception as e:
                         print(f"Error processing movie {movie.get('title')}: {e}")
             

@@ -683,9 +683,8 @@ async def binged_detail(client, cq):
     
     preview_msg = f"**{title}** ({year})\n\nChoose movie status:"
     
-    # Try to get backdrop from TMDB
-    backdrop_image = get_tmdb_backdrop(title, year)
-    final_image = backdrop_image if backdrop_image else movie_data.get("image", "")
+    # Use Binged poster
+    final_image = movie_data.get("image", "")
     
     if final_image:
         await cq.message.reply_photo(
@@ -1009,10 +1008,9 @@ async def receive_custom_search(client, message):
     else:
         msg, image = build_released_message(movie_data, temp.U_NAME, source=source)
 
-    # Try to get backdrop from TMDB
+    # Use Binged poster
     if source == "binged":
-        backdrop_image = get_tmdb_backdrop(title, year)
-        final_image = backdrop_image if backdrop_image else image
+        final_image = image
     else:  # imdb already has image from TMDB
         final_image = image
 
@@ -1096,5 +1094,43 @@ async def notify_release_callback(client, cq):
     movie_id = cq.data.split("_")[-1]
     user_id = cq.from_user.id
     
+    # Add alert to DB
     await db.add_movie_alert(user_id, movie_id)
     await cq.answer("✅ Notification set! You will be notified when this movie releases.", show_alert=True)
+    
+    # Log to Log Channel
+    try:
+        # Try to get movie data from temp storage first
+        movie_data = temp.BINGED_RESULTS.get(user_id, {}).get(movie_id)
+        
+        # If not found, fetch it
+        if not movie_data:
+             try:
+                resp = requests.get(f"{DETAIL_URL}/{movie_id}", headers=HEADERS, timeout=10)
+                if resp.status_code == 200:
+                    movie_data = resp.json()
+             except:
+                pass
+        
+        if movie_data:
+            title = clean_text(movie_data.get("post_title", "Unknown"))
+            release_date = unix_to_date(movie_data.get("release_date"))
+            subscribed_date = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+            user_link = f"<a href='tg://user?id={user_id}'>{cq.from_user.first_name}</a>"
+            
+            log_msg = (
+                f"🔔 **New Notification Subscription**\n\n"
+                f"👤 **User:** {user_link} (`{user_id}`)\n"
+                f"🎬 **Movie:** {title}\n"
+                f"📅 **Release Date:** {release_date}\n"
+                f"⏰ **Subscribed Date:** {subscribed_date}"
+            )
+            
+            if LOG_CHANNEL:
+                await client.send_message(
+                    chat_id=LOG_CHANNEL,
+                    text=log_msg,
+                    disable_web_page_preview=True
+                )
+    except Exception as e:
+        print(f"Error logging notification: {e}")
