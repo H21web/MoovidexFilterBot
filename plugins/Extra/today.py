@@ -6,7 +6,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
 from info import *
-from plugins.Extra.binged import HEADERS, DETAIL_URL, ADMIN_IDS, clean_text, build_released_message, build_upcoming_message, get_similar_movies, format_search_title
+from plugins.Extra.binged import HEADERS, DETAIL_URL, ADMIN_IDS, clean_text, build_released_message, build_upcoming_message, get_similar_movies, format_search_title, find_tmdb_id, get_tmdb_details
 from database.ia_filterdb import get_search_results
 from database.users_chats_db import db
 from TechVJ.bot import TechVJBot
@@ -79,10 +79,24 @@ async def check_releases_loop():
                             # Build Message
                             msg, image = build_released_message(movie_data, temp.U_NAME, source='binged')
                             
-                            # Use Binged poster (User Request)
-                            final_image = image
+                            # --- TMDB INTEGRATION START ---
+                            imdb_id = movie_data.get("imdb_id")
+                            tmdb_image = None
                             
-                            # Backdrop as fallback? No, user requested Binged poster.
+                            if imdb_id:
+                                try:
+                                    tmdb_results = find_tmdb_id(imdb_id)
+                                    if tmdb_results:
+                                        tmdb_id = tmdb_results[0].get("id")
+                                        tmdb_details = get_tmdb_details(tmdb_id, "movie")
+                                        if tmdb_details and tmdb_details.get("image"):
+                                            tmdb_image = tmdb_details.get("image")
+                                except Exception as e:
+                                    print(f"TMDB Fetch Error in Loop: {e}")
+
+                            # Use TMDB image if available, otherwise fallback to Binged image
+                            final_image = tmdb_image if tmdb_image else image
+                            # --- TMDB INTEGRATION END ---
                             
                             safe_title = format_search_title(title, year)
                                                         
@@ -228,8 +242,25 @@ async def show_movie_detail(client, cq):
     # Build message using shared function
     msg, image = build_released_message(movie_data, temp.U_NAME, source='binged')
 
-    # Use Binged poster (User Request)
-    final_image = image
+    # --- TMDB INTEGRATION START ---
+    imdb_id = movie_data.get("imdb_id")
+    tmdb_image = None
+    
+    if imdb_id:
+        try:
+            tmdb_results = find_tmdb_id(imdb_id)
+            if tmdb_results:
+                tmdb_id = tmdb_results[0].get("id")
+                tmdb_details = get_tmdb_details(tmdb_id, "movie")
+                if tmdb_details and tmdb_details.get("image"):
+                    tmdb_image = tmdb_details.get("image")
+        except Exception as e:
+            print(f"TMDB Fetch Error in Detail: {e}")
+
+    # Use TMDB image if available, otherwise fallback to Binged image
+    final_image = tmdb_image if tmdb_image else image
+    movie_data["image"] = final_image # Sync for consistency
+    # --- TMDB INTEGRATION END ---
     
     # Build buttons
     buttons = []

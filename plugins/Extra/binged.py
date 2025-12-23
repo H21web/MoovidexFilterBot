@@ -133,7 +133,37 @@ def get_platform_name(platform_data):
     else:
         return "OTT"
 
-# Search TMDB
+# Search TMDB (Supports Name or IMDB ID)
+def find_tmdb_id(query):
+    try:
+        # Check if query is IMDB ID
+        if re.match(r'^tt\d+$', query):
+            url = f"{TMDB_API_URL}/find/{query}"
+            params = {
+                "api_key": TMDB_API_KEY,
+                "external_source": "imdb_id"
+            }
+            resp = requests.get(url, params=params, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            # Combine results
+            results = []
+            for media_type in ["movie_results", "tv_results"]:
+                for item in data.get(media_type, []):
+                    item["media_type"] = "movie" if media_type == "movie_results" else "tv"
+                    results.append(item)
+            return results
+            
+        else:
+            # Regular search
+            return search_tmdb(query)
+            
+    except Exception as e:
+        print(f"TMDB Find Error: {e}")
+        return []
+
+# Search TMDB (Name only)
 def search_tmdb(query):
     try:
         url = f"{TMDB_API_URL}/search/multi"
@@ -190,18 +220,35 @@ def get_tmdb_details(tmdb_id, media_type="movie"):
         rating = f"{round(data.get('vote_average', 0), 1)}/10"
         
         # Images (Backdrop preference)
-        backdrop_path = data.get("backdrop_path")
         poster_path = data.get("poster_path")
+        backdrop_path = data.get("backdrop_path")
         
-        # Try to find best landscape image from images
+        # Advanced Image Selection: Landscape with Title Preference
         images = data.get("images", {})
         backdrops = images.get("backdrops", [])
+        
+        best_backdrop = None
+        
         if backdrops:
-            # Sort by vote count or width to get best quality
-            backdrops.sort(key=lambda x: x.get("vote_count", 0), reverse=True)
-            backdrop_path = backdrops[0].get("file_path")
+            # 1. Filter English backdrops (likely to contain English title)
+            english_backdrops = [b for b in backdrops if b.get("iso_639_1") == "en"]
             
-        image_url = f"{TMDB_IMAGE_URL}{backdrop_path}" if backdrop_path else (f"{TMDB_IMAGE_URL}{poster_path}" if poster_path else "")
+            # 2. Sort by vote_count (popularity usually means better quality/relevance)
+            english_backdrops.sort(key=lambda x: x.get("vote_count", 0), reverse=True)
+            
+            # 3. Also sort all backdrops by vote_count as fallback
+            backdrops.sort(key=lambda x: x.get("vote_count", 0), reverse=True)
+            
+            if english_backdrops:
+                best_backdrop = english_backdrops[0].get("file_path")
+            elif backdrops:
+                best_backdrop = backdrops[0].get("file_path")
+        
+        # Fallback to default backdrop if no specific one found
+        if not best_backdrop:
+            best_backdrop = backdrop_path
+            
+        image_url = f"{TMDB_IMAGE_URL}{best_backdrop}" if best_backdrop else (f"{TMDB_IMAGE_URL}{poster_path}" if poster_path else "")
         
         # Similar
         similar = []
@@ -234,7 +281,8 @@ def get_tmdb_details(tmdb_id, media_type="movie"):
             "release_date": release_date,
             "videos": videos,
             "similar": similar,
-            "media_type": media_type
+            "media_type": media_type,
+            "original_data": data # Keep original data for deep diving if needed
         }
     except Exception as e:
         print(f"TMDB Details Error: {e}")
@@ -480,7 +528,8 @@ async def imdb_search(client, message):
 
     query = " ".join(message.command[1:]).strip()
     
-    results = search_tmdb(query)
+    # Use find_tmdb_id to support IMDB ID or Name
+    results = find_tmdb_id(query)
     if not results:
         return await message.reply_text("No results found on TMDB.")
 
@@ -643,6 +692,27 @@ async def binged_detail(client, cq):
     
     if not movie_data or "ID" not in movie_data:
         return await cq.answer("Movie data not found.", show_alert=True)
+        
+    # --- TMDB INTEGRATION START ---
+    imdb_id = movie_data.get("imdb_id")
+    tmdb_image = None
+    
+    if imdb_id:
+        print(f"Searching TMDB for IMDB ID: {imdb_id}")
+        tmdb_results = find_tmdb_id(imdb_id)
+        if tmdb_results:
+            tmdb_id = tmdb_results[0].get("id")
+            media_type = tmdb_results[0].get("media_type", "movie")
+            tmdb_details = get_tmdb_details(tmdb_id, media_type)
+            
+            if tmdb_details and tmdb_details.get("image"):
+                tmdb_image = tmdb_details.get("image")
+                print(f"Found TMDB Image: {tmdb_image}")
+    
+    # Use TMDB image if available, otherwise fallback to Binged image
+    final_image = tmdb_image if tmdb_image else movie_data.get("image", "")
+    movie_data["image"] = final_image # Update the movie data with the new image
+    # --- TMDB INTEGRATION END ---
     
     # Store full movie data
     temp.BINGED_RESULTS[user_id] = temp.BINGED_RESULTS.get(user_id, {})
@@ -662,9 +732,6 @@ async def binged_detail(client, cq):
     ]
     
     preview_msg = f"**{title}** ({year})\n\nChoose movie status:"
-    
-    # Use Binged poster
-    final_image = movie_data.get("image", "")
     
     if final_image:
         await cq.message.reply_photo(
