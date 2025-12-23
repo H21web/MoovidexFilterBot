@@ -6,7 +6,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
 from info import *
-from plugins.Extra.binged import HEADERS, DETAIL_URL, ADMIN_IDS, clean_text, build_released_message, build_upcoming_message, get_similar_movies, format_search_title, find_tmdb_id, get_tmdb_details
+from plugins.Extra.binged import HEADERS, DETAIL_URL, ADMIN_IDS, clean_text, build_released_message, build_upcoming_message, get_similar_movies, format_search_title, find_tmdb_id, get_tmdb_details, search_tmdb_advanced
 from database.ia_filterdb import get_search_results
 from database.users_chats_db import db
 from TechVJ.bot import TechVJBot
@@ -93,6 +93,30 @@ async def check_releases_loop():
                                             tmdb_image = tmdb_details.get("image")
                                 except Exception as e:
                                     print(f"TMDB Fetch Error in Loop: {e}")
+                            
+                            # Fallback: Search by Title if no IMDB ID or no image found
+                            if not tmdb_image:
+                                title_search = clean_text(movie.get("title", ""))
+                                year_search = movie.get("release_year") or movie.get("year")
+                                
+                                # Determine media type (today is usually streaming movies/series)
+                                media_type_hint = "movie"
+                                # Basic check for series pattern
+                                if "season" in title_search.lower() or re.search(r'S\d+', title_search, re.IGNORECASE):
+                                     media_type_hint = "tv"
+
+                                if title_search:
+                                    print(f"Searching TMDB Advanced (Loop): {title_search} ({year_search})")
+                                    # Use specific year search
+                                    tmdb_results = search_tmdb_advanced(title_search, year=year_search, media_type=media_type_hint)
+                                    
+                                    if tmdb_results:
+                                        tmdb_id = tmdb_results[0].get("id")
+                                        tmdb_details = get_tmdb_details(tmdb_id, "movie") # get_tmdb_details handles generic types well
+                                        
+                                        if tmdb_details and tmdb_details.get("image"):
+                                            tmdb_image = tmdb_details.get("image")
+                                            print(f"Found TMDB Image via Advanced Search (Loop): {tmdb_image}")
 
                             # Use TMDB image if available, otherwise fallback to Binged image
                             final_image = tmdb_image if tmdb_image else image
@@ -256,6 +280,36 @@ async def show_movie_detail(client, cq):
                     tmdb_image = tmdb_details.get("image")
         except Exception as e:
             print(f"TMDB Fetch Error in Detail: {e}")
+            
+    # Fallback: Search by Title if no IMDB ID or no image found
+    if not tmdb_image:
+        title_search = clean_text(movie_data.get("post_title", ""))
+        year_search = movie_data.get("release_year")
+        
+        # Determine media type from categories
+        media_type_hint = "movie"
+        if "categories" in movie_data:
+             cats = str(movie_data["categories"]).lower()
+             if "tv" in cats or "series" in cats or "show" in cats:
+                 media_type_hint = "tv"
+        
+        # Also check title pattern
+        if re.search(r'S\d+', title_search, re.IGNORECASE):
+             media_type_hint = "tv"
+
+        if title_search:
+            print(f"Searching TMDB Advanced (Detail): {title_search} ({year_search})")
+            
+            # Use specific year search
+            tmdb_results = search_tmdb_advanced(title_search, year=year_search, media_type=media_type_hint)
+            
+            if tmdb_results:
+                tmdb_id = tmdb_results[0].get("id")
+                tmdb_details = get_tmdb_details(tmdb_id, "movie")
+                
+                if tmdb_details and tmdb_details.get("image"):
+                    tmdb_image = tmdb_details.get("image")
+                    print(f"Found TMDB Image via Advanced Search (Detail): {tmdb_image}")
 
     # Use TMDB image if available, otherwise fallback to Binged image
     final_image = tmdb_image if tmdb_image else image

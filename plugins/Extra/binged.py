@@ -189,6 +189,41 @@ def search_tmdb(query):
         print(f"TMDB Search Error: {e}")
         return []
 
+# Advanced Search TMDB (Specific Type & Year)
+def search_tmdb_advanced(query, year=None, media_type="movie"):
+    try:
+        endpoint = "tv" if media_type == "tv" else "movie"
+        url = f"{TMDB_API_URL}/search/{endpoint}"
+        
+        params = {
+            "api_key": TMDB_API_KEY,
+            "query": query,
+            "language": "en-US",
+            "page": 1,
+            "include_adult": "true"
+        }
+        
+        if year and str(year).isdigit():
+            if media_type == "tv":
+                params["first_air_date_year"] = str(year)
+            else:
+                params["primary_release_year"] = str(year)
+                
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        
+        results = []
+        for item in data.get("results", []):
+            item["media_type"] = media_type # Enforce type from search
+            results.append(item)
+            
+        return results
+    except Exception as e:
+        print(f"TMDB Advanced Search Error: {e}")
+        # Fallback to general search if specific fails
+        return search_tmdb(f"{query} {year}" if year else query)
+
 # Get TMDB Details
 def get_tmdb_details(tmdb_id, media_type="movie"):
     try:
@@ -719,16 +754,32 @@ async def binged_detail(client, cq):
                 tmdb_image = tmdb_details.get("image")
                 print(f"Found TMDB Image via ID: {tmdb_image}")
 
+            if tmdb_details and tmdb_details.get("image"):
+                tmdb_image = tmdb_details.get("image")
+                print(f"Found TMDB Image via ID: {tmdb_image}")
+
     # Fallback: Search by Title if no IMDB ID or no image found
     if not tmdb_image:
         title_search = clean_text(movie_data.get("post_title", ""))
         year_search = movie_data.get("release_year")
         
+        # Determine media type from categories or title
+        media_type_hint = "movie"
+        if "categories" in movie_data:
+             cats = str(movie_data["categories"]).lower()
+             if "tv" in cats or "series" in cats or "show" in cats:
+                 media_type_hint = "tv"
+        
+        # Also check title pattern for S01 etc
+        if re.search(r'S\d+', title_search, re.IGNORECASE):
+             media_type_hint = "tv"
+
         if title_search:
-            search_query = f"{title_search} {year_search}" if year_search and str(year_search).isdigit() else title_search
-            print(f"Searching TMDB by Title: {search_query}")
+            print(f"Searching TMDB Advanced: {title_search} ({year_search}) Type: {media_type_hint}")
             
-            tmdb_results = search_tmdb(search_query) # Search tmdb by name
+            # Use specific year search
+            tmdb_results = search_tmdb_advanced(title_search, year=year_search, media_type=media_type_hint)
+            
             if tmdb_results:
                 # Use first result
                 tmdb_id = tmdb_results[0].get("id")
@@ -737,7 +788,7 @@ async def binged_detail(client, cq):
                 
                 if tmdb_details and tmdb_details.get("image"):
                     tmdb_image = tmdb_details.get("image")
-                    print(f"Found TMDB Image via Title: {tmdb_image}")
+                    print(f"Found TMDB Image via Advanced Search: {tmdb_image}")
     
     # Use TMDB image if available, otherwise fallback to Binged image
     final_image = tmdb_image if tmdb_image else movie_data.get("image", "")
