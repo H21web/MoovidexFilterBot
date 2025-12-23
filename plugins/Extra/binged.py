@@ -42,6 +42,7 @@ TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/original"
 
 # List of Admin IDs
 ADMIN_IDS = [1011394081, 7191327005]
+UPDATE_CHANNEL_ID = -1001680629032
 
 from database.users_chats_db import db
 
@@ -707,7 +708,27 @@ async def binged_detail(client, cq):
             
             if tmdb_details and tmdb_details.get("image"):
                 tmdb_image = tmdb_details.get("image")
-                print(f"Found TMDB Image: {tmdb_image}")
+                print(f"Found TMDB Image via ID: {tmdb_image}")
+
+    # Fallback: Search by Title if no IMDB ID or no image found
+    if not tmdb_image:
+        title_search = clean_text(movie_data.get("post_title", ""))
+        year_search = movie_data.get("release_year")
+        
+        if title_search:
+            search_query = f"{title_search} {year_search}" if year_search and str(year_search).isdigit() else title_search
+            print(f"Searching TMDB by Title: {search_query}")
+            
+            tmdb_results = search_tmdb(search_query) # Search tmdb by name
+            if tmdb_results:
+                # Use first result
+                tmdb_id = tmdb_results[0].get("id")
+                media_type = tmdb_results[0].get("media_type", "movie")
+                tmdb_details = get_tmdb_details(tmdb_id, media_type)
+                
+                if tmdb_details and tmdb_details.get("image"):
+                    tmdb_image = tmdb_details.get("image")
+                    print(f"Found TMDB Image via Title: {tmdb_image}")
     
     # Use TMDB image if available, otherwise fallback to Binged image
     final_image = tmdb_image if tmdb_image else movie_data.get("image", "")
@@ -915,14 +936,14 @@ async def binged_post(client, cq):
     try:
         if final_image:
             await client.send_photo(
-                chat_id=-1001680629032,
+                chat_id=UPDATE_CHANNEL_ID,
                 photo=final_image,
                 caption=msg,
                 reply_markup=InlineKeyboardMarkup(buttons)
             )
         else:
             await client.send_message(
-                chat_id=-1001680629032,
+                chat_id=UPDATE_CHANNEL_ID,
                 text=msg,
                 reply_markup=InlineKeyboardMarkup(buttons),
                 disable_web_page_preview=True
@@ -977,22 +998,27 @@ async def imdb_post(client, cq):
     
     # Send to channel
     try:
+        # Debug printing
+        print(f"Posting to Channel ID: {UPDATE_CHANNEL_ID}")
+        print(f"Image: {image}")
+        
         if image:
             await client.send_photo(
-                chat_id=-1001680629032,
+                chat_id=UPDATE_CHANNEL_ID,
                 photo=image,
                 caption=msg,
                 reply_markup=InlineKeyboardMarkup(buttons)
             )
         else:
             await client.send_message(
-                chat_id=-1001680629032,
+                chat_id=UPDATE_CHANNEL_ID,
                 text=msg,
                 reply_markup=InlineKeyboardMarkup(buttons),
                 disable_web_page_preview=True
             )
         await cq.answer("✅ Posted to channel.")
     except Exception as e:
+        print(f"Error Posting IMDB: {e}")
         await cq.answer(f"❌ Error posting: {e}", show_alert=True)
 
 # Prompt for custom button input (Binged)
@@ -1110,14 +1136,14 @@ async def receive_custom_search(client, message):
     try:
         if final_image:
             await client.send_photo(
-                chat_id=-1001680629032,
+                chat_id=UPDATE_CHANNEL_ID,
                 photo=final_image,
                 caption=msg,
                 reply_markup=InlineKeyboardMarkup(buttons)
             )
         else:
             await client.send_message(
-                chat_id=-1001680629032,
+                chat_id=UPDATE_CHANNEL_ID,
                 text=msg,
                 reply_markup=InlineKeyboardMarkup(buttons),
                 disable_web_page_preview=True
