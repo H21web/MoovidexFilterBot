@@ -232,6 +232,8 @@ def get_tmdb_details(tmdb_id, media_type="movie"):
         
         if backdrops:
             # 1. Filter English backdrops (likely to contain English title)
+            # Check for iso_639_1 == "en" OR "null" (sometimes titles are in null lang)
+            # Prioritize "en" explicitly for titles
             english_backdrops = [b for b in backdrops if b.get("iso_639_1") == "en"]
             
             # 2. Sort by vote_count (popularity usually means better quality/relevance)
@@ -240,8 +242,15 @@ def get_tmdb_details(tmdb_id, media_type="movie"):
             # 3. Also sort all backdrops by vote_count as fallback
             backdrops.sort(key=lambda x: x.get("vote_count", 0), reverse=True)
             
+            # 4. Secondary filter: backdrops with no language (often high quality but risky)
+            none_backdrops = [b for b in backdrops if b.get("iso_639_1") is None]
+            none_backdrops.sort(key=lambda x: x.get("vote_count", 0), reverse=True)
+
+            # Strategy: Best English -> Best None (if high vote) -> Best Overall
             if english_backdrops:
                 best_backdrop = english_backdrops[0].get("file_path")
+            elif none_backdrops and none_backdrops[0].get("vote_count", 0) > 5: # Only if decent votes
+                 best_backdrop = none_backdrops[0].get("file_path")
             elif backdrops:
                 best_backdrop = backdrops[0].get("file_path")
         
@@ -969,7 +978,7 @@ async def imdb_post(client, cq):
     year = movie_data.get("year", "N/A")
     
     # Get status from temp storage
-    status = temp.MOVIE_STATUS.get(movie_id, "released")
+    status = temp.MOVIE_STATUS.get(tmdb_id, "released")
     
     if status == "upcoming":
         msg, image = build_upcoming_message(movie_data, temp.U_NAME, source='imdb')
