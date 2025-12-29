@@ -1325,8 +1325,15 @@ async def smart_next_page(bot, query):
 
     await show_smart_results(bot, query, all_files, key, title_extra, offset=offset)
 
-async def show_smart_results(client, query, files, key, title_extra, offset=0, back_cb=None):
-    settings = await get_settings(query.message.chat.id)
+async def show_smart_results(client, query_or_msg, files, key, title_extra, offset=0, back_cb=None):
+    if isinstance(query_or_msg, CallbackQuery):
+        message = query_or_msg.message
+        req_user_id = query_or_msg.from_user.id
+    else:
+        message = query_or_msg
+        req_user_id = message.reply_to_message.from_user.id if message.reply_to_message else message.chat.id # Estimate
+    
+    settings = await get_settings(message.chat.id)
     pre = 'filep' if settings['file_secure'] else 'file'
     
     # Slice for display
@@ -1356,7 +1363,7 @@ async def show_smart_results(client, query, files, key, title_extra, offset=0, b
          TITLES[key] = title_extra
          # Ensure we DO NOT overwrite FRESH[key] here!
     
-    req = query.from_user.id
+    req = req_user_id
     
     # Pagination Buttons
     # Previous / Back
@@ -1381,11 +1388,21 @@ async def show_smart_results(client, query, files, key, title_extra, offset=0, b
     cap = f"⚡️ <b>{title_extra}</b>\n\n📂 <b>Found {total_results} Files</b>"
     
     if settings["button"]:
-        await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
+        try:
+            await message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
+        except (MessageNotModified, ValueError, BadRequest):
+             pass # Ignore if unchanged or bad request
+        except Exception as e:
+             logger.error(f"Error in show_smart_results: {e}")
     else:
         for file in view_files:
             cap += f"\n📁 [{get_size(file['file_size'])}] {file['file_name']}"
-        await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
+        try:
+            await message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
+        except (MessageNotModified, ValueError, BadRequest):
+             pass
+        except Exception as e:
+             logger.error(f"Error in show_smart_results: {e}")
 
 @Client.on_callback_query()
 async def cb_handler(client: Client, query: CallbackQuery):
@@ -2981,6 +2998,77 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
 
 
+async def search_orchestrator(client, reply_msg, files, key, search, analysis):
+    """
+    God Function: Intelligently routes search results to the best view.
+    """
+    
+    # 1. Language Picker (Multilingual Content)
+    if len(analysis['languages']) > 1:
+        btn = []
+        for lang in analysis['languages']:
+            btn.append([InlineKeyboardButton(f"🗣 {lang}", callback_data=f"smart_lang#{lang}#{key}")])
+        btn.append([InlineKeyboardButton("📂 Show All Files", callback_data=f"smart_default#{key}")])
+        
+        try:
+            await reply_msg.edit_text(
+                f"**Found {len(files)} results for '{search}'**\n\nSELECT LANGUAGE:",
+                reply_markup=InlineKeyboardMarkup(btn)
+            )
+        except Exception as e:
+            logger.error(f"Orchestrator Error (Lang): {e}")
+        return
+
+    # 2. Season Picker (Series with Multiple Seasons)
+    if analysis['is_series'] and len(analysis['seasons']) > 0:
+        btn = []
+        row = []
+        for season in analysis['seasons']:
+            row.append(InlineKeyboardButton(f"📺 {season}", callback_data=f"smart_season#{season}#{key}"))
+            if len(row) == 3:
+                btn.append(row)
+                row = []
+        if row:
+            btn.append(row)
+            
+        btn.append([InlineKeyboardButton("📂 Show All Episodes", callback_data=f"smart_default#{key}")])
+        
+        try:
+            await reply_msg.edit_text(
+                f"**Found {len(analysis['seasons'])} Seasons for '{search}'**\n\nSELECT SEASON:",
+                reply_markup=InlineKeyboardMarkup(btn)
+            )
+        except Exception as e:
+            logger.error(f"Orchestrator Error (Season): {e}")
+        return
+
+    # 3. Quality Picker (Movies with variants, if many files)
+    if not analysis['is_series'] and len(analysis['qualities']) > 1 and len(files) > 10:
+        btn = []
+        row = []
+        for qual in analysis['qualities']:
+            row.append(InlineKeyboardButton(f"{qual}", callback_data=f"smart_quality#{qual}#{key}"))
+            if len(row) == 3:
+                btn.append(row)
+                row = []
+        if row:
+            btn.append(row)
+        btn.append([InlineKeyboardButton("📂 Show All Files", callback_data=f"smart_default#{key}")])
+
+        try:
+            await reply_msg.edit_text( 
+                f"**Found {len(files)} results.**\n\nSELECT QUALITY:",
+                reply_markup=InlineKeyboardMarkup(btn) 
+            )
+        except Exception as e:
+            logger.error(f"Orchestrator Error (Quality): {e}")
+        return
+
+    # 4. Standard List (Default)
+    # Pass 'message' object (reply_msg) to show_smart_results
+    await show_smart_results(client, reply_msg, files, key, f"{search}")
+
+
 async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     curr_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
     if not spoll:
@@ -3052,120 +3140,11 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     # --- Smart Filter Logic Start ---
     analysis = analyze_query_results(files)
     key = f"{message.chat.id}-{message.id}"
-    req = message.from_user.id if message.from_user else 0
     FRESH[key] = search
-    temp.GETALL[key] = files # Store ALL fetched files for filtering
+    temp.GETALL[key] = files
     temp.SHORT[message.from_user.id] = message.chat.id
-
-    pre = 'filep' if settings['file_secure'] else 'file'
-
-    # 1. Language Check
-    if len(analysis['languages']) > 1:
-        btn = []
-        for lang in analysis['languages']:
-            btn.append([InlineKeyboardButton(f"🗣 {lang}", callback_data=f"smart_lang#{lang}#{key}")])
-        btn.append([InlineKeyboardButton("📂 Show All Files", callback_data=f"smart_default#{key}")])
-        
-        await reply_msg.edit_text(
-            f"**Found {total_results} results for '{search}'**\n\nSELECT LANGUAGE:",
-            reply_markup=InlineKeyboardMarkup(btn)
-        )
-        return
-
-    # 2. Season Check (for Series)
-    if analysis['is_series'] and len(analysis['seasons']) > 0:
-        btn = []
-        # Group seasons in rows of 3
-        row = []
-        for season in analysis['seasons']:
-            row.append(InlineKeyboardButton(f"📺 {season}", callback_data=f"smart_season#{season}#{key}"))
-            if len(row) == 3:
-                btn.append(row)
-                row = []
-        if row:
-            btn.append(row)
-            
-        btn.append([InlineKeyboardButton("Show All Episodes", callback_data=f"smart_default#{key}")])
-        
-        await reply_msg.edit_text(
-            f"**Found {len(analysis['seasons'])} Seasons for '{search}'**\n\nSELECT SEASON:",
-            reply_markup=InlineKeyboardMarkup(btn)
-        )
-        return
-        
-    # 3. Quality Check (if no specific filtering needed or just movies)
-    if len(analysis['qualities']) > 1 and not analysis['is_series']:
-         # Optional: We could ask for quality, but typically listing files is fine if just quality differs.
-         # Let's show quality buttons if there are too many files (e.g. > 10)
-         if total_results > 10:
-            btn = []
-            row = []
-            for qual in analysis['qualities']:
-                row.append(InlineKeyboardButton(f"{qual}", callback_data=f"smart_quality#{qual}#{key}"))
-                if len(row) == 3:
-                    btn.append(row)
-                    row = []
-            if row:
-                btn.append(row)
-            btn.append([InlineKeyboardButton("Show All Files", callback_data=f"smart_default#{key}")])
-
-            await reply_msg.edit_text( 
-                f"**Found {total_results} results.**\n\nSELECT QUALITY:",
-                reply_markup=InlineKeyboardMarkup(btn) 
-            )
-            return
-
-    # --- Fallback to Standard Display (Default) ---
-    # Convert files to standard page view (10 max)
-    # We fetched up to 100, so we slice the first 10 or MAX_B_TN
     
-    view_files = files[:int(MAX_B_TN) if not settings.get('max_btn') else 10]
-    
-    if settings["button"]:
-        btn = [
-            [
-                InlineKeyboardButton(
-                    text=extract_shortdetails(file['file_name'], file['file_size']),
-                    callback_data=f"{pre}#{file['file_id']}"
-                ),
-            ]
-            for file in view_files
-        ]
-    else:
-        btn = []
-
-    # Navigation Buttons (if more files exist than shown)
-    if total_results > len(view_files):
-        btn.append([
-             InlineKeyboardButton("📑 Page", callback_data="pages"),
-             InlineKeyboardButton(f"1/{math.ceil(total_results/(int(MAX_B_TN) if not settings.get('max_btn') else 10))}", callback_data="pages"),
-             InlineKeyboardButton("Next ▶", callback_data=f"next_{req}_{key}_{len(view_files)}")
-        ])
-
-    # Add Standard Filter Buttons
-    btn.insert(0, [
-        InlineKeyboardButton(f"🗂 {total_results} Results", callback_data='total')
-    ])
-    
-    # Extra buttons like languages/seasons if not auto-triggered
-    extra_row = []
-    if len(analysis['languages']) > 1:
-        extra_row.append(InlineKeyboardButton("Languages", callback_data=f"languages#{key}"))
-    if analysis['is_series'] and len(analysis['seasons']) > 1:
-        extra_row.append(InlineKeyboardButton("Seasons", callback_data=f"seasons#{key}"))
-    
-    if extra_row:
-        btn.insert(1, extra_row)
-
-    cap = f"**Search Results for '{search}':**"
-    
-    if settings["button"]:
-        await reply_msg.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
-    else:
-        # Generate text list
-        for file in view_files:
-            cap += f"\n📁 [{get_size(file['file_size'])}] {file['file_name']}"
-        await reply_msg.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
+    await search_orchestrator(client, reply_msg, files, key, search, analysis)
 
 async def handle_no_results(client, reply_msg, mv_rqst, reqstr):
     try:
