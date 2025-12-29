@@ -99,6 +99,7 @@ class Database:
     
     async def add_user(self, id, name):
         user = self.new_user(id, name)
+        user['joined_date'] = datetime.date.today().isoformat()
         await self.col.insert_one(user)
     
     async def is_user_exist(self, id):
@@ -107,6 +108,11 @@ class Database:
     
     async def total_users_count(self):
         count = await self.col.count_documents({})
+        return count
+
+    async def get_users_joined_today_count(self):
+        today = datetime.date.today().isoformat()
+        count = await self.col.count_documents({'joined_date': today})
         return count
 
     async def add_clone_bot(self, bot_id, user_id, bot_token):

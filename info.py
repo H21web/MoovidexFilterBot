@@ -14,6 +14,8 @@ SESSION = environ.get('SESSION', 'TechVJBot')
 API_ID = int(environ.get('API_ID', ''))
 API_HASH = environ.get('API_HASH', '')
 BOT_TOKEN = environ.get('BOT_TOKEN', "")
+ADMIN_USERNAME = environ.get('ADMIN_USERNAME', "admin")
+ADMIN_PASSWORD = environ.get('ADMIN_PASSWORD', "admin")
 TMDB_API_KEY = environ.get('TMDB_API_KEY', "b3d10dab8e82525e3a2ed8ed8bc38874") # Default key or empty
 
 

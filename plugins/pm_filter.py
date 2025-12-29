@@ -13,6 +13,7 @@ from pyrogram.errors import FloodWait, UserIsBlocked, MessageNotModified, PeerId
 from pyrogram.errors.exceptions.bad_request_400 import MediaEmpty, PhotoInvalidDimensions, WebpageMediaEmpty
 from utils import get_wish, get_size, is_subscribed, pub_is_subscribed, get_poster, search_gagala, temp, get_settings, save_group_settings, get_shortlink, get_tutorial, send_all, get_cap
 from database.users_chats_db import db
+from database.stats_db import stats_db
 from database.ia_filterdb import col, sec_col, db as vjdb, sec_db, get_file_details, get_search_results, get_bad_files
 from database.filters_mdb import del_all, find_filter, get_filters
 from database.connections_mdb import mydb, active_connection, all_connections, delete_connection, if_active, make_active, make_inactive
@@ -101,6 +102,7 @@ async def pm_text(bot, message):
     kd = await global_filters(bot, message)
     if kd is False:
         if PM_SEARCH == True:
+            await stats_db.add_pm_search_log(content, user_id)
             ai_search = True
             reply_msg = await bot.send_message(
                 chat_id=message.chat.id,
@@ -2638,6 +2640,11 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             search = search.replace(":", "")
             search = search.replace(".", "")
             files, offset, total_results = await get_search_results(message.chat.id ,search, offset=0, filter=True)
+            try:
+                req_user_id = message.from_user.id if message.from_user else 0
+                await stats_db.add_search_log(search, req_user_id, total_results)
+            except Exception as e:
+                print(f"Error logging search: {e}")
             settings = await get_settings(message.chat.id)
             if not files:
                 if settings["spell_check"]:

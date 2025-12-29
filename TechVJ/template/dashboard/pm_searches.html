@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>PM Searches</h1>
+<form method="POST" action="/admin/clear_pm_searches" style="margin-bottom: 20px;">
+    <button type="submit" style="background-color: #ff6b6b; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">Clear Logs</button>
+</form>
+<div class="card">
+    <h3>Recent PM Searches</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>User ID</th>
+                <th>Query</th>
+                <th>Timestamp</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for search in pm_searches %}
+            <tr>
+                <td>{{ search.user_id }}</td>
+                <td>{{ search.query }}</td>
+                <td>{{ search.timestamp }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Search Statistics</h1>
+<div class="styles-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <div class="card">
+        <h3>Top Searches</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Query</th>
+                    <th>Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for search in top_searches %}
+                <tr>
+                    <td>{{ search._id }}</td>
+                    <td>{{ search.count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="card">
+        <h3>Most Anticipated (No Results)</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Query</th>
+                    <th>Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for search in no_result_searches %}
+                <tr>
+                    <td>{{ search._id }}</td>
+                    <td>{{ search.count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
