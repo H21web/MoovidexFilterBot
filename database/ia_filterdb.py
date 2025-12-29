@@ -102,11 +102,16 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
     else:
         # Multi-word query - Smart Regex Split
         # Split by space and ensure each word is present
-        words = query.split()
+        # Improve: Replace special chars with space first to match "start-up" with "start up"
+        # and "spider.man" with "spider man"
+        clean_query = re.sub(r'[\.\+\-_]', ' ', query)
+        words = clean_query.split()
+        
         regex_list = []
         for word in words:
-            # Escape the word ensures special chars don't break regex
-            # We match the word anywhere in the string, generally sufficient for "spider man" in "Amazing Spider-Man"
+            # Match word with robust boundaries or connected by symbols
+            # Using simple escape is safer for speed, but let's allow partial word matching if user wants
+            # user said "efficient search without errors"
             regex_list.append({'file_name': {'$regex': re.escape(word), '$options': 'i'}})
         
         filter_criteria = {'$and': regex_list}

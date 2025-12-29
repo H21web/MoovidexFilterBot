@@ -34,6 +34,7 @@ BUTTONS0 = {}
 BUTTONS1 = {}
 BUTTONS2 = {}
 SPELL_CHECK = {}
+TITLES = {} # [NEW] Store display titles for filtered results
 
 # Language Mapping
 LANG_MAP = {
@@ -54,11 +55,15 @@ QUALITY_MAP = ['2160p', '4k', '1080p', '720p', '480p', '360p', 'cam', 'dvd']
 
 @Client.on_message(filters.group & filters.text & filters.incoming)
 async def give_filter(client, message):
-    await mdb.update_top_messages(message.from_user.id, message.text)
+    user_id = message.from_user.id if message.from_user else 0
+    try:
+        await mdb.update_top_messages(user_id, message.text)
+    except Exception as e:
+        logger.error(f"Error updating top messages: {e}")
+        
     if message.chat.id != SUPPORT_CHAT_ID:
         settings = await get_settings(message.chat.id)
-        chatid = message.chat.id 
-        user_id = message.from_user.id if message.from_user else 0
+        chatid = message.chat.id
         if settings['fsub'] != None:
             try:
                 btn = await pub_is_subscribed(client, message, settings['fsub'])
@@ -2853,9 +2858,8 @@ async def smart_next_page(bot, query):
         
     all_files = temp.GETALL[key]
     
-    # We don't have the "Filtered: Title" string easily available in the callback data
-    # But FRESH[key] stores it!
-    title_extra = FRESH.get(key, "").replace("Filtered: ", "") or "Results"
+    # Retrieve title from TITLES dict, fallback to "Results"
+    title_extra = TITLES.get(key, "Results")
 
     await show_smart_results(bot, query, all_files, key, title_extra, offset=offset)
 
@@ -2885,9 +2889,10 @@ async def show_smart_results(client, query, files, key, title_extra, offset=0):
     else:
         btn = []
     
-    # Update title in FRESH for context if this function is called directly first time
-    if offset == 0 and "Filtered" not in FRESH.get(key, ""):
-         FRESH[key] = f"Filtered: {title_extra}"
+    # Update TITLES for context if this function is called directly first time
+    if offset == 0:
+         TITLES[key] = title_extra
+         # Ensure we DO NOT overwrite FRESH[key] here!
     
     req = query.from_user.id
     
