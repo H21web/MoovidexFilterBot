@@ -59,6 +59,24 @@ async def dashboard_home(request):
     
     success_ratio = await stats_db.get_global_success_ratio()
     fulfillment_ratio = await stats_db.get_average_user_fulfillment()
+    
+    # New Stats for Chart and Box
+    no_result_ratio = await stats_db.get_no_result_ratio()
+    no_result_data = await stats_db.get_no_results_per_day(days=7)
+    
+    # Prepare Chart Data
+    # Fill in missing days for last 7 days for a complete graph
+    chart_labels = []
+    chart_data = []
+    
+    # Map data by date
+    data_map = {item['_id']: item['count'] for item in no_result_data}
+    
+    for i in range(6, -1, -1):
+        d = datetime.date.today() - datetime.timedelta(days=i)
+        date_str = d.strftime("%Y-%m-%d")
+        chart_labels.append(date_str)
+        chart_data.append(data_map.get(date_str, 0))
 
     return web.Response(text=render_template("index.html", 
                                              total_users=total_users,
@@ -67,6 +85,9 @@ async def dashboard_home(request):
                                              total_searches=total_searches,
                                              success_ratio=success_ratio,
                                              fulfillment_ratio=fulfillment_ratio,
+                                             no_result_ratio=no_result_ratio,
+                                             no_result_chart_labels=chart_labels,
+                                             no_result_chart_data=chart_data,
                                              status="Online"), content_type='text/html')
 
 @routes.get("/admin/users")
@@ -102,10 +123,21 @@ async def groups_page(request):
     if not check_auth(request):
         return web.HTTPFound('/admin/login')
     
-    chats = await db.get_all_chats()
-    chats_list = await chats.to_list(length=100)
+    try:
+        page = int(request.query.get('page', 1))
+    except ValueError:
+        page = 1
+        
+    limit = 20
+    total_chats_count = await db.total_chat_count()
+    total_pages = (total_chats_count + limit - 1) // limit
     
-    return web.Response(text=render_template("groups.html", chats=chats_list), content_type='text/html')
+    chats_list = await db.get_all_chats_paginated(page, limit)
+    
+    return web.Response(text=render_template("groups.html", 
+                                             chats=chats_list,
+                                             page=page,
+                                             total_pages=total_pages), content_type='text/html')
 
 @routes.get("/admin/searches")
 async def searches_page(request):
@@ -128,9 +160,20 @@ async def pm_searches_page(request):
     if not check_auth(request):
         return web.HTTPFound('/admin/login')
     
-    pm_searches = await stats_db.get_recent_pm_searches()
+    try:
+        page = int(request.query.get('page', 1))
+    except ValueError:
+        page = 1
+        
+    limit = 50
+    pm_searches = await stats_db.get_recent_pm_searches(page=page, limit=limit)
+    total_count = await stats_db.get_total_pm_searches_count()
+    total_pages = (total_count + limit - 1) // limit
     
-    return web.Response(text=render_template("pm_searches.html", pm_searches=pm_searches), content_type='text/html')
+    return web.Response(text=render_template("pm_searches.html", 
+                                             pm_searches=pm_searches,
+                                             page=page,
+                                             total_pages=total_pages), content_type='text/html')
 
 @routes.post("/admin/clear_pm_searches")
 async def clear_pm_searches(request):

@@ -253,6 +253,11 @@ class Database:
     async def get_all_chats(self):
         return self.grp.find({})
 
+    async def get_all_chats_paginated(self, page=1, limit=50):
+        skip = (page - 1) * limit
+        cursor = self.grp.find({}).sort('_id', -1).skip(skip).limit(limit)
+        return await cursor.to_list(length=limit)
+
 
     async def get_db_size(self):
         return (await self.db.command("dbstats"))['dataSize']

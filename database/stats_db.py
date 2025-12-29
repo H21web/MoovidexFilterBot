@@ -52,9 +52,11 @@ class StatsDB:
         cursor = self.search_logs.aggregate(pipeline)
         return await cursor.to_list(length=limit)
 
-    async def get_recent_pm_searches(self, limit=50):
+    async def get_recent_pm_searches(self, page=1, limit=50):
+        skip = (page - 1) * limit
         pipeline = [
             {"$sort": {"timestamp": -1}},
+            {"$skip": skip},
             {"$limit": limit},
             {"$lookup": {
                 "from": "users",  # Verify this matches COLLECTION_NAME in users_chats_db logic
@@ -66,6 +68,9 @@ class StatsDB:
         ]
         cursor = self.pm_search_logs.aggregate(pipeline)
         return await cursor.to_list(length=limit)
+
+    async def get_total_pm_searches_count(self):
+        return await self.pm_search_logs.count_documents({})
 
     async def get_recent_all_searches(self, limit=100):
         pipeline = [
@@ -145,5 +150,33 @@ class StatsDB:
         if result:
             return round(result[0]['avg_fulfillment'] * 100, 2)
         return 0
+
+    async def get_no_result_ratio(self):
+        """
+        Global % of searches with 0 results.
+        """
+        total = await self.search_logs.count_documents({})
+        if total == 0: return 0
+        no_res = await self.search_logs.count_documents({"results_count": 0})
+        return round((no_res / total) * 100, 2)
+
+    async def get_no_results_per_day(self, days=7):
+        pipeline = [
+            {
+                "$match": {
+                    "results_count": 0,
+                    "timestamp": {"$gte": datetime.utcnow() - datetime.timedelta(days=days)}
+                }
+            },
+            {
+                "$group": {
+                    "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$timestamp"}},
+                    "count": {"$sum": 1}
+                }
+            },
+            {"$sort": {"_id": 1}}
+        ]
+        cursor = self.search_logs.aggregate(pipeline)
+        return await cursor.to_list(length=days)
 
 stats_db = StatsDB(DATABASE_URI, DATABASE_NAME)

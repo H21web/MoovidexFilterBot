@@ -3114,6 +3114,9 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             season_pattern = re.compile(r'(?i)(?:S(\d{1,2})|Season\s?(\d{1,2}))')
             series_keywords = re.compile(r'(?i)\b(?:ep|episode)\s?\d+')
             
+            # Check if query itself implies a series (Skip suggestion if so)
+            is_series_query = season_pattern.search(search) or series_keywords.search(search)
+            
             for file in files[:50]: # Check top 50
                 fname = file['file_name'].lower()
                 if season_pattern.search(fname) or series_keywords.search(fname):
@@ -3125,7 +3128,8 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
                     break
                     
             # Trigger Logic: No Year OR Mixed Content
-            should_suggest = (not has_year) or (has_series and has_movies)
+            # BUT Skip if query is explicitly for a series
+            should_suggest = ((not has_year) or (has_series and has_movies)) and not is_series_query
             
             if should_suggest and settings["spell_check"]:
                  # If no year OR mixed results, and NOT explicitly an AI search, suggest via IMDb
