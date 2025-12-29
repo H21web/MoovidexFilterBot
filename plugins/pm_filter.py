@@ -3001,7 +3001,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             has_year = re.search(r'\b(19|20)\d{2}\b', search)
             if not has_year and not ai_search and settings["spell_check"]:
                  # If no year, and NOT explicitly an AI search (which skips this), suggest via IMDb
-                 return await advantage_spell_chok(client, name, msg, reply_msg, ai_search=True) # Check logic of ai_search flag usage implementation later
+                 return await advantage_spell_chok(client, name, msg, reply_msg, ai_search=False)
             
             if not files:
                 if settings["spell_check"]:
@@ -3158,7 +3158,7 @@ async def handle_no_results(client, reply_msg, mv_rqst, reqstr):
 
 
 
-async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
+async def advantage_spell_chok(client, name, msg, reply_msg, ai_search):
     mv_id = msg.id
     mv_rqst = name
     reqstr1 = msg.from_user.id if msg.from_user else 0
@@ -3191,7 +3191,7 @@ async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
     SPELL_CHECK[mv_id] = movielist
 
     # Auto spell check shortcut
-    if AI_SPELL_CHECK and vj_search:
+    if AI_SPELL_CHECK and ai_search:
         vj_search_new = False
         try:
             if reply_msg and hasattr(reply_msg, 'edit_text'):
