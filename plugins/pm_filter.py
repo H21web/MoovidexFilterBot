@@ -1176,6 +1176,7 @@ async def smart_lang_handler(client, query):
         if row:
             btn.append(row)
         btn.append([InlineKeyboardButton("Show All Episodes", callback_data=f"smart_default#{key}#{lang}")])
+        btn.append([InlineKeyboardButton("⬅ Back to Languages", callback_data=f"languages#{key}")])
         
         await query.message.edit_text(
             f"**Selected Language: {lang}**\nFound {len(analysis['seasons'])} Seasons.\n\nSELECT SEASON:",
@@ -1193,6 +1194,7 @@ async def smart_lang_handler(client, query):
         if row:
             btn.append(row)
         btn.append([InlineKeyboardButton("Show All Files", callback_data=f"smart_default#{key}#{lang}")])
+        btn.append([InlineKeyboardButton("⬅ Back to Languages", callback_data=f"languages#{key}")])
         
         await query.message.edit_text(
             f"**Selected Language: {lang}**\nFound {len(filtered_files)} Files.\n\nSELECT QUALITY:",
@@ -1227,7 +1229,8 @@ async def smart_season_handler(client, query):
         
     season_num = season_str.split()[-1] # "1"
     # Match S1, S01, Season 1, Season 01
-    s_regex = re.compile(rf'(?i)(?:S0?{season_num}|Season\s?0?{season_num})\b')
+    # Use (?:\D|$) to match S01 in S01E01 (non-digit boundary) or end of string
+    s_regex = re.compile(rf'(?i)(?:S0?{season_num}|Season\s?0?{season_num})(?:\D|$)')
     
     filtered_files = [f for f in filtered_files if s_regex.search(f['file_name'])]
     
@@ -1241,7 +1244,15 @@ async def smart_season_handler(client, query):
         
     filtered_files.sort(key=ep_sort)
     
-    await show_smart_results(client, query, filtered_files, key, f"{lang + ' | ' if lang else ''}{season_str}")
+    # Back Callback: If lang was present, go back to Season List for that Lang.
+    # If not, go back to Languages (if multilang) or main search?
+    # Actually, smart_season_handler is entered from Season List (which is shown by smart_lang_handler or auto_filter).
+    # If lang is present, smart_lang_handler showed the season list.
+    # If lang is NOT present, auto_filter (or smart_default?) showed the season list.
+    
+    back_cb = f"smart_lang#{lang}#{key}" if lang else f"languages#{key}"
+
+    await show_smart_results(client, query, filtered_files, key, f"{lang + ' | ' if lang else ''}{season_str}", back_cb=back_cb)
 
 @Client.on_callback_query(filters.regex(r"^smart_quality"))
 async def smart_quality_handler(client, query):
@@ -1316,7 +1327,7 @@ async def smart_next_page(bot, query):
 
     await show_smart_results(bot, query, all_files, key, title_extra, offset=offset)
 
-async def show_smart_results(client, query, files, key, title_extra, offset=0):
+async def show_smart_results(client, query, files, key, title_extra, offset=0, back_cb=None):
     settings = await get_settings(query.message.chat.id)
     pre = 'filep' if settings['file_secure'] else 'file'
     
@@ -1364,6 +1375,9 @@ async def show_smart_results(client, query, files, key, title_extra, offset=0):
          
     if nav_row:
         btn.append(nav_row)
+
+    if back_cb and offset == 0:
+        btn.append([InlineKeyboardButton("⬅ Back to Options", callback_data=back_cb)])
 
     cap = f"**Results for {title_extra}:**\nFound {total_results} files."
     
