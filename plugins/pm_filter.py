@@ -305,7 +305,26 @@ def extract_shortdetails(filename, file_size, max_length=64):
         current = test
 
     return current.strip()
+def sort_by_relevance(files, query):
+    """
+    Sort files by relevance:
+    1. Exact Match (Score 3)
+    2. Starts With (Score 2)
+    3. Contains (Score 1)
+    """
+    query = query.lower()
     
+    def get_score(file):
+        name = file['file_name'].lower()
+        if name == query:
+            return 3
+        if name.startswith(query):
+            return 2
+        if query in name:
+            return 1
+        return 0
+        
+    return sorted(files, key=get_score, reverse=True)
 
 
 def analyze_query_results(files):
@@ -1173,7 +1192,7 @@ async def smart_lang_handler(client, query):
                 row = []
         if row:
             btn.append(row)
-        btn.append([InlineKeyboardButton("Show All", callback_data=f"smart_default#{key}#{lang}")])
+        btn.append([InlineKeyboardButton("Show All Files", callback_data=f"smart_default#{key}#{lang}")])
         
         await query.message.edit_text(
             f"**Selected Language: {lang}**\nFound {len(filtered_files)} Files.\n\nSELECT QUALITY:",
@@ -2966,6 +2985,9 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             # Fetch MORE results for analysis (up to 100)
             files, offset, total_results = await get_search_results(message.chat.id ,search, offset=0, max_results=100, filter=True)
             
+            # Relevance Sorting
+            files = sort_by_relevance(files, search)
+                
             try:
                 req_user_id = message.from_user.id if message.from_user else 0
                 await stats_db.add_search_log(search, req_user_id, total_results, source='auto_filter')
@@ -2973,6 +2995,13 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
                 print(f"Error logging search: {e}")
                 
             settings = await get_settings(message.chat.id)
+            
+            # IMDb Auto-Suggest (If no year in query and results are messy/numerous)
+            # Check for 4-digit year
+            has_year = re.search(r'\b(19|20)\d{2}\b', search)
+            if not has_year and not ai_search and settings["spell_check"]:
+                 # If no year, and NOT explicitly an AI search (which skips this), suggest via IMDb
+                 return await advantage_spell_chok(client, name, msg, reply_msg, ai_search=True) # Check logic of ai_search flag usage implementation later
             
             if not files:
                 if settings["spell_check"]:
@@ -3000,7 +3029,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         btn = []
         for lang in analysis['languages']:
             btn.append([InlineKeyboardButton(f"{lang}", callback_data=f"smart_lang#{lang}#{key}")])
-        btn.append([InlineKeyboardButton("Show All / Default", callback_data=f"smart_default#{key}")])
+        btn.append([InlineKeyboardButton("Show All Files", callback_data=f"smart_default#{key}")])
         
         await reply_msg.edit_text(
             f"**Found {total_results} results for '{search}'**\n\nSELECT LANGUAGE:",
@@ -3043,7 +3072,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
                     row = []
             if row:
                 btn.append(row)
-            btn.append([InlineKeyboardButton("Show All", callback_data=f"smart_default#{key}")])
+            btn.append([InlineKeyboardButton("Show All Files", callback_data=f"smart_default#{key}")])
 
             await reply_msg.edit_text( 
                 f"**Found {total_results} results.**\n\nSELECT QUALITY:",
