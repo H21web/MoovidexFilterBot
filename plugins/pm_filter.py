@@ -360,6 +360,15 @@ def analyze_query_results(files):
         for code, lang in LANG_MAP.items():
             if code in name:
                 languages.add(lang)
+        
+        # Dynamic Language Extraction (Regex) - for languages not in LANG_MAP
+        # Match "Language Audio" or just "Language" if it looks like a language name
+        # Common pattern: Title Year Language ...
+        # List of common languages to check dynamically if not mapped
+        common_langs = ["French", "German", "Italian", "Spanish", "Russian", "Japanese", "Chinese", "Korean", "Thai", "Indonesian"]
+        for lang in common_langs:
+            if re.search(rf'(?i)\b{lang}\b', name):
+                languages.add(lang)
                 
         # Extract Quality
         for q in QUALITY_MAP:
@@ -586,7 +595,7 @@ async def advantage_spoll_choker(bot, query):
                 ai_search = True
                 k = (movie, files, offset, total_results)
                 reply_msg = await query.message.edit_text(f"<b>🔍 Searching {movie} </b>")
-                await auto_filter(bot, movie, query, reply_msg, ai_search, k)
+                await auto_filter(bot, movie, query.message, reply_msg, ai_search, k)
             else:
                 reqstr = await bot.get_users(query.from_user.id if query.from_user else 0)
 
@@ -1263,7 +1272,9 @@ async def smart_quality_handler(client, query):
         
     filtered_files = [f for f in filtered_files if qual.lower() in f['file_name'].lower()]
     
-    await show_smart_results(client, query, filtered_files, key, f"{lang + ' | ' if lang else ''}{qual}")
+    back_cb = f"smart_lang#{lang}#{key}" if lang else f"languages#{key}"
+
+    await show_smart_results(client, query, filtered_files, key, f"{lang + ' | ' if lang else ''}{qual}", back_cb=back_cb)
 
 @Client.on_callback_query(filters.regex(r"^smart_default"))
 async def smart_default_handler(client, query):
@@ -1284,7 +1295,9 @@ async def smart_default_handler(client, query):
                 temp_files.append(f)
         all_files = temp_files if temp_files else [f for f in all_files if lang.lower() in f['file_name'].lower()]
         
-    await show_smart_results(client, query, all_files, key, f"{lang if lang else 'All Results'}")
+    back_cb = f"languages#{key}"
+
+    await show_smart_results(client, query, all_files, key, f"{lang if lang else 'All Results'}", back_cb=back_cb)
 
 @Client.on_callback_query(filters.regex(r"^smart_next"))
 async def smart_next_page(bot, query):
@@ -2995,11 +3008,33 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
                 
             settings = await get_settings(message.chat.id)
             
-            # IMDb Auto-Suggest (If no year in query and results are messy/numerous)
-            # Check for 4-digit year
+            # IMDb Auto-Suggest
+            # 1. Check for year
             has_year = re.search(r'\b(19|20)\d{2}\b', search)
-            if not has_year and not ai_search and settings["spell_check"]:
-                 # If no year, and NOT explicitly an AI search (which skips this), suggest via IMDb
+            
+            # 2. Check for Mixed Content (Movie + Series)
+            has_series = False
+            has_movies = False
+            
+            # Quick scan of top results (regex same as analyze_query_results)
+            season_pattern = re.compile(r'(?i)(?:S(\d{1,2})|Season\s?(\d{1,2}))')
+            series_keywords = re.compile(r'(?i)\b(?:ep|episode)\s?\d+')
+            
+            for file in files[:20]: # Check top 20
+                fname = file['file_name'].lower()
+                if season_pattern.search(fname) or series_keywords.search(fname):
+                    has_series = True
+                else:
+                    has_movies = True
+                
+                if has_series and has_movies:
+                    break
+                    
+            # Trigger Logic: No Year OR Mixed Content
+            should_suggest = (not has_year) or (has_series and has_movies)
+            
+            if should_suggest and not ai_search and settings["spell_check"]:
+                 # If no year OR mixed results, and NOT explicitly an AI search, suggest via IMDb
                  return await advantage_spell_chok(client, name, msg, reply_msg, ai_search=False)
             
             if not files:
