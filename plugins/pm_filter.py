@@ -3,6 +3,7 @@
 # Ask Doubt on telegram @H21TG
 
 import os, logging, string, asyncio, time, re, ast, random, math, pytz, pyrogram, aiohttp
+from difflib import SequenceMatcher
 from datetime import datetime, timedelta, date, time
 from Script import script
 import requests
@@ -619,19 +620,54 @@ async def advantage_spoll_choker(bot, query):
         return await query.message.delete()
     
     movie = movies[int(movie_index)]
-    movie = re.sub(r"[:\-]", " ", movie)
-    movie = re.sub(r"\s+", " ", movie).strip()
+    
+    # Logic: Extract Year, Search Title, Sort by Year
+    year_match = re.search(r'\s(\d{4})$', movie)
+    search_year = year_match.group(1) if year_match else None
+    
+    # Remove year from search query for broader results
+    movie_title = re.sub(r'\s\d{4}$', '', movie)
+    # Remove special chars for clean search
+    movie_clean = re.sub(r'[^\w\s]', ' ', movie_title)
+    movie_clean = re.sub(r"\s+", " ", movie_clean).strip()
+    
     await query.answer(script.TOP_ALRT_MSG)
     
-    if not await global_filters(bot, query.message, text=movie):
-        if not await manual_filters(bot, query.message, text=movie):
-            files, offset, total_results = await get_search_results(query.message.chat.id, movie, offset=0, filter=True)
+    if not await global_filters(bot, query.message, text=movie_clean):
+        if not await manual_filters(bot, query.message, text=movie_clean):
+            files, offset, total_results = await get_search_results(query.message.chat.id, movie_clean, offset=0, filter=True)
             if files:
+                # Custom Sort: 
+                # 1. Year Match (Highest Priority)
+                # 2. Similarity of Title (Avoid "Reloaded" when searching "Matrix")
+                
+                def get_ranking_score(f):
+                    fname = f['file_name'].lower()
+                    
+                    # 1. Check Year (Primary)
+                    has_year = search_year in fname if search_year else False
+                    
+                    # 2. Calculate Similarity (Secondary)
+                    # Remove year/resolution/quality from filename for cleaner comparison
+                    fname_clean = re.sub(r'\b(19|20)\d{2}\b', '', fname) # Remove year
+                    fname_clean = re.sub(r'(\.|_|\-)', ' ', fname_clean) # Remove separators
+                    fname_clean = re.sub(r'\b(4k|1080p|720p|480p|cam|rip|web|hdr|x264|x265|hevc)\b', '', fname_clean) # Remove qualities
+                    fname_clean = re.sub(r'\s+', ' ', fname_clean).strip()
+                    
+                    # Compare Core Title vs Clean Filename
+                    # movie_clean is "the matrix" (no year)
+                    similarity = SequenceMatcher(None, movie_clean.lower(), fname_clean).ratio()
+                    
+                    # Return tuple for sorting: (Has Year? (1/0), Similarity Score)
+                    # Python sorts tuples element-by-element. We want Descending order.
+                    return (1 if has_year else 0, similarity)
+
+                files.sort(key=get_ranking_score, reverse=True)
+                
                 ai_search = True
-                ai_search = True
-                k = (movie, files, offset, total_results)
-                # reply_msg = await query.message.edit_text(f"<b>🔍 Searching {movie} </b>")
-                await auto_filter(bot, movie, query, query.message, ai_search, k)
+                k = (movie_clean, files, offset, total_results)
+                # reply_msg = await query.message.edit_text(f"<b>🔍 Searching {movie_clean} </b>")
+                await auto_filter(bot, movie_clean, query, query.message, ai_search, k)
             else:
                 reqstr = await bot.get_users(query.from_user.id if query.from_user else 0)
 
