@@ -285,6 +285,71 @@ def extract_shortdetails(filename, file_size, max_length=64):
     return current.strip()
     
 
+
+def analyze_query_results(files):
+    """
+    Analyzes a list of files to identify unique languages, seasons, and qualities.
+    Returns a dict with sets of detected attributes.
+    """
+    languages = set()
+    seasons = set()
+    qualities = set()
+    is_series = False
+    
+    # Common Patterns
+    season_pattern = re.compile(r'(?i)(?:S(\d{1,2})|Season\s?(\d{1,2}))')
+    
+    # Language Mapping (Expand as needed)
+    lang_map = {
+        'hind': 'Hindi', 'hndi': 'Hindi', 'hin': 'Hindi',
+        'eng': 'English', 'english': 'English',
+        'tam': 'Tamil', 'tamil': 'Tamil',
+        'tel': 'Telugu', 'telugu': 'Telugu',
+        'mal': 'Malayalam', 'malayalam': 'Malayalam',
+        'kan': 'Kannada', 'kannada': 'Kannada',
+        'ben': 'Bengali', 'bengali': 'Bengali',
+        'kor': 'Korean', 'korean': 'Korean',
+        'jap': 'Japanese',
+        'dual': 'Dual Audio', 'multi': 'Multi Audio'
+    }
+    
+    # Quality Mapping
+    quality_map = ['2160p', '4k', '1080p', '720p', '480p', '360p', 'cam', 'dvd']
+
+    for file in files:
+        name = file['file_name'].lower()
+        
+        # Check for Series
+        if season_pattern.search(name) or 'episode' in name or 'ep' in name:
+            is_series = True
+            
+        # Extract Season
+        s_match = season_pattern.search(name)
+        if s_match:
+            season_num = int(s_match.group(1) or s_match.group(2))
+            seasons.add(f"Season {season_num}")
+
+        # Extract Languages
+        for code, lang in lang_map.items():
+            if code in name:
+                languages.add(lang)
+                
+        # Extract Quality
+        for q in quality_map:
+            if q in name:
+                qualities.add(q.upper())
+
+    # Sort results
+    return {
+        'languages': sorted(list(languages)),
+        'seasons': sorted(list(seasons), key=lambda x: int(x.split()[-1])),
+        'qualities': sorted(list(qualities), key=lambda x: (
+            ['2160P', '4K', '1080P', '720P', '480P', '360P', 'DVD', 'CAM'].index(x) 
+            if x in ['2160P', '4K', '1080P', '720P', '480P', '360P', 'DVD', 'CAM'] else 99
+        )),
+        'is_series': is_series
+    }
+
 @Client.on_callback_query(filters.regex(r"^next"))
 async def next_page(bot, query):
     ident, req, key, offset = query.data.split("_")
@@ -2615,56 +2680,142 @@ async def cb_handler(client: Client, query: CallbackQuery):
             await query.message.edit_reply_markup(reply_markup)
     await query.answer(MSG_ALRT)
 
-async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
-    curr_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
-    if not spoll:
-        message = msg
-        #if message.text.startswith("/"): return  # ignore commands
-        #if re.findall("((^\/|^,|^!|^\.|^[\U0001F600-\U000E007F]).*)", message.text):
-            #return
-        text = message.caption or message.text or ""
-        if len(text) < 50:
-            search = name
-            search = search.lower()
-            find = search.split(" ")
-            search = ""
-            removes = ["in","upload", "series", "full", "horror", "thriller", "mystery", "print", "file"]
-            for x in find:
-                if x in removes:
-                    continue
-                else:
-                    search = search + x + " "
-            search = re.sub(r"\b(pl(i|e)*?(s|z+|ease|se|ese|(e+)s(e)?)|((send|snd|giv(e)?|gib)(\sme)?)|movie(s)?|new|latest|bro|bruh|broh|helo|that|find|dubbed|link|venum|iruka|pannunga|pannungga|anuppunga|anupunga|anuppungga|anupungga|film|undo|kitti|kitty|tharu|kittumo|kittum|movie|any(one)|with\ssubtitle(s)?)", "", search, flags=re.IGNORECASE)
-            search = re.sub(r"\s+", " ", search).strip()
-            search = search.replace("-", " ")
-            search = search.replace(":", "")
-            search = search.replace(".", "")
-            files, offset, total_results = await get_search_results(message.chat.id ,search, offset=0, filter=True)
-            try:
-                req_user_id = message.from_user.id if message.from_user else 0
-                await stats_db.add_search_log(search, req_user_id, total_results, source='auto_filter')
-            except Exception as e:
-                print(f"Error logging search: {e}")
-            settings = await get_settings(message.chat.id)
-            if not files:
-                if settings["spell_check"]:
-                    return await advantage_spell_chok(client, name, msg, reply_msg, ai_search)
-                else:
-                    return await reply_msg.edit_text(f"**⚠️ No File Found For Your Query - {name}**\n**Make Sure Spelling Is Correct.**")
-        else:
-            return
+# --- Smart Filter Callbacks ---
+
+@Client.on_callback_query(filters.regex(r"^smart_lang"))
+async def smart_lang_handler(client, query):
+    _, lang, key = query.data.split("#")
+    
+    # Retrieve all files for this query
+    if key not in temp.GETALL:
+        await query.answer("Search expired. Please search again.", show_alert=True)
+        return
+        
+    all_files = temp.GETALL[key]
+    
+    # Filter by Language
+    filtered_files = [f for f in all_files if lang.lower() in f['file_name'].lower()]
+    
+    # Proceed to next check (Series/Season or Quality)
+    analysis = analyze_query_results(filtered_files)
+    
+    if analysis['is_series'] and len(analysis['seasons']) > 0:
+        btn = []
+        row = []
+        for season in analysis['seasons']:
+            row.append(InlineKeyboardButton(f"{season}", callback_data=f"smart_season#{season}#{key}#{lang}")) # Pass lang forward
+            if len(row) == 3:
+                btn.append(row)
+                row = []
+        if row:
+            btn.append(row)
+        btn.append([InlineKeyboardButton("Show All Episodes", callback_data=f"smart_default#{key}#{lang}")])
+        
+        await query.message.edit_text(
+            f"**Selected Language: {lang}**\nFound {len(analysis['seasons'])} Seasons.\n\nSELECT SEASON:",
+            reply_markup=InlineKeyboardMarkup(btn)
+        )
+    elif len(analysis['qualities']) > 1:
+        # Quality check for movies
+        btn = []
+        row = []
+        for qual in analysis['qualities']:
+            row.append(InlineKeyboardButton(f"{qual}", callback_data=f"smart_quality#{qual}#{key}#{lang}"))
+            if len(row) == 3:
+                btn.append(row)
+                row = []
+        if row:
+            btn.append(row)
+        btn.append([InlineKeyboardButton("Show All", callback_data=f"smart_default#{key}#{lang}")])
+        
+        await query.message.edit_text(
+            f"**Selected Language: {lang}**\nFound {len(filtered_files)} Files.\n\nSELECT QUALITY:",
+            reply_markup=InlineKeyboardMarkup(btn)
+        )
     else:
-        message = msg.message.reply_to_message  # msg will be callback query
-        search, files, offset, total_results = spoll
-        settings = await get_settings(message.chat.id)
-        await msg.message.delete()
+        # Show results directly
+        await show_smart_results(client, query, filtered_files, key, f"Language: {lang}")
+
+@Client.on_callback_query(filters.regex(r"^smart_season"))
+async def smart_season_handler(client, query):
+    data_parts = query.data.split("#")
+    season_str = data_parts[1] # "Season 1"
+    key = data_parts[2]
+    lang = data_parts[3] if len(data_parts) > 3 else None
+    
+    if key not in temp.GETALL:
+        await query.answer("Search expired.", show_alert=True)
+        return
+
+    all_files = temp.GETALL[key]
+    
+    # Filter by Lang (if any) AND Season
+    filtered_files = all_files
+    if lang:
+        filtered_files = [f for f in filtered_files if lang.lower() in f['file_name'].lower()]
+        
+    season_num = season_str.split()[-1] # "1"
+    # Match S1, S01, Season 1, Season 01
+    s_regex = re.compile(rf'(?i)(?:S0?{season_num}|Season\s?0?{season_num})\b')
+    
+    filtered_files = [f for f in filtered_files if s_regex.search(f['file_name'])]
+    
+    # Sort by Episode
+    def ep_sort(f):
+        # Find E01, Episode 1 etc
+        match = re.search(r'(?i)(?:E|Episode\s?)(\d{1,3})', f['file_name'])
+        if match:
+            return int(match.group(1))
+        return 999
+        
+    filtered_files.sort(key=ep_sort)
+    
+    await show_smart_results(client, query, filtered_files, key, f"{lang + ' | ' if lang else ''}{season_str}")
+
+@Client.on_callback_query(filters.regex(r"^smart_quality"))
+async def smart_quality_handler(client, query):
+    data_parts = query.data.split("#")
+    qual = data_parts[1]
+    key = data_parts[2]
+    lang = data_parts[3] if len(data_parts) > 3 else None
+    
+    if key not in temp.GETALL:
+        await query.answer("Search expired.", show_alert=True)
+        return
+        
+    all_files = temp.GETALL[key]
+    
+    filtered_files = all_files
+    if lang:
+        filtered_files = [f for f in filtered_files if lang.lower() in f['file_name'].lower()]
+        
+    filtered_files = [f for f in filtered_files if qual.lower() in f['file_name'].lower()]
+    
+    await show_smart_results(client, query, filtered_files, key, f"{lang + ' | ' if lang else ''}{qual}")
+
+@Client.on_callback_query(filters.regex(r"^smart_default"))
+async def smart_default_handler(client, query):
+    data_parts = query.data.split("#")
+    key = data_parts[1]
+    lang = data_parts[2] if len(data_parts) > 2 else None
+    
+    if key not in temp.GETALL:
+        await query.answer("Search expired.", show_alert=True)
+        return
+        
+    all_files = temp.GETALL[key]
+    if lang:
+        all_files = [f for f in all_files if lang.lower() in f['file_name'].lower()]
+        
+    await show_smart_results(client, query, all_files, key, f"{lang if lang else 'All Results'}")
+
+async def show_smart_results(client, query, files, key, title_extra):
+    settings = await get_settings(query.message.chat.id)
     pre = 'filep' if settings['file_secure'] else 'file'
-    key = f"{message.chat.id}-{message.id}"
-    req = message.from_user.id if message.from_user else 0
-    FRESH[key] = search
-    temp.GETALL[key] = files
-    temp.SHORT[message.from_user.id] = message.chat.id
-    total_results_str = str(total_results)
+    
+    # Slice for display
+    total_results = len(files)
+    view_files = files[:int(MAX_B_TN) if not settings.get('max_btn') else 10]
     
     if settings["button"]:
         btn = [
@@ -2674,164 +2825,191 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
                     callback_data=f"{pre}#{file['file_id']}"
                 ),
             ]
-            for file in files
+            for file in view_files
         ]
-        btn.insert(0, 
-            [
-                InlineKeyboardButton(f'🎚 Quality', callback_data=f"qualities#{key}"),
-                InlineKeyboardButton('ℹ Info', url='https://t.me/moovidex/11'),
-              #  InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
-                InlineKeyboardButton("🗃 Seasons",  callback_data=f"seasons#{key}")
-            ]
-        )
-        btn.insert(0, [
-            InlineKeyboardButton(f"🗂 Files: {total_results_str}" , 'total'),            
-           # InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
-            InlineKeyboardButton("🎧 Languages", callback_data=f"languages#{key}")
-           # InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
-        ])
     else:
         btn = []
-        btn.insert(0, 
-            [
-                InlineKeyboardButton(f'🎚 Quality', callback_data=f"qualities#{key}"),
-                InlineKeyboardButton('ℹ Info', url='https://t.me/moovidex/11'),
-               # InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
-                InlineKeyboardButton("🗃 Seasons",  callback_data=f"seasons#{key}")
-            ]
-        )
-        btn.insert(0, [
-            InlineKeyboardButton(f"🗂 Files: {total_results_str}" , 'total'),
-          #  InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
-            InlineKeyboardButton("🎧 Languages", callback_data=f"languages#{key}")
-         #   InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
-        ])
-    if offset != "":
-        try:
-            if settings['max_btn']:
-                btn.append(
-                    [InlineKeyboardButton("📑 Page", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/10)}",callback_data="pages"), InlineKeyboardButton(text="Next ▶",callback_data=f"next_{req}_{key}_{offset}")]
-                )
-            else:
-                btn.append(
-                    [InlineKeyboardButton("📑 Page", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/int(MAX_B_TN))}",callback_data="pages"), InlineKeyboardButton(text="Next ▶",callback_data=f"next_{req}_{key}_{offset}")]
-                )
-        except KeyError:
-            await save_group_settings(message.chat.id, 'max_btn', True)
-            btn.append(
-                [InlineKeyboardButton("📑 Page", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/10)}",callback_data="pages"), InlineKeyboardButton(text="Next ▶",callback_data=f"next_{req}_{key}_{offset}")]
-            )
-    else:
-        btn.append(
-            [InlineKeyboardButton(text="⛔ ɴᴏ ᴍᴏʀᴇ ᴘᴀɢᴇs ᴀᴠᴀɪʟᴀʙʟᴇ ⛔ ",callback_data="pages")]
-        )
-    imdb = await get_poster(search, file=(files[0])['file_name']) if settings["imdb"] else None
-    cur_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
-    time_difference = timedelta(hours=cur_time.hour, minutes=cur_time.minute, seconds=(cur_time.second+(cur_time.microsecond/1000000))) - timedelta(hours=curr_time.hour, minutes=curr_time.minute, seconds=(curr_time.second+(curr_time.microsecond/1000000)))
-    remaining_seconds = "{:.2f}".format(time_difference.total_seconds())
-    TEMPLATE = script.IMDB_TEMPLATE_TXT
-    if imdb:
-        cap = TEMPLATE.format(
-            
-            qurey=search,
-            title=imdb['title'],
-            votes=imdb['votes'],
-            aka=imdb["aka"],
-            seasons=imdb["seasons"],
-            box_office=imdb['box_office'],
-            localized_title=imdb['localized_title'],
-            kind=imdb['kind'],
-            imdb_id=imdb["imdb_id"],
-            cast=imdb["cast"],
-            runtime=imdb["runtime"],
-            countries=imdb["countries"],
-            certificates=imdb["certificates"],
-            languages=imdb["languages"],
-            director=imdb["director"],
-            writer=imdb["writer"],
-            producer=imdb["producer"],
-            composer=imdb["composer"],
-            cinematographer=imdb["cinematographer"],
-            music_team=imdb["music_team"],
-            distributors=imdb["distributors"],
-            release_date=imdb['release_date'],
-            year=imdb['year'],
-            genres=imdb['genres'],
-            poster=imdb['poster'],
-            plot=imdb['plot'],
-            rating=imdb['rating'],
-            url=imdb['url'],
-            **locals()
-            
-        )
-        temp.IMDB_CAP[message.from_user.id] = cap
-        if not settings["button"]:
-            for file in files:
-                cap += f"<b>📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}'>[{get_size(file['file_size'])}] {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}\n\n</a></b>"
-    else:
-        if settings["button"]:
-            cap = f"<b>𝖱𝖾𝗌𝗎𝗅𝗍  𝖥𝗈𝗎𝗇𝖽 𝖥𝗈𝗋 {search}\n\n🧑‍💻 𝖱𝖾𝗊𝗎𝖾𝗌𝗍𝖾𝖽 𝖡𝗒  : {message.from_user.mention}\n⏰ 𝖱𝖾𝗌𝗎𝗅𝗍 𝖲𝗁𝗈𝗐𝗇 𝗂𝗇 : {remaining_seconds} 𝗌𝖾𝖼𝗈𝗇𝖽𝗌\n\n<blockquote>⚠️ ᴀꜰᴛᴇʀ 5 ᴍɪɴᴜᴛᴇꜱ ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴅᴇʟᴇᴛᴇᴅ 🗑️</blockquote>\n\n</b>"
-        else:
-            cap = f"<b>𝖱𝖾𝗌𝗎𝗅𝗍  𝖥𝗈𝗎𝗇𝖽 𝖥𝗈𝗋 {search}\n\n🧑‍💻 𝖱𝖾𝗊𝗎𝖾𝗌𝗍𝖾𝖽 𝖡𝗒  : {message.from_user.mention}\n⏰ 𝖱𝖾𝗌𝗎𝗅𝗍 𝖲𝗁𝗈𝗐𝗇 𝗂𝗇 : {remaining_seconds} 𝗌𝖾𝖼𝗈𝗇𝖽𝗌\n\n<blockquote>⚠️ ᴀꜰᴛᴇʀ 5 ᴍɪɴᴜᴛᴇꜱ ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴅᴇʟᴇᴛᴇᴅ 🗑️</blockquote>\n\n</b>"
-        
-            for file in files:
-                cap += f"<b>📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}'>[{get_size(file['file_size'])}] {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file['file_name'].split()))}\n\n</a></b>"
 
-    if imdb and imdb.get('poster'):
-        try:
-            hehe = await message.reply_photo(photo=imdb.get('poster'), caption=cap, reply_markup=InlineKeyboardMarkup(btn))
-            await reply_msg.delete()
-            try:
-                if settings['auto_delete']:
-                    await asyncio.sleep(300)
-                    await hehe.delete()
-                    await message.delete()
-            except KeyError:
-                await save_group_settings(message.chat.id, 'auto_delete', True)
-                await asyncio.sleep(300)
-                await hehe.delete()
-                await message.delete()
-        except (MediaEmpty, PhotoInvalidDimensions, WebpageMediaEmpty):
-            pic = imdb.get('poster')
-            poster = pic.replace('.jpg', "._V1_UX360.jpg") 
-            hmm = await message.reply_photo(photo=poster, caption=cap, reply_markup=InlineKeyboardMarkup(btn))
-            await reply_msg.delete()
-            try:
-               if settings['auto_delete']:
-                    await asyncio.sleep(300)
-                    await hmm.delete()
-                    await message.delete()
-            except KeyError:
-                await save_group_settings(message.chat.id, 'auto_delete', True)
-                await asyncio.sleep(300)
-                await hmm.delete()
-                await message.delete()
-        except Exception as e:
-            logger.exception(e) 
-            fek = await reply_msg.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
-            try:
-                if settings['auto_delete']:
-                    await asyncio.sleep(300)
-                    await fek.delete()
-                    await message.delete()
-            except KeyError:
-                await save_group_settings(message.chat.id, 'auto_delete', True)
-                await asyncio.sleep(300)
-                await fek.delete()
-                await message.delete()
+    # Simple Pagination (Basic Next button for now if needed, we can improve later)
+    # Note: Complex pagination with filtering state needs we store filtered list in temp or pass params
+    # For now, we show "Show All" or similar if result list is huge, or just limited.
+    # To keep code simple, we'll re-use basic pagination logic only if we store the filtered list
+    
+    # Update FRESh/GETALL with filtered list so normal pagination works? 
+    # Yes, updating temp.GETALL[key] with filtered list allows next_page to work on the filtered set!
+    temp.GETALL[key] = files 
+    FRESH[key] = f"Filtered: {title_extra}" # Update title for context
+    
+    req = query.from_user.id
+    if total_results > len(view_files):
+         btn.append([
+             InlineKeyboardButton("📑 Page", callback_data="pages"),
+             InlineKeyboardButton(f"1/{math.ceil(total_results/len(view_files))}", callback_data="pages"),
+             InlineKeyboardButton("Next ▶", callback_data=f"next_{req}_{key}_{len(view_files)}")
+        ])
+
+    cap = f"**Results for {title_extra}:**\nFound {total_results} files."
+    
+    if settings["button"]:
+        await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
     else:
-        fuk = await reply_msg.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
+        for file in view_files:
+            cap += f"\n📁 [{get_size(file['file_size'])}] {file['file_name']}"
+        await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
+
+async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
+    curr_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
+    if not spoll:
+        message = msg
+        text = message.caption or message.text or ""
+        if len(text) < 50:
+            search = name.lower()
+            # Clean search query
+            search = re.sub(r"\b(pl(i|e)*?(s|z+|ease|se|ese|(e+)s(e)?)|((send|snd|giv(e)?|gib)(\sme)?)|movie(s)?|new|latest|bro|bruh|broh|helo|that|find|dubbed|link|venum|iruka|pannunga|pannungga|anuppunga|anupunga|anuppungga|anupungga|film|undo|kitti|kitty|tharu|kittumo|kittum|movie|any(one)|with\ssubtitle(s)?)", "", search, flags=re.IGNORECASE)
+            search = re.sub(r"\s+", " ", search).strip()
+            search = search.replace("-", " ")
+            search = search.replace(":", "")
+            search = search.replace(".", "")
+            
+            # Fetch MORE results for analysis (up to 100)
+            files, offset, total_results = await get_search_results(message.chat.id ,search, offset=0, max_results=100, filter=True)
+            
+            try:
+                req_user_id = message.from_user.id if message.from_user else 0
+                await stats_db.add_search_log(search, req_user_id, total_results, source='auto_filter')
+            except Exception as e:
+                print(f"Error logging search: {e}")
+                
+            settings = await get_settings(message.chat.id)
+            
+            if not files:
+                if settings["spell_check"]:
+                    return await advantage_spell_chok(client, name, msg, reply_msg, ai_search)
+                else:
+                    return await reply_msg.edit_text(f"**⚠️ No File Found For Your Query - {name}**\n**Make Sure Spelling Is Correct.**")
+    else:
+        message = msg.message.reply_to_message  # msg will be callback query
+        search, files, offset, total_results = spoll
+        settings = await get_settings(message.chat.id)
+        await msg.message.delete()
+
+    # --- Smart Filter Logic Start ---
+    analysis = analyze_query_results(files)
+    key = f"{message.chat.id}-{message.id}"
+    req = message.from_user.id if message.from_user else 0
+    FRESH[key] = search
+    temp.GETALL[key] = files # Store ALL fetched files for filtering
+    temp.SHORT[message.from_user.id] = message.chat.id
+
+    pre = 'filep' if settings['file_secure'] else 'file'
+
+    # 1. Language Check
+    if len(analysis['languages']) > 1:
+        btn = []
+        for lang in analysis['languages']:
+            btn.append([InlineKeyboardButton(f"{lang}", callback_data=f"smart_lang#{lang}#{key}")])
+        btn.append([InlineKeyboardButton("Show All / Default", callback_data=f"smart_default#{key}")])
         
-        try:
-            if settings['auto_delete']:
-                await asyncio.sleep(300)
-                await fuk.delete()
-                await message.delete()
-        except KeyError:
-            await save_group_settings(message.chat.id, 'auto_delete', True)
-            await asyncio.sleep(300)
-            await fuk.delete()
-            await message.delete()
+        await reply_msg.edit_text(
+            f"**Found {total_results} results for '{search}'**\n\nSELECT LANGUAGE:",
+            reply_markup=InlineKeyboardMarkup(btn)
+        )
+        return
+
+    # 2. Season Check (for Series)
+    if analysis['is_series'] and len(analysis['seasons']) > 0:
+        btn = []
+        # Group seasons in rows of 3
+        row = []
+        for season in analysis['seasons']:
+            row.append(InlineKeyboardButton(f"{season}", callback_data=f"smart_season#{season}#{key}"))
+            if len(row) == 3:
+                btn.append(row)
+                row = []
+        if row:
+            btn.append(row)
+            
+        btn.append([InlineKeyboardButton("Show All Episodes", callback_data=f"smart_default#{key}")])
+        
+        await reply_msg.edit_text(
+            f"**Found {len(analysis['seasons'])} Seasons for '{search}'**\n\nSELECT SEASON:",
+            reply_markup=InlineKeyboardMarkup(btn)
+        )
+        return
+        
+    # 3. Quality Check (if no specific filtering needed or just movies)
+    if len(analysis['qualities']) > 1 and not analysis['is_series']:
+         # Optional: We could ask for quality, but typically listing files is fine if just quality differs.
+         # Let's show quality buttons if there are too many files (e.g. > 10)
+         if total_results > 10:
+            btn = []
+            row = []
+            for qual in analysis['qualities']:
+                row.append(InlineKeyboardButton(f"{qual}", callback_data=f"smart_quality#{qual}#{key}"))
+                if len(row) == 3:
+                    btn.append(row)
+                    row = []
+            if row:
+                btn.append(row)
+            btn.append([InlineKeyboardButton("Show All", callback_data=f"smart_default#{key}")])
+
+            await reply_msg.edit_text( 
+                f"**Found {total_results} results.**\n\nSELECT QUALITY:",
+                reply_markup=InlineKeyboardMarkup(btn) 
+            )
+            return
+
+    # --- Fallback to Standard Display (Default) ---
+    # Convert files to standard page view (10 max)
+    # We fetched up to 100, so we slice the first 10 or MAX_B_TN
+    
+    view_files = files[:int(MAX_B_TN) if not settings.get('max_btn') else 10]
+    
+    if settings["button"]:
+        btn = [
+            [
+                InlineKeyboardButton(
+                    text=extract_shortdetails(file['file_name'], file['file_size']),
+                    callback_data=f"{pre}#{file['file_id']}"
+                ),
+            ]
+            for file in view_files
+        ]
+    else:
+        btn = []
+
+    # Navigation Buttons (if more files exist than shown)
+    if total_results > len(view_files):
+        btn.append([
+             InlineKeyboardButton("📑 Page", callback_data="pages"),
+             InlineKeyboardButton(f"1/{math.ceil(total_results/(int(MAX_B_TN) if not settings.get('max_btn') else 10))}", callback_data="pages"),
+             InlineKeyboardButton("Next ▶", callback_data=f"next_{req}_{key}_{len(view_files)}")
+        ])
+
+    # Add Standard Filter Buttons
+    btn.insert(0, [
+        InlineKeyboardButton(f"🗂 {total_results} Results", callback_data='total')
+    ])
+    
+    # Extra buttons like languages/seasons if not auto-triggered
+    extra_row = []
+    if len(analysis['languages']) > 1:
+        extra_row.append(InlineKeyboardButton("Languages", callback_data=f"languages#{key}"))
+    if analysis['is_series'] and len(analysis['seasons']) > 1:
+        extra_row.append(InlineKeyboardButton("Seasons", callback_data=f"seasons#{key}"))
+    
+    if extra_row:
+        btn.insert(1, extra_row)
+
+    cap = f"**Search Results for '{search}':**"
+    
+    if settings["button"]:
+        await reply_msg.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
+    else:
+        # Generate text list
+        for file in view_files:
+            cap += f"\n📁 [{get_size(file['file_size'])}] {file['file_name']}"
+        await reply_msg.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
 
 async def handle_no_results(client, reply_msg, mv_rqst, reqstr):
     try:
