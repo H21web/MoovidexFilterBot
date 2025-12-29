@@ -35,6 +35,23 @@ BUTTONS1 = {}
 BUTTONS2 = {}
 SPELL_CHECK = {}
 
+# Language Mapping
+LANG_MAP = {
+    'hind': 'Hindi', 'hndi': 'Hindi', 'hin': 'Hindi',
+    'eng': 'English', 'english': 'English',
+    'tam': 'Tamil', 'tamil': 'Tamil',
+    'tel': 'Telugu', 'telugu': 'Telugu',
+    'mal': 'Malayalam', 'malayalam': 'Malayalam',
+    'kan': 'Kannada', 'kannada': 'Kannada',
+    'ben': 'Bengali', 'bengali': 'Bengali',
+    'kor': 'Korean', 'korean': 'Korean',
+    'jap': 'Japanese',
+    'dual': 'Dual Audio', 'multi': 'Multi Audio'
+}
+
+# Quality Mapping
+QUALITY_MAP = ['2160p', '4k', '1080p', '720p', '480p', '360p', 'cam', 'dvd']
+
 @Client.on_message(filters.group & filters.text & filters.incoming)
 async def give_filter(client, message):
     await mdb.update_top_messages(message.from_user.id, message.text)
@@ -299,23 +316,6 @@ def analyze_query_results(files):
     # Common Patterns
     season_pattern = re.compile(r'(?i)(?:S(\d{1,2})|Season\s?(\d{1,2}))')
     
-    # Language Mapping (Expand as needed)
-    lang_map = {
-        'hind': 'Hindi', 'hndi': 'Hindi', 'hin': 'Hindi',
-        'eng': 'English', 'english': 'English',
-        'tam': 'Tamil', 'tamil': 'Tamil',
-        'tel': 'Telugu', 'telugu': 'Telugu',
-        'mal': 'Malayalam', 'malayalam': 'Malayalam',
-        'kan': 'Kannada', 'kannada': 'Kannada',
-        'ben': 'Bengali', 'bengali': 'Bengali',
-        'kor': 'Korean', 'korean': 'Korean',
-        'jap': 'Japanese',
-        'dual': 'Dual Audio', 'multi': 'Multi Audio'
-    }
-    
-    # Quality Mapping
-    quality_map = ['2160p', '4k', '1080p', '720p', '480p', '360p', 'cam', 'dvd']
-
     for file in files:
         name = file['file_name'].lower()
         
@@ -330,12 +330,12 @@ def analyze_query_results(files):
             seasons.add(f"Season {season_num}")
 
         # Extract Languages
-        for code, lang in lang_map.items():
+        for code, lang in LANG_MAP.items():
             if code in name:
                 languages.add(lang)
                 
         # Extract Quality
-        for q in quality_map:
+        for q in QUALITY_MAP:
             if q in name:
                 qualities.add(q.upper())
 
@@ -2694,7 +2694,18 @@ async def smart_lang_handler(client, query):
     all_files = temp.GETALL[key]
     
     # Filter by Language
-    filtered_files = [f for f in all_files if lang.lower() in f['file_name'].lower()]
+    # Identify valid codes for this language
+    valid_codes = [code for code, l in LANG_MAP.items() if l == lang]
+    
+    filtered_files = []
+    for f in all_files:
+        name = f['file_name'].lower()
+        if any(code in name for code in valid_codes):
+            filtered_files.append(f)
+            
+    # Fallback: strict name check if nothing found via codes (rare)
+    if not filtered_files:
+        filtered_files = [f for f in all_files if lang.lower() in f['file_name'].lower()]
     
     # Proceed to next check (Series/Season or Quality)
     analysis = analyze_query_results(filtered_files)
@@ -2752,7 +2763,12 @@ async def smart_season_handler(client, query):
     # Filter by Lang (if any) AND Season
     filtered_files = all_files
     if lang:
-        filtered_files = [f for f in filtered_files if lang.lower() in f['file_name'].lower()]
+        valid_codes = [code for code, l in LANG_MAP.items() if l == lang]
+        temp_files = []
+        for f in filtered_files:
+            if any(code in f['file_name'].lower() for code in valid_codes):
+                temp_files.append(f)
+        filtered_files = temp_files if temp_files else [f for f in filtered_files if lang.lower() in f['file_name'].lower()]
         
     season_num = season_str.split()[-1] # "1"
     # Match S1, S01, Season 1, Season 01
@@ -2787,7 +2803,12 @@ async def smart_quality_handler(client, query):
     
     filtered_files = all_files
     if lang:
-        filtered_files = [f for f in filtered_files if lang.lower() in f['file_name'].lower()]
+        valid_codes = [code for code, l in LANG_MAP.items() if l == lang]
+        temp_files = []
+        for f in filtered_files:
+            if any(code in f['file_name'].lower() for code in valid_codes):
+                temp_files.append(f)
+        filtered_files = temp_files if temp_files else [f for f in filtered_files if lang.lower() in f['file_name'].lower()]
         
     filtered_files = [f for f in filtered_files if qual.lower() in f['file_name'].lower()]
     
@@ -2805,17 +2826,51 @@ async def smart_default_handler(client, query):
         
     all_files = temp.GETALL[key]
     if lang:
-        all_files = [f for f in all_files if lang.lower() in f['file_name'].lower()]
+        valid_codes = [code for code, l in LANG_MAP.items() if l == lang]
+        temp_files = []
+        for f in all_files:
+            if any(code in f['file_name'].lower() for code in valid_codes):
+                temp_files.append(f)
+        all_files = temp_files if temp_files else [f for f in all_files if lang.lower() in f['file_name'].lower()]
         
     await show_smart_results(client, query, all_files, key, f"{lang if lang else 'All Results'}")
 
-async def show_smart_results(client, query, files, key, title_extra):
+@Client.on_callback_query(filters.regex(r"^smart_next"))
+async def smart_next_page(bot, query):
+    ident, req, key, offset = query.data.split("_")
+    
+    if int(req) not in [query.from_user.id, 0]:
+        return await query.answer(script.ALRT_TXT.format(query.from_user.first_name), show_alert=True)
+        
+    try:
+        offset = int(offset)
+    except:
+        offset = 0
+        
+    if key not in temp.GETALL:
+        await query.answer("Search expired.", show_alert=True)
+        return
+        
+    all_files = temp.GETALL[key]
+    
+    # We don't have the "Filtered: Title" string easily available in the callback data
+    # But FRESH[key] stores it!
+    title_extra = FRESH.get(key, "").replace("Filtered: ", "") or "Results"
+
+    await show_smart_results(bot, query, all_files, key, title_extra, offset=offset)
+
+async def show_smart_results(client, query, files, key, title_extra, offset=0):
     settings = await get_settings(query.message.chat.id)
     pre = 'filep' if settings['file_secure'] else 'file'
     
     # Slice for display
     total_results = len(files)
-    view_files = files[:int(MAX_B_TN) if not settings.get('max_btn') else 10]
+    
+    # Calculate limits
+    limit = int(MAX_B_TN) if not settings.get('max_btn') else 10
+    
+    # Slice list
+    view_files = files[offset:offset+limit]
     
     if settings["button"]:
         btn = [
@@ -2829,24 +2884,28 @@ async def show_smart_results(client, query, files, key, title_extra):
         ]
     else:
         btn = []
-
-    # Simple Pagination (Basic Next button for now if needed, we can improve later)
-    # Note: Complex pagination with filtering state needs we store filtered list in temp or pass params
-    # For now, we show "Show All" or similar if result list is huge, or just limited.
-    # To keep code simple, we'll re-use basic pagination logic only if we store the filtered list
     
-    # Update FRESh/GETALL with filtered list so normal pagination works? 
-    # Yes, updating temp.GETALL[key] with filtered list allows next_page to work on the filtered set!
-    temp.GETALL[key] = files 
-    FRESH[key] = f"Filtered: {title_extra}" # Update title for context
+    # Update title in FRESH for context if this function is called directly first time
+    if offset == 0 and "Filtered" not in FRESH.get(key, ""):
+         FRESH[key] = f"Filtered: {title_extra}"
     
     req = query.from_user.id
-    if total_results > len(view_files):
-         btn.append([
-             InlineKeyboardButton("📑 Page", callback_data="pages"),
-             InlineKeyboardButton(f"1/{math.ceil(total_results/len(view_files))}", callback_data="pages"),
-             InlineKeyboardButton("Next ▶", callback_data=f"next_{req}_{key}_{len(view_files)}")
-        ])
+    
+    # Pagination Buttons
+    # Previous / Back
+    nav_row = []
+    if offset >= limit:
+         nav_row.append(InlineKeyboardButton("◀ Back", callback_data=f"smart_next_{req}_{key}_{offset-limit}"))
+         
+    # Page Info
+    nav_row.append(InlineKeyboardButton(f"{math.ceil((offset/limit)+1)} / {math.ceil(total_results/limit)}", callback_data="pages"))
+    
+    # Next
+    if total_results > (offset + limit):
+         nav_row.append(InlineKeyboardButton("Next ▶", callback_data=f"smart_next_{req}_{key}_{offset+limit}"))
+         
+    if nav_row:
+        btn.append(nav_row)
 
     cap = f"**Results for {title_extra}:**\nFound {total_results} files."
     
