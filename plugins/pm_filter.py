@@ -311,6 +311,7 @@ def sort_by_relevance(files, query):
     1. Exact Match (Score 3)
     2. Starts With (Score 2)
     3. Contains (Score 1)
+    Then by Year (Newest first) and File Size (Largest first)
     """
     query = query.lower()
     
@@ -324,7 +325,11 @@ def sort_by_relevance(files, query):
             return 1
         return 0
         
-    return sorted(files, key=get_score, reverse=True)
+    def get_year(file):
+        match = re.search(r'\b(19|20)\d{2}\b', file['file_name'])
+        return int(match.group(0)) if match else 0
+        
+    return sorted(files, key=lambda f: (get_score(f), get_year(f), f['file_size']), reverse=True)
 
 
 def analyze_query_results(files):
@@ -1234,9 +1239,9 @@ async def smart_season_handler(client, query):
         match = re.search(r'(?i)(?:E|Episode\s?)(\d{1,3})', f['file_name'])
         if match:
             return int(match.group(1))
-        return 999
+        return -1
         
-    filtered_files.sort(key=ep_sort)
+    filtered_files.sort(key=ep_sort, reverse=True)
     
     # Back Callback: If lang was present, go back to Season List for that Lang.
     # If not, go back to Languages (if multilang) or main search?
@@ -3122,7 +3127,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             # Trigger Logic: No Year OR Mixed Content
             should_suggest = (not has_year) or (has_series and has_movies)
             
-            if should_suggest and not ai_search and settings["spell_check"]:
+            if should_suggest and settings["spell_check"]:
                  # If no year OR mixed results, and NOT explicitly an AI search, suggest via IMDb
                  return await advantage_spell_chok(client, name, msg, reply_msg, ai_search=False)
             
