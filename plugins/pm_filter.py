@@ -2642,7 +2642,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             files, offset, total_results = await get_search_results(message.chat.id ,search, offset=0, filter=True)
             try:
                 req_user_id = message.from_user.id if message.from_user else 0
-                await stats_db.add_search_log(search, req_user_id, total_results)
+                await stats_db.add_search_log(search, req_user_id, total_results, source='auto_filter')
             except Exception as e:
                 print(f"Error logging search: {e}")
             settings = await get_settings(message.chat.id)

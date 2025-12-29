@@ -45,6 +45,7 @@ ADMIN_IDS = [1011394081, 7191327005]
 UPDATE_CHANNEL_ID = -1001680629032
 
 from database.users_chats_db import db
+from database.stats_db import stats_db
 
 from database.users_chats_db import db
 
@@ -544,6 +545,13 @@ async def binged_search(client, message):
         return await message.reply_text(f"API error: {e}")
 
     results = resp.json().get("data", [])
+    
+    # Log search stats
+    try:
+        await stats_db.add_search_log(query, message.from_user.id, len(results), source='binged')
+    except Exception as e:
+        print(f"Error logging binged search: {e}")
+
     if not results:
         return await message.reply_text("No results found.")
 
@@ -576,7 +584,18 @@ async def imdb_search(client, message):
     # Use find_tmdb_id to support IMDB ID or Name
     results = find_tmdb_id(query)
     if not results:
+        # Log search stats for no results
+        try:
+            await stats_db.add_search_log(query, message.from_user.id, 0, source='imdb')
+        except Exception as e:
+            print(f"Error logging imdb search: {e}")
         return await message.reply_text("No results found on TMDB.")
+    
+    # Log search stats for success
+    try:
+        await stats_db.add_search_log(query, message.from_user.id, len(results), source='imdb')
+    except Exception as e:
+        print(f"Error logging imdb search: {e}")
 
     temp.TMDB_RESULTS[message.from_user.id] = {}
     buttons = []

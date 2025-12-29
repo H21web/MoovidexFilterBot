@@ -57,11 +57,16 @@ async def dashboard_home(request):
     # Bot status (online/uptime would require tracking start time, assuming bot is online if this works)
     # We can get uptime from a global variable if we stored it, or just show "Online"
     
+    success_ratio = await stats_db.get_global_success_ratio()
+    fulfillment_ratio = await stats_db.get_average_user_fulfillment()
+
     return web.Response(text=render_template("index.html", 
                                              total_users=total_users,
                                              users_today=users_today,
                                              total_chats=total_chats,
                                              total_searches=total_searches,
+                                             success_ratio=success_ratio,
+                                             fulfillment_ratio=fulfillment_ratio,
                                              status="Online"), content_type='text/html')
 
 @routes.get("/admin/users")

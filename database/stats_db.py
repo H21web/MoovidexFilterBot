@@ -9,11 +9,12 @@ class StatsDB:
         self.search_logs = self.db.search_logs
         self.pm_search_logs = self.db.pm_search_logs
 
-    async def add_search_log(self, query, user_id, results_count):
+    async def add_search_log(self, query, user_id, results_count, source=None):
         log = {
             'query': query,
             'user_id': user_id,
             'results_count': results_count,
+            'source': source or 'auto_filter',
             'timestamp': datetime.utcnow()
         }
         await self.search_logs.insert_one(log)
@@ -63,5 +64,53 @@ class StatsDB:
         ]
         cursor = self.search_logs.aggregate(pipeline)
         return await cursor.to_list(length=limit)
+
+    async def get_global_success_ratio(self):
+        """
+        Returns the percentage of searches that returned at least one result.
+        """
+        total_searches = await self.search_logs.count_documents({})
+        if total_searches == 0:
+            return 0
+        
+        successful_searches = await self.search_logs.count_documents({"results_count": {"$gt": 0}})
+        return round((successful_searches / total_searches) * 100, 2)
+
+    async def get_average_user_fulfillment(self):
+        """
+        Calculates average fulfillment ratio per user.
+        Fulfillment = (Successful Searches / Total Searches) per user.
+        Returns the average of these ratios across all users.
+        """
+        pipeline = [
+            {
+                "$group": {
+                    "_id": "$user_id",
+                    "total": {"$sum": 1},
+                    "success": {
+                        "$sum": {
+                            "$cond": [{"$gt": ["$results_count", 0]}, 1, 0]
+                        }
+                    }
+                }
+            },
+            {
+                "$project": {
+                    "ratio": {"$divide": ["$success", "$total"]}
+                }
+            },
+            {
+                "$group": {
+                    "_id": None,
+                    "avg_fulfillment": {"$avg": "$ratio"}
+                }
+            }
+        ]
+        cursor = self.search_logs.aggregate(pipeline)
+        result = await cursor.to_list(length=1)
+        
+        if result:
+            return round(result[0]['avg_fulfillment'] * 100, 2)
+        return 0
 
 stats_db = StatsDB(DATABASE_URI, DATABASE_NAME)
