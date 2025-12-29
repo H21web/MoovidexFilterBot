@@ -53,6 +53,31 @@ LANG_MAP = {
 # Quality Mapping
 QUALITY_MAP = ['2160p', '4k', '1080p', '720p', '480p', '360p', 'cam', 'dvd']
 
+# --- Optimization: Global Regex Compilation ---
+# 1. Season Pattern: Fixed to avoid "DS4K" (enforce word boundaries)
+# Matches: S01, Season 1, Season01, S 1
+SEASON_PATTERN = re.compile(r'(?i)\b(?:S|Season)\s?(\d{1,3})\b') 
+
+# 2. Series Keywords
+SERIES_KEYWORDS = re.compile(r'(?i)\b(?:ep|episode)\s?\d+')
+
+# 3. Combined Language Regex
+# Create a robust pattern from LANG_MAP values + Common Languages
+COMMON_LANGS = ["French", "German", "Italian", "Spanish", "Russian", "Japanese", "Chinese", "Korean", "Thai", "Indonesian"]
+ALL_LANGS = set(LANG_MAP.values()) | set(COMMON_LANGS)
+# Sort by length desc to match longest first (e.g. "Dual Audio" before "Audio")
+SORTED_LANG_KEYS = sorted(LANG_MAP.keys(), key=len, reverse=True) 
+AL_LANG_PATTERN = '|'.join(map(re.escape, ALL_LANGS))
+LANG_KEYS_PATTERN = '|'.join(map(re.escape, SORTED_LANG_KEYS))
+
+# Combine codes and full names: match either a known code OR a full language name
+# We separate them to map codes back to full names
+LANG_CODE_REGEX = re.compile(rf'(?i)\b({LANG_KEYS_PATTERN})\b')
+LANG_NAME_REGEX = re.compile(rf'(?i)\b({AL_LANG_PATTERN})\b')
+
+# 4. Combined Quality Regex
+QUALITY_REGEX = re.compile(rf'(?i)\b({"|".join(map(re.escape, QUALITY_MAP))})\b')
+
 @Client.on_message(filters.group & filters.text & filters.incoming)
 async def give_filter(client, message):
     user_id = message.from_user.id if message.from_user else 0
@@ -336,58 +361,63 @@ def analyze_query_results(files):
     """
     Analyzes a list of files to identify unique languages, seasons, and qualities.
     Returns a dict with sets of detected attributes.
+    Optimized for speed: Single pass, global regex, limited depth.
     """
     languages = set()
     seasons = set()
     qualities = set()
     is_series = False
     
-    # Common Patterns
-    season_pattern = re.compile(r'(?i)(?:S(\d{1,2})|Season\s?(\d{1,2}))')
-    
-    for file in files:
+    # Limit analysis to top 500 files for speed
+    # Users usually search for relevance, so top results matter most for filters.
+    # We still show ALL files in "Show All Files" option.
+    files_to_analyze = files[:500] 
+
+    for file in files_to_analyze:
         name = file['file_name'].lower()
         
-        # Check for Series
-        # Check for Series
-        # Use regex for 'ep' to avoid matching words like 'Deep', 'Concept'
-        series_keywords = re.compile(r'(?i)\b(?:ep|episode)\s?\d+')
-        if season_pattern.search(name) or series_keywords.search(name):
+        # 1. Check for Series & Extract Season
+        s_matches = SEASON_PATTERN.findall(name)
+        if s_matches:
             is_series = True
-            
-        # Extract Season
-        s_match = season_pattern.search(name)
-        if s_match:
-            season_num = int(s_match.group(1) or s_match.group(2))
-            seasons.add(f"Season {season_num}")
+            for match in s_matches:
+                # match could be from group 1 or implicit if simple regex
+                # regex is (\d{1,3}), findall returns list of str
+                try:
+                    # In our filtered regex (?i)\b(?:S|Season)\s?(\d{1,3})\b, findall returns only the capturing group
+                    seasons.add(f"Season {int(match)}") 
+                except: pass
 
-        # Extract Languages
-        for code, lang in LANG_MAP.items():
-            if code in name:
-                languages.add(lang)
+        if not is_series and SERIES_KEYWORDS.search(name):
+             is_series = True
+
+        # 2. Extract Languages
+        # Match Codes (hind, tam, etc.)
+        for code_match in LANG_CODE_REGEX.findall(name):
+             languages.add(LANG_MAP[code_match.lower()])
         
-        # Dynamic Language Extraction (Regex) - for languages not in LANG_MAP
-        # Match "Language Audio" or just "Language" if it looks like a language name
-        # Common pattern: Title Year Language ...
-        # List of common languages to check dynamically if not mapped
-        common_langs = ["French", "German", "Italian", "Spanish", "Russian", "Japanese", "Chinese", "Korean", "Thai", "Indonesian"]
-        for lang in common_langs:
-            if re.search(rf'(?i)\b{lang}\b', name):
-                languages.add(lang)
-                
-        # Extract Quality
-        for q in QUALITY_MAP:
-            if q in name:
-                qualities.add(q.upper())
+        # Match Full Names (French, etc.)
+        for name_match in LANG_NAME_REGEX.findall(name):
+             # Capitalize properly (e.g. 'french' -> 'French' if in set)
+             # simpler: just add title case
+             languages.add(name_match.title())
+        
+        # 3. Extract Qualities
+        for q_match in QUALITY_REGEX.findall(name):
+             qualities.add(q_match.upper())
 
     # Sort results
+    # Custom sort for seasons (numerical)
+    sorted_seasons = sorted(list(seasons), key=lambda x: int(x.split()[-1]) if x.split()[-1].isdigit() else 999)
+    
+    # Custom sort for qualities
+    quality_order = ['2160P', '4K', '1080P', '720P', '480P', '360P', 'DVD', 'CAM']
+    sorted_qualities = sorted(list(qualities), key=lambda x: quality_order.index(x) if x in quality_order else 99)
+
     return {
         'languages': sorted(list(languages)),
-        'seasons': sorted(list(seasons), key=lambda x: int(x.split()[-1])),
-        'qualities': sorted(list(qualities), key=lambda x: (
-            ['2160P', '4K', '1080P', '720P', '480P', '360P', 'DVD', 'CAM'].index(x) 
-            if x in ['2160P', '4K', '1080P', '720P', '480P', '360P', 'DVD', 'CAM'] else 99
-        )),
+        'seasons': sorted_seasons,
+        'qualities': sorted_qualities,
         'is_series': is_series
     }
 
@@ -598,9 +628,10 @@ async def advantage_spoll_choker(bot, query):
             files, offset, total_results = await get_search_results(query.message.chat.id, movie, offset=0, filter=True)
             if files:
                 ai_search = True
+                ai_search = True
                 k = (movie, files, offset, total_results)
-                reply_msg = await query.message.edit_text(f"<b>🔍 Searching {movie} </b>")
-                await auto_filter(bot, movie, query, reply_msg, ai_search, k)
+                # reply_msg = await query.message.edit_text(f"<b>🔍 Searching {movie} </b>")
+                await auto_filter(bot, movie, query, query.message, ai_search, k)
             else:
                 reqstr = await bot.get_users(query.from_user.id if query.from_user else 0)
 
@@ -1331,6 +1362,26 @@ async def smart_next_page(bot, query):
 
     await show_smart_results(bot, query, files, key, title_extra, offset=offset)
 
+@Client.on_callback_query(filters.regex(r"^languages"))
+async def languages_handler(client, query):
+    try:
+        key = query.data.split("#")[1]
+    except IndexError:
+        await query.answer("Invalid request", show_alert=True)
+        return
+        
+    if key not in temp.GETALL:
+        await query.answer("Search expired.", show_alert=True)
+        return
+        
+    files = temp.GETALL[key]
+    search = FRESH.get(key, "")
+    
+    # Re-analyze to show the orchestrator view (Language Picker)
+    analysis = analyze_query_results(files)
+    
+    await search_orchestrator(client, query.message, files, key, search, analysis)
+
 async def show_smart_results(client, query_or_msg, files, key, title_extra, offset=0, back_cb=None):
     if isinstance(query_or_msg, CallbackQuery):
         message = query_or_msg.message
@@ -1341,6 +1392,12 @@ async def show_smart_results(client, query_or_msg, files, key, title_extra, offs
     
     settings = await get_settings(message.chat.id)
     pre = 'filep' if settings['file_secure'] else 'file'
+    
+    # Persist Back Callback
+    if back_cb:
+        temp.BACK_CB[key] = back_cb
+    else:
+        back_cb = temp.BACK_CB.get(key)
     
     # Slice for display
     total_results = len(files)
@@ -3121,7 +3178,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
                 
             try:
                 req_user_id = message.from_user.id if message.from_user else 0
-                await stats_db.add_search_log(search, req_user_id, total_results, source='auto_filter')
+                asyncio.create_task(stats_db.add_search_log(search, req_user_id, total_results, source='auto_filter'))
             except Exception as e:
                 print(f"Error logging search: {e}")
                 

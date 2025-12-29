@@ -51,6 +51,7 @@ class temp(object):
     SETTINGS = {}
     IMDB_CAP = {}
     FILTERED = {}
+    BACK_CB = {}
 
 
 async def pub_is_subscribed(bot, query, channel):
