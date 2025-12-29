@@ -1374,10 +1374,11 @@ async def show_smart_results(client, query, files, key, title_extra, offset=0, b
     if nav_row:
         btn.append(nav_row)
 
-    if back_cb and offset == 0:
+    if back_cb:
         btn.append([InlineKeyboardButton("⬅ Back to Options", callback_data=back_cb)])
 
-    cap = f"**Results for {title_extra}:**\nFound {total_results} files."
+    # App-like Header
+    cap = f"⚡️ <b>{title_extra}</b>\n\n📂 <b>Found {total_results} Files</b>"
     
     if settings["button"]:
         await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
@@ -3020,7 +3021,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             season_pattern = re.compile(r'(?i)(?:S(\d{1,2})|Season\s?(\d{1,2}))')
             series_keywords = re.compile(r'(?i)\b(?:ep|episode)\s?\d+')
             
-            for file in files[:20]: # Check top 20
+            for file in files[:50]: # Check top 50
                 fname = file['file_name'].lower()
                 if season_pattern.search(fname) or series_keywords.search(fname):
                     has_series = True
