@@ -661,7 +661,8 @@ async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
     except:
         pass
     if lang != "homepage":
-        search = f"{search} {lang}" 
+        full_lang = LANG_MAP.get(lang.lower(), lang)
+        search = f"{search} {full_lang}" 
     BUTTONS[key] = search
 
     files, offset, total_results = await get_search_results(chat_id, search, offset=0, filter=True)
@@ -1092,6 +1093,242 @@ async def filter_qualities_cb_handler(client: Client, query: CallbackQuery):
             await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(btn))
         except MessageNotModified:
             pass
+
+# --- Smart Filter Callbacks (Moved before cb_handler) ---
+
+@Client.on_callback_query(filters.regex(r"^smart_lang"))
+async def smart_lang_handler(client, query):
+    _, lang, key = query.data.split("#")
+    
+    # Retrieve all files for this query
+    if key not in temp.GETALL:
+        await query.answer("Search expired. Please search again.", show_alert=True)
+        return
+        
+    all_files = temp.GETALL[key]
+    
+    # Filter by Language
+    # Identify valid codes for this language
+    valid_codes = [code for code, l in LANG_MAP.items() if l == lang]
+    
+    filtered_files = []
+    for f in all_files:
+        name = f['file_name'].lower()
+        if any(code in name for code in valid_codes):
+            filtered_files.append(f)
+            
+    # Fallback: strict name check if nothing found via codes (rare)
+    if not filtered_files:
+        filtered_files = [f for f in all_files if lang.lower() in f['file_name'].lower()]
+    
+    # Proceed to next check (Series/Season or Quality)
+    analysis = analyze_query_results(filtered_files)
+    
+    if analysis['is_series'] and len(analysis['seasons']) > 0:
+        btn = []
+        row = []
+        for season in analysis['seasons']:
+            row.append(InlineKeyboardButton(f"{season}", callback_data=f"smart_season#{season}#{key}#{lang}")) # Pass lang forward
+            if len(row) == 3:
+                btn.append(row)
+                row = []
+        if row:
+            btn.append(row)
+        btn.append([InlineKeyboardButton("Show All Episodes", callback_data=f"smart_default#{key}#{lang}")])
+        
+        await query.message.edit_text(
+            f"**Selected Language: {lang}**\nFound {len(analysis['seasons'])} Seasons.\n\nSELECT SEASON:",
+            reply_markup=InlineKeyboardMarkup(btn)
+        )
+    elif len(analysis['qualities']) > 1:
+        # Quality check for movies
+        btn = []
+        row = []
+        for qual in analysis['qualities']:
+            row.append(InlineKeyboardButton(f"{qual}", callback_data=f"smart_quality#{qual}#{key}#{lang}"))
+            if len(row) == 3:
+                btn.append(row)
+                row = []
+        if row:
+            btn.append(row)
+        btn.append([InlineKeyboardButton("Show All", callback_data=f"smart_default#{key}#{lang}")])
+        
+        await query.message.edit_text(
+            f"**Selected Language: {lang}**\nFound {len(filtered_files)} Files.\n\nSELECT QUALITY:",
+            reply_markup=InlineKeyboardMarkup(btn)
+        )
+    else:
+        # Show results directly
+        await show_smart_results(client, query, filtered_files, key, f"Language: {lang}")
+
+@Client.on_callback_query(filters.regex(r"^smart_season"))
+async def smart_season_handler(client, query):
+    data_parts = query.data.split("#")
+    season_str = data_parts[1] # "Season 1"
+    key = data_parts[2]
+    lang = data_parts[3] if len(data_parts) > 3 else None
+    
+    if key not in temp.GETALL:
+        await query.answer("Search expired.", show_alert=True)
+        return
+
+    all_files = temp.GETALL[key]
+    
+    # Filter by Lang (if any) AND Season
+    filtered_files = all_files
+    if lang:
+        valid_codes = [code for code, l in LANG_MAP.items() if l == lang]
+        temp_files = []
+        for f in filtered_files:
+            if any(code in f['file_name'].lower() for code in valid_codes):
+                temp_files.append(f)
+        filtered_files = temp_files if temp_files else [f for f in filtered_files if lang.lower() in f['file_name'].lower()]
+        
+    season_num = season_str.split()[-1] # "1"
+    # Match S1, S01, Season 1, Season 01
+    s_regex = re.compile(rf'(?i)(?:S0?{season_num}|Season\s?0?{season_num})\b')
+    
+    filtered_files = [f for f in filtered_files if s_regex.search(f['file_name'])]
+    
+    # Sort by Episode
+    def ep_sort(f):
+        # Find E01, Episode 1 etc
+        match = re.search(r'(?i)(?:E|Episode\s?)(\d{1,3})', f['file_name'])
+        if match:
+            return int(match.group(1))
+        return 999
+        
+    filtered_files.sort(key=ep_sort)
+    
+    await show_smart_results(client, query, filtered_files, key, f"{lang + ' | ' if lang else ''}{season_str}")
+
+@Client.on_callback_query(filters.regex(r"^smart_quality"))
+async def smart_quality_handler(client, query):
+    data_parts = query.data.split("#")
+    qual = data_parts[1]
+    key = data_parts[2]
+    lang = data_parts[3] if len(data_parts) > 3 else None
+    
+    if key not in temp.GETALL:
+        await query.answer("Search expired.", show_alert=True)
+        return
+        
+    all_files = temp.GETALL[key]
+    
+    filtered_files = all_files
+    if lang:
+        valid_codes = [code for code, l in LANG_MAP.items() if l == lang]
+        temp_files = []
+        for f in filtered_files:
+            if any(code in f['file_name'].lower() for code in valid_codes):
+                temp_files.append(f)
+        filtered_files = temp_files if temp_files else [f for f in filtered_files if lang.lower() in f['file_name'].lower()]
+        
+    filtered_files = [f for f in filtered_files if qual.lower() in f['file_name'].lower()]
+    
+    await show_smart_results(client, query, filtered_files, key, f"{lang + ' | ' if lang else ''}{qual}")
+
+@Client.on_callback_query(filters.regex(r"^smart_default"))
+async def smart_default_handler(client, query):
+    data_parts = query.data.split("#")
+    key = data_parts[1]
+    lang = data_parts[2] if len(data_parts) > 2 else None
+    
+    if key not in temp.GETALL:
+        await query.answer("Search expired.", show_alert=True)
+        return
+        
+    all_files = temp.GETALL[key]
+    if lang:
+        valid_codes = [code for code, l in LANG_MAP.items() if l == lang]
+        temp_files = []
+        for f in all_files:
+            if any(code in f['file_name'].lower() for code in valid_codes):
+                temp_files.append(f)
+        all_files = temp_files if temp_files else [f for f in all_files if lang.lower() in f['file_name'].lower()]
+        
+    await show_smart_results(client, query, all_files, key, f"{lang if lang else 'All Results'}")
+
+@Client.on_callback_query(filters.regex(r"^smart_next"))
+async def smart_next_page(bot, query):
+    ident, req, key, offset = query.data.split("_")
+    
+    if int(req) not in [query.from_user.id, 0]:
+        return await query.answer(script.ALRT_TXT.format(query.from_user.first_name), show_alert=True)
+        
+    try:
+        offset = int(offset)
+    except:
+        offset = 0
+        
+    if key not in temp.GETALL:
+        await query.answer("Search expired.", show_alert=True)
+        return
+        
+    all_files = temp.GETALL[key]
+    
+    # Retrieve title from TITLES dict, fallback to "Results"
+    title_extra = TITLES.get(key, "Results")
+
+    await show_smart_results(bot, query, all_files, key, title_extra, offset=offset)
+
+async def show_smart_results(client, query, files, key, title_extra, offset=0):
+    settings = await get_settings(query.message.chat.id)
+    pre = 'filep' if settings['file_secure'] else 'file'
+    
+    # Slice for display
+    total_results = len(files)
+    
+    # Calculate limits
+    limit = int(MAX_B_TN) if not settings.get('max_btn') else 10
+    
+    # Slice list
+    view_files = files[offset:offset+limit]
+    
+    if settings["button"]:
+        btn = [
+            [
+                InlineKeyboardButton(
+                    text=extract_shortdetails(file['file_name'], file['file_size']),
+                    callback_data=f"{pre}#{file['file_id']}"
+                ),
+            ]
+            for file in view_files
+        ]
+    else:
+        btn = []
+    
+    # Update TITLES for context if this function is called directly first time
+    if offset == 0:
+         TITLES[key] = title_extra
+         # Ensure we DO NOT overwrite FRESH[key] here!
+    
+    req = query.from_user.id
+    
+    # Pagination Buttons
+    # Previous / Back
+    nav_row = []
+    if offset >= limit:
+         nav_row.append(InlineKeyboardButton("◀ Back", callback_data=f"smart_next_{req}_{key}_{offset-limit}"))
+         
+    # Page Info
+    nav_row.append(InlineKeyboardButton(f"{math.ceil((offset/limit)+1)} / {math.ceil(total_results/limit)}", callback_data="pages"))
+    
+    # Next
+    if total_results > (offset + limit):
+         nav_row.append(InlineKeyboardButton("Next ▶", callback_data=f"smart_next_{req}_{key}_{offset+limit}"))
+         
+    if nav_row:
+        btn.append(nav_row)
+
+    cap = f"**Results for {title_extra}:**\nFound {total_results} files."
+    
+    if settings["button"]:
+        await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
+    else:
+        for file in view_files:
+            cap += f"\n📁 [{get_size(file['file_size'])}] {file['file_name']}"
+        await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
 
 @Client.on_callback_query()
 async def cb_handler(client: Client, query: CallbackQuery):
@@ -2685,241 +2922,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             await query.message.edit_reply_markup(reply_markup)
     await query.answer(MSG_ALRT)
 
-# --- Smart Filter Callbacks ---
 
-@Client.on_callback_query(filters.regex(r"^smart_lang"))
-async def smart_lang_handler(client, query):
-    _, lang, key = query.data.split("#")
-    
-    # Retrieve all files for this query
-    if key not in temp.GETALL:
-        await query.answer("Search expired. Please search again.", show_alert=True)
-        return
-        
-    all_files = temp.GETALL[key]
-    
-    # Filter by Language
-    # Identify valid codes for this language
-    valid_codes = [code for code, l in LANG_MAP.items() if l == lang]
-    
-    filtered_files = []
-    for f in all_files:
-        name = f['file_name'].lower()
-        if any(code in name for code in valid_codes):
-            filtered_files.append(f)
-            
-    # Fallback: strict name check if nothing found via codes (rare)
-    if not filtered_files:
-        filtered_files = [f for f in all_files if lang.lower() in f['file_name'].lower()]
-    
-    # Proceed to next check (Series/Season or Quality)
-    analysis = analyze_query_results(filtered_files)
-    
-    if analysis['is_series'] and len(analysis['seasons']) > 0:
-        btn = []
-        row = []
-        for season in analysis['seasons']:
-            row.append(InlineKeyboardButton(f"{season}", callback_data=f"smart_season#{season}#{key}#{lang}")) # Pass lang forward
-            if len(row) == 3:
-                btn.append(row)
-                row = []
-        if row:
-            btn.append(row)
-        btn.append([InlineKeyboardButton("Show All Episodes", callback_data=f"smart_default#{key}#{lang}")])
-        
-        await query.message.edit_text(
-            f"**Selected Language: {lang}**\nFound {len(analysis['seasons'])} Seasons.\n\nSELECT SEASON:",
-            reply_markup=InlineKeyboardMarkup(btn)
-        )
-    elif len(analysis['qualities']) > 1:
-        # Quality check for movies
-        btn = []
-        row = []
-        for qual in analysis['qualities']:
-            row.append(InlineKeyboardButton(f"{qual}", callback_data=f"smart_quality#{qual}#{key}#{lang}"))
-            if len(row) == 3:
-                btn.append(row)
-                row = []
-        if row:
-            btn.append(row)
-        btn.append([InlineKeyboardButton("Show All", callback_data=f"smart_default#{key}#{lang}")])
-        
-        await query.message.edit_text(
-            f"**Selected Language: {lang}**\nFound {len(filtered_files)} Files.\n\nSELECT QUALITY:",
-            reply_markup=InlineKeyboardMarkup(btn)
-        )
-    else:
-        # Show results directly
-        await show_smart_results(client, query, filtered_files, key, f"Language: {lang}")
-
-@Client.on_callback_query(filters.regex(r"^smart_season"))
-async def smart_season_handler(client, query):
-    data_parts = query.data.split("#")
-    season_str = data_parts[1] # "Season 1"
-    key = data_parts[2]
-    lang = data_parts[3] if len(data_parts) > 3 else None
-    
-    if key not in temp.GETALL:
-        await query.answer("Search expired.", show_alert=True)
-        return
-
-    all_files = temp.GETALL[key]
-    
-    # Filter by Lang (if any) AND Season
-    filtered_files = all_files
-    if lang:
-        valid_codes = [code for code, l in LANG_MAP.items() if l == lang]
-        temp_files = []
-        for f in filtered_files:
-            if any(code in f['file_name'].lower() for code in valid_codes):
-                temp_files.append(f)
-        filtered_files = temp_files if temp_files else [f for f in filtered_files if lang.lower() in f['file_name'].lower()]
-        
-    season_num = season_str.split()[-1] # "1"
-    # Match S1, S01, Season 1, Season 01
-    s_regex = re.compile(rf'(?i)(?:S0?{season_num}|Season\s?0?{season_num})\b')
-    
-    filtered_files = [f for f in filtered_files if s_regex.search(f['file_name'])]
-    
-    # Sort by Episode
-    def ep_sort(f):
-        # Find E01, Episode 1 etc
-        match = re.search(r'(?i)(?:E|Episode\s?)(\d{1,3})', f['file_name'])
-        if match:
-            return int(match.group(1))
-        return 999
-        
-    filtered_files.sort(key=ep_sort)
-    
-    await show_smart_results(client, query, filtered_files, key, f"{lang + ' | ' if lang else ''}{season_str}")
-
-@Client.on_callback_query(filters.regex(r"^smart_quality"))
-async def smart_quality_handler(client, query):
-    data_parts = query.data.split("#")
-    qual = data_parts[1]
-    key = data_parts[2]
-    lang = data_parts[3] if len(data_parts) > 3 else None
-    
-    if key not in temp.GETALL:
-        await query.answer("Search expired.", show_alert=True)
-        return
-        
-    all_files = temp.GETALL[key]
-    
-    filtered_files = all_files
-    if lang:
-        valid_codes = [code for code, l in LANG_MAP.items() if l == lang]
-        temp_files = []
-        for f in filtered_files:
-            if any(code in f['file_name'].lower() for code in valid_codes):
-                temp_files.append(f)
-        filtered_files = temp_files if temp_files else [f for f in filtered_files if lang.lower() in f['file_name'].lower()]
-        
-    filtered_files = [f for f in filtered_files if qual.lower() in f['file_name'].lower()]
-    
-    await show_smart_results(client, query, filtered_files, key, f"{lang + ' | ' if lang else ''}{qual}")
-
-@Client.on_callback_query(filters.regex(r"^smart_default"))
-async def smart_default_handler(client, query):
-    data_parts = query.data.split("#")
-    key = data_parts[1]
-    lang = data_parts[2] if len(data_parts) > 2 else None
-    
-    if key not in temp.GETALL:
-        await query.answer("Search expired.", show_alert=True)
-        return
-        
-    all_files = temp.GETALL[key]
-    if lang:
-        valid_codes = [code for code, l in LANG_MAP.items() if l == lang]
-        temp_files = []
-        for f in all_files:
-            if any(code in f['file_name'].lower() for code in valid_codes):
-                temp_files.append(f)
-        all_files = temp_files if temp_files else [f for f in all_files if lang.lower() in f['file_name'].lower()]
-        
-    await show_smart_results(client, query, all_files, key, f"{lang if lang else 'All Results'}")
-
-@Client.on_callback_query(filters.regex(r"^smart_next"))
-async def smart_next_page(bot, query):
-    ident, req, key, offset = query.data.split("_")
-    
-    if int(req) not in [query.from_user.id, 0]:
-        return await query.answer(script.ALRT_TXT.format(query.from_user.first_name), show_alert=True)
-        
-    try:
-        offset = int(offset)
-    except:
-        offset = 0
-        
-    if key not in temp.GETALL:
-        await query.answer("Search expired.", show_alert=True)
-        return
-        
-    all_files = temp.GETALL[key]
-    
-    # Retrieve title from TITLES dict, fallback to "Results"
-    title_extra = TITLES.get(key, "Results")
-
-    await show_smart_results(bot, query, all_files, key, title_extra, offset=offset)
-
-async def show_smart_results(client, query, files, key, title_extra, offset=0):
-    settings = await get_settings(query.message.chat.id)
-    pre = 'filep' if settings['file_secure'] else 'file'
-    
-    # Slice for display
-    total_results = len(files)
-    
-    # Calculate limits
-    limit = int(MAX_B_TN) if not settings.get('max_btn') else 10
-    
-    # Slice list
-    view_files = files[offset:offset+limit]
-    
-    if settings["button"]:
-        btn = [
-            [
-                InlineKeyboardButton(
-                    text=extract_shortdetails(file['file_name'], file['file_size']),
-                    callback_data=f"{pre}#{file['file_id']}"
-                ),
-            ]
-            for file in view_files
-        ]
-    else:
-        btn = []
-    
-    # Update TITLES for context if this function is called directly first time
-    if offset == 0:
-         TITLES[key] = title_extra
-         # Ensure we DO NOT overwrite FRESH[key] here!
-    
-    req = query.from_user.id
-    
-    # Pagination Buttons
-    # Previous / Back
-    nav_row = []
-    if offset >= limit:
-         nav_row.append(InlineKeyboardButton("◀ Back", callback_data=f"smart_next_{req}_{key}_{offset-limit}"))
-         
-    # Page Info
-    nav_row.append(InlineKeyboardButton(f"{math.ceil((offset/limit)+1)} / {math.ceil(total_results/limit)}", callback_data="pages"))
-    
-    # Next
-    if total_results > (offset + limit):
-         nav_row.append(InlineKeyboardButton("Next ▶", callback_data=f"smart_next_{req}_{key}_{offset+limit}"))
-         
-    if nav_row:
-        btn.append(nav_row)
-
-    cap = f"**Results for {title_extra}:**\nFound {total_results} files."
-    
-    if settings["button"]:
-        await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
-    else:
-        for file in view_files:
-            cap += f"\n📁 [{get_size(file['file_size'])}] {file['file_name']}"
-        await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn))
 
 async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     curr_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
