@@ -643,41 +643,26 @@ async def languages_cb_handler(client: Client, query: CallbackQuery):
         pass
 
     _, key = query.data.split("#")
-    search = FRESH.get(key)
-    search = search.replace(' ', '_')
-
+    
+    if key not in temp.GETALL:
+        await query.answer("Search expired.", show_alert=True)
+        return
+        
+    all_files = temp.GETALL[key]
+    analysis = analyze_query_results(all_files)
+    
     btn = []
-    for i in range(0, len(LANGUAGES)-1, 2):
-        btn.append([
-            InlineKeyboardButton(
-                text=LANGUAGES[i].title(),  
-                callback_data=f"fl#{LANGUAGES[i].lower()[:3]}#{key}"
-            ),
-            InlineKeyboardButton(
-                text=LANGUAGES[i+1].title(),  
-                callback_data=f"fl#{LANGUAGES[i+1].lower()[:3]}#{key}"
-            ),
-        ])
+    # Dynamic Language Buttons from found files
+    for lang in analysis['languages']:
+        btn.append([InlineKeyboardButton(f"🗣 {lang}", callback_data=f"smart_lang#{lang}#{key}")])
+        
+    # Standard "Back" to show all files (effectively "Home" for this search)
+    btn.append([InlineKeyboardButton("📂 Show All Files", callback_data=f"smart_default#{key}")])
 
-    btn.insert(
-        0,
-        [
-            InlineKeyboardButton(
-                text="💬 Select Language ", callback_data="ident"
-            )
-        ],
+    await query.message.edit_text(
+        f"**Found {len(all_files)} results.**\n\nSELECT LANGUAGE:",
+        reply_markup=InlineKeyboardMarkup(btn)
     )
-
-    req = query.from_user.id
-    offset = 0
-    btn.append([InlineKeyboardButton(text="◀ Back To Files ", callback_data=f"fl#homepage#{key}")])
-
-    try:
-        await query.edit_message_reply_markup(
-            reply_markup=InlineKeyboardMarkup(btn)
-        )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^fl#"))
 async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
@@ -1169,7 +1154,7 @@ async def smart_lang_handler(client, query):
         btn = []
         row = []
         for season in analysis['seasons']:
-            row.append(InlineKeyboardButton(f"{season}", callback_data=f"smart_season#{season}#{key}#{lang}")) # Pass lang forward
+            row.append(InlineKeyboardButton(f"📺 {season}", callback_data=f"smart_season#{season}#{key}#{lang}")) # Pass lang forward
             if len(row) == 3:
                 btn.append(row)
                 row = []
@@ -3042,8 +3027,8 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     if len(analysis['languages']) > 1:
         btn = []
         for lang in analysis['languages']:
-            btn.append([InlineKeyboardButton(f"{lang}", callback_data=f"smart_lang#{lang}#{key}")])
-        btn.append([InlineKeyboardButton("Show All Files", callback_data=f"smart_default#{key}")])
+            btn.append([InlineKeyboardButton(f"🗣 {lang}", callback_data=f"smart_lang#{lang}#{key}")])
+        btn.append([InlineKeyboardButton("📂 Show All Files", callback_data=f"smart_default#{key}")])
         
         await reply_msg.edit_text(
             f"**Found {total_results} results for '{search}'**\n\nSELECT LANGUAGE:",
@@ -3057,7 +3042,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         # Group seasons in rows of 3
         row = []
         for season in analysis['seasons']:
-            row.append(InlineKeyboardButton(f"{season}", callback_data=f"smart_season#{season}#{key}"))
+            row.append(InlineKeyboardButton(f"📺 {season}", callback_data=f"smart_season#{season}#{key}"))
             if len(row) == 3:
                 btn.append(row)
                 row = []
