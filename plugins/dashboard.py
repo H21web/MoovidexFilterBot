@@ -78,17 +78,24 @@ async def users_page(request):
         page = int(request.query.get('page', 1))
     except ValueError:
         page = 1
-        
-    limit = 50
-    total_users = await db.total_users_count()
-    total_pages = (total_users + limit - 1) // limit
     
-    users_list = await db.get_all_users_paginated(page, limit)
+    search_query = request.query.get('search')
+    limit = 50
+    
+    if search_query:
+        users_list = await db.search_users(search_query)
+        total_users = len(users_list) # Simplified pagination for search
+        total_pages = 1
+    else:
+        total_users = await db.total_users_count()
+        total_pages = (total_users + limit - 1) // limit
+        users_list = await db.get_all_users_paginated(page, limit)
     
     return web.Response(text=render_template("users.html", 
                                              users=users_list,
                                              page=page,
-                                             total_pages=total_pages), content_type='text/html')
+                                             total_pages=total_pages,
+                                             search_query=search_query), content_type='text/html')
 
 @routes.get("/admin/groups")
 async def groups_page(request):
@@ -108,11 +115,13 @@ async def searches_page(request):
     top_searches = await stats_db.get_top_searches()
     no_result_searches = await stats_db.get_no_result_stats() 
     top_users = await stats_db.get_top_active_users()
+    recent_searches = await stats_db.get_recent_all_searches(limit=100)
     
     return web.Response(text=render_template("searches.html", 
                                              top_searches=top_searches,
                                              no_result_searches=no_result_searches,
-                                             top_users=top_users), content_type='text/html')
+                                             top_users=top_users,
+                                             recent_searches=recent_searches), content_type='text/html')
 
 @routes.get("/admin/pm_searches")
 async def pm_searches_page(request):

@@ -182,6 +182,18 @@ class Database:
         skip = (page - 1) * limit
         cursor = self.col.find({}).sort('_id', -1).skip(skip).limit(limit)
         return await cursor.to_list(length=limit)
+
+    async def search_users(self, query):
+        # Try matching by ID first
+        try:
+            user_id = int(query)
+            cursor = self.col.find({'id': user_id})
+        except ValueError:
+            # Match by name (case-insensitive regex)
+            regex = re.compile(re.escape(query), re.IGNORECASE)
+            cursor = self.col.find({'name': regex})
+        
+        return await cursor.to_list(length=50)
     
 
     async def delete_user(self, user_id):

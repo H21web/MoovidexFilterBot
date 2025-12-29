@@ -600,7 +600,7 @@ async def advantage_spoll_choker(bot, query):
                 ai_search = True
                 k = (movie, files, offset, total_results)
                 reply_msg = await query.message.edit_text(f"<b>🔍 Searching {movie} </b>")
-                await auto_filter(bot, movie, query.message, reply_msg, ai_search, k)
+                await auto_filter(bot, movie, query, reply_msg, ai_search, k)
             else:
                 reqstr = await bot.get_users(query.from_user.id if query.from_user else 0)
 
@@ -3196,8 +3196,9 @@ async def advantage_spell_chok(client, name, msg, reply_msg, ai_search):
         return
 
     try:
-        res = requests.get(f"https://imdb.iamidiotareyoutoo.com/search?q={query}")
-        data = res.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"https://imdb.iamidiotareyoutoo.com/search?q={query}") as res:
+                data = await res.json()
         if not data.get("ok") or not data.get("description"):
             raise ValueError("No movie suggestions found.")
     except Exception as e:
@@ -3248,7 +3249,7 @@ async def advantage_spell_chok(client, name, msg, reply_msg, ai_search):
     try:
         if reply_msg and hasattr(reply_msg, 'edit_text'):
             spell_check_del = await reply_msg.edit_text(
-                text=script.CUDNT_FND.format(mv_rqst),
+                text="<b>Please select the movie / series</b>",
                 reply_markup=InlineKeyboardMarkup(btn)
             )
 

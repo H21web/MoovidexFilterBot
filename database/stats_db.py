@@ -67,6 +67,21 @@ class StatsDB:
         cursor = self.pm_search_logs.aggregate(pipeline)
         return await cursor.to_list(length=limit)
 
+    async def get_recent_all_searches(self, limit=100):
+        pipeline = [
+            {"$sort": {"timestamp": -1}},
+            {"$limit": limit},
+            {"$lookup": {
+                "from": "users",
+                "localField": "user_id",
+                "foreignField": "id",
+                "as": "user_info"
+            }},
+            {"$unwind": {"path": "$user_info", "preserveNullAndEmptyArrays": True}}
+        ]
+        cursor = self.search_logs.aggregate(pipeline)
+        return await cursor.to_list(length=limit)
+
     async def get_top_active_users(self, limit=10):
         pipeline = [
             {"$group": {"_id": "$user_id", "count": {"$sum": 1}}},

@@ -3,6 +3,15 @@
 <h1>Users</h1>
 <div class="card">
     <h3>All Users</h3>
+    <div style="margin-bottom: 20px;">
+        <form action="/admin/users" method="get">
+            <input type="text" name="search" placeholder="Search by ID or Name" value="{{ search_query or '' }}" style="padding: 5px; border-radius: 4px; border: 1px solid #ccc;">
+            <button type="submit" style="padding: 5px 10px; border-radius: 4px; background: #007bff; color: white; border: none; cursor: pointer;">Search</button>
+            {% if search_query %}
+            <a href="/admin/users" style="margin-left: 10px; color: #666; text-decoration: none;">Clear</a>
+            {% endif %}
+        </form>
+    </div>
     <table>
         <thead>
             <tr>

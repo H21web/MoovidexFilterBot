@@ -319,7 +319,7 @@
     }
 
     function vlc_player() {
-        const openVlc = `vlc://${downloadlink}`;
+        const openVlc = `intent:${downloadlink}#Intent;package=org.videolan.vlc;type=video/*;end`;
         window.open(openVlc, '_blank');
           Telegram.WebApp.HapticFeedback.notificationOccurred('light');
     }

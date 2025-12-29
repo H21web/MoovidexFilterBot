@@ -63,5 +63,31 @@
             </tbody>
         </table>
     </div>
+
+    <div class="card" style="grid-column: span 2;">
+        <h3>Recent Searches (Global)</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>User</th>
+                    <th>Source</th>
+                    <th>Query</th>
+                    <th>Results</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in recent_searches %}
+                <tr>
+                    <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td>{{ log.user_info.name if log.user_info else log.user_id }}</td>
+                    <td>{{ log.source|default('auto_filter') }}</td>
+                    <td>{{ log.query }}</td>
+                    <td>{{ log.results_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 {% endblock %}
