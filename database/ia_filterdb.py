@@ -96,9 +96,11 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
         raw_pattern = r'(\b|[\.\+\-_])' + query + r'(\b|[\.\+\-_])'
         try:
             regex = re.compile(raw_pattern, flags=re.IGNORECASE)
-            filter_criteria = {'file_name': regex}
+            # Check both file_name and caption
+            filter_criteria = {'$or': [{'file_name': regex}, {'caption': regex}]}
         except:
-            filter_criteria = {'file_name': {'$regex': query, '$options': 'i'}}
+            regex = {'$regex': query, '$options': 'i'}
+            filter_criteria = {'$or': [{'file_name': regex}, {'caption': regex}]}
     else:
         # Multi-word query - Smart Regex Split
         # Split by space and ensure each word is present
@@ -112,7 +114,8 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
             # Match word with robust boundaries or connected by symbols
             # Using simple escape is safer for speed, but let's allow partial word matching if user wants
             # user said "efficient search without errors"
-            regex_list.append({'file_name': {'$regex': re.escape(word), '$options': 'i'}})
+            word_regex = {'$regex': re.escape(word), '$options': 'i'}
+            regex_list.append({'$or': [{'file_name': word_regex}, {'caption': word_regex}]})
         
         filter_criteria = {'$and': regex_list}
 

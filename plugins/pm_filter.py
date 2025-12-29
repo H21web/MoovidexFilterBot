@@ -796,7 +796,7 @@ async def seasons_cb_handler(client: Client, query: CallbackQuery):
     try:
         if int(query.from_user.id) not in [query.message.reply_to_message.from_user.id, 0]:
             return await query.answer(
-                f"⚠️ Hello {query.from_user.first_name},\n🎬 Only the person who requested this can change seasons",
+                f"⚠️ Hello {query.from_user.first_name},\n🎬 Only the person who requested this can change seasons.",
                 show_alert=True,
             )
     except:
@@ -1318,17 +1318,18 @@ async def smart_next_page(bot, query):
         offset = int(offset)
     except:
         offset = 0
-        
-    if key not in temp.GETALL:
-        await query.answer("Search expired.", show_alert=True)
+    
+    # Use FILTERED if available, else GETALL, else None
+    files = temp.FILTERED.get(key, temp.GETALL.get(key))
+    
+    if not files:
+        await query.answer("Search expired. Please search again.", show_alert=True)
         return
         
-    all_files = temp.GETALL[key]
-    
     # Retrieve title from TITLES dict, fallback to "Results"
     title_extra = TITLES.get(key, "Results")
 
-    await show_smart_results(bot, query, all_files, key, title_extra, offset=offset)
+    await show_smart_results(bot, query, files, key, title_extra, offset=offset)
 
 async def show_smart_results(client, query_or_msg, files, key, title_extra, offset=0, back_cb=None):
     if isinstance(query_or_msg, CallbackQuery):
@@ -1344,6 +1345,15 @@ async def show_smart_results(client, query_or_msg, files, key, title_extra, offs
     # Slice for display
     total_results = len(files)
     
+    # Save the current filtered files for pagination
+    temp.FILTERED[key] = files
+
+    if len(files) == 0:
+        return await query_or_msg.edit_text(
+            f"<b>⚠️ No filtered results found for {title_extra}!</b>", 
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=back_cb or f"spoll#{key}#{offset}")]])
+        )
+
     # Calculate limits
     limit = int(MAX_B_TN) if not settings.get('max_btn') else 10
     
@@ -1468,7 +1478,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
                     chat = await client.get_chat(grpid)
                     title = chat.title
                 except:
-                    await query.message.edit_text("Mᴀᴋᴇ sᴜʀᴇ I'ᴍ ᴘʀᴇsᴇɴᴛ ɪɴ ʏᴏᴜʀ ɢʀᴏᴜᴘ!!", quote=True)
+                    await query.message.edit_text("Mᴀᴋᴇ sᴜʀᴇ I'm ᴘʀᴇsᴇɴᴛ ɪɴ ʏᴏᴜʀ ɢʀᴏᴜᴘ!!", quote=True)
                     return await query.answer(MSG_ALRT)
             else:
                 await query.message.edit_text(
@@ -1617,6 +1627,16 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 title = ttl.title
                 active = await if_active(str(userid), str(groupid))
                 act = " - ACTIVE" if active else ""
+                if len(languages) > 1:
+                    btn = [
+                        [
+                            InlineKeyboardButton(
+                                text=f"🔊 {lang.title()}",
+                                callback_data=f"lang#{lang}#{key}"
+                            ),
+                        ]
+                        for lang in languages
+                    ]
                 buttons.append(
                     [
                         InlineKeyboardButton(
@@ -3012,7 +3032,7 @@ async def search_orchestrator(client, reply_msg, files, key, search, analysis):
     if len(analysis['languages']) > 1:
         btn = []
         for lang in analysis['languages']:
-            btn.append([InlineKeyboardButton(f"🗣 {lang}", callback_data=f"smart_lang#{lang}#{key}")])
+            btn.append([InlineKeyboardButton(f"🔊 {lang}", callback_data=f"smart_lang#{lang}#{key}")])
         btn.append([InlineKeyboardButton("📂 Show All Files", callback_data=f"smart_default#{key}")])
         
         try:
@@ -3086,7 +3106,12 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             search = re.sub(r"\s+", " ", search).strip()
             search = search.replace("-", " ")
             search = search.replace(":", "")
+            search = search.replace(":", "")
             search = search.replace(".", "")
+            # Remove brackets and their content if desired, or just the brackets? User said "unwanted character". 
+            # Usually removing generic special chars is safer.
+            search = re.sub(r"[\[\]\(\)\{\}]", "", search)
+            search = re.sub(r"[^\w\s]", "", search) # Keep only alphanumeric and whitespace
             
             # Fetch MORE results for analysis (up to 100)
             files, offset, total_results = await get_search_results(message.chat.id ,search, offset=0, max_results=100, filter=True)
@@ -3144,7 +3169,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         message = msg.message.reply_to_message  # msg will be callback query
         search, files, offset, total_results = spoll
         settings = await get_settings(message.chat.id)
-        await msg.message.delete()
+        # await msg.message.delete() # Removed to prevent MESSAGE_ID_INVALID as orchestrator edits this message
 
     # --- Smart Filter Logic Start ---
     analysis = analyze_query_results(files)

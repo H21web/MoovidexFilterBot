@@ -48,7 +48,9 @@ class temp(object):
     GETALL = {}
     SHORT = {}
     SETTINGS = {}
+    SETTINGS = {}
     IMDB_CAP = {}
+    FILTERED = {}
 
 
 async def pub_is_subscribed(bot, query, channel):

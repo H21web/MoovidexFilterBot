@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import motor.motor_asyncio
 from info import DATABASE_URI, DATABASE_NAME
 
@@ -165,7 +165,7 @@ class StatsDB:
             {
                 "$match": {
                     "results_count": 0,
-                    "timestamp": {"$gte": datetime.utcnow() - datetime.timedelta(days=days)}
+                    "timestamp": {"$gte": datetime.utcnow() - timedelta(days=days)}
                 }
             },
             {
