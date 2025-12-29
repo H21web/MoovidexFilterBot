@@ -3220,38 +3220,8 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
                 
             settings = await get_settings(message.chat.id)
             
-            # IMDb Auto-Suggest
-            # 1. Check for year
-            has_year = re.search(r'\b(19|20)\d{2}\b', search)
-            
-            # 2. Check for Mixed Content (Movie + Series)
-            has_series = False
-            has_movies = False
-            
-            # Quick scan of top results (regex same as analyze_query_results)
-            season_pattern = re.compile(r'(?i)(?:S(\d{1,2})|Season\s?(\d{1,2}))')
-            series_keywords = re.compile(r'(?i)\b(?:ep|episode)\s?\d+')
-            
-            # Check if query itself implies a series (Skip suggestion if so)
-            is_series_query = season_pattern.search(search) or series_keywords.search(search)
-            
-            for file in files[:50]: # Check top 50
-                fname = file['file_name'].lower()
-                if season_pattern.search(fname) or series_keywords.search(fname):
-                    has_series = True
-                else:
-                    has_movies = True
-                
-                if has_series and has_movies:
-                    break
-                    
-            # Trigger Logic: No Year OR Mixed Content
-            # BUT Skip if query is explicitly for a series
-            should_suggest = ((not has_year) or (has_series and has_movies)) and not is_series_query
-            
-            if should_suggest and settings["spell_check"]:
-                 # If no year OR mixed results, and NOT explicitly an AI search, suggest via IMDb
-                 return await advantage_spell_chok(client, name, msg, reply_msg, ai_search=False)
+            # Trigger Logic: Only check IMDb/Spell Check if NO files are found
+            # Removed proactive "should_suggest" logic as per user request
             
             if not files:
                 if settings["spell_check"]:
