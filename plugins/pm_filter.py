@@ -333,29 +333,40 @@ def extract_shortdetails(filename, file_size, max_length=64):
     return current.strip()
 def sort_by_relevance(files, query):
     """
-    Sort files by relevance:
-    1. Exact Match (Score 3)
-    2. Starts With (Score 2)
-    3. Contains (Score 1)
-    Then by Year (Newest first) and File Size (Largest first)
+    Sort files by relevance using Similarity Score.
     """
-    query = query.lower()
+    # Clean query for comparison
+    query_norm = re.sub(r'\s+', ' ', re.sub(r'[^\w\s]', ' ', query.lower())).strip()
     
-    def get_score(file):
-        name = file['file_name'].lower()
-        if name == query:
-            return 3
-        if name.startswith(query):
-            return 2
-        if query in name:
-            return 1
-        return 0
+    def get_score(f):
+        name = f['file_name'].lower().replace('.', ' ').strip()
         
-    def get_year(file):
-        match = re.search(r'\b(19|20)\d{2}\b', file['file_name'])
-        return int(match.group(0)) if match else 0
+        # 0. Check Year for Tie-Breaking
+        year_match = re.search(r'\b(19|20)\d{2}\b', name)
+        year = int(year_match.group(0)) if year_match else 0
         
-    return sorted(files, key=lambda f: (get_score(f), get_year(f), f['file_size']), reverse=True)
+        # 1. Similarity Score
+        # Remove Tags for comparison to get "Core Title"
+        clean_name = re.sub(r'\b(4k|1080p|720p|480p|cam|rip|web|hdr|x264|x265|hevc|dual|audio|hindi|eng|sub)\b', '', name)
+        clean_name = re.sub(r'\s+', ' ', clean_name).strip()
+        
+        similarity = SequenceMatcher(None, query_norm, clean_name).ratio()
+        
+        # Categorize Score
+        if similarity > 0.9: 
+            score = 3 # Exact-ish
+        elif name.startswith(query_norm):
+            score = 2.5 # Prefix match high priority
+        elif similarity > 0.6:
+            score = 2 # Good match
+        elif query_norm in name:
+            score = 1 # Basic Containment
+        else:
+            score = 0
+            
+        return (score, year, f['file_size'])
+
+    return sorted(files, key=get_score, reverse=True)
 
 
 def analyze_query_results(files):
