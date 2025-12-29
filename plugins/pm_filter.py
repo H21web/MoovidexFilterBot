@@ -325,7 +325,10 @@ def analyze_query_results(files):
         name = file['file_name'].lower()
         
         # Check for Series
-        if season_pattern.search(name) or 'episode' in name or 'ep' in name:
+        # Check for Series
+        # Use regex for 'ep' to avoid matching words like 'Deep', 'Concept'
+        series_keywords = re.compile(r'(?i)\b(?:ep|episode)\s?\d+')
+        if season_pattern.search(name) or series_keywords.search(name):
             is_series = True
             
         # Extract Season
@@ -357,7 +360,26 @@ def analyze_query_results(files):
 
 @Client.on_callback_query(filters.regex(r"^next"))
 async def next_page(bot, query):
-    ident, req, key, offset = query.data.split("_")
+    try:
+        ident, req, key, offset = query.data.split("_")
+    except ValueError:
+        try:
+            ident, req, key, offset = query.data.split("#")
+        except ValueError:
+             # Fallback: maybe key has underscores? Try maxsplit?
+             # But standardized on # is better.
+             # If format is next_REQ_KEY_OFFSET and KEY has _, split("_") yields > 4 parts.
+             # We should probably handle that if we can't change the generating source easily.
+             # But for now, try/except is safer.
+             parts = query.data.split("_")
+             if len(parts) > 4: 
+                 # Assume first is 'next', second is req, last is offset, middle is key
+                 ident = parts[0]
+                 req = parts[1]
+                 offset = parts[-1]
+                 key = "_".join(parts[2:-1])
+             else:
+                 return await query.answer("Invalid callback data")
     curr_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
     if int(req) not in [query.from_user.id, 0]:
         return await query.answer(script.ALRT_TXT.format(query.from_user.first_name), show_alert=True)
@@ -1251,7 +1273,10 @@ async def smart_default_handler(client, query):
 
 @Client.on_callback_query(filters.regex(r"^smart_next"))
 async def smart_next_page(bot, query):
-    ident, req, key, offset = query.data.split("_")
+    try:
+        ident, req, key, offset = query.data.split("#")
+    except ValueError:
+        ident, req, key, offset = query.data.split("_")
     
     if int(req) not in [query.from_user.id, 0]:
         return await query.answer(script.ALRT_TXT.format(query.from_user.first_name), show_alert=True)
@@ -1309,14 +1334,14 @@ async def show_smart_results(client, query, files, key, title_extra, offset=0):
     # Previous / Back
     nav_row = []
     if offset >= limit:
-         nav_row.append(InlineKeyboardButton("◀ Back", callback_data=f"smart_next_{req}_{key}_{offset-limit}"))
+         nav_row.append(InlineKeyboardButton("◀ Back", callback_data=f"smart_next#{req}#{key}#{offset-limit}"))
          
     # Page Info
     nav_row.append(InlineKeyboardButton(f"{math.ceil((offset/limit)+1)} / {math.ceil(total_results/limit)}", callback_data="pages"))
     
     # Next
     if total_results > (offset + limit):
-         nav_row.append(InlineKeyboardButton("Next ▶", callback_data=f"smart_next_{req}_{key}_{offset+limit}"))
+         nav_row.append(InlineKeyboardButton("Next ▶", callback_data=f"smart_next#{req}#{key}#{offset+limit}"))
          
     if nav_row:
         btn.append(nav_row)
@@ -3150,9 +3175,12 @@ async def advantage_spell_chok(client, name, msg, reply_msg, vj_search):
             mv_rqst = mv_rqst.capitalize()
         except Exception:
             pass
-        if mv_rqst and techvj and mv_rqst.startswith(techvj[0]):
-            await auto_filter(client, techvj, msg, reply_msg, vj_search_new)
-            return
+        if mv_rqst and techvj:
+            from difflib import SequenceMatcher
+            similarity = SequenceMatcher(None, mv_rqst.lower(), techvj.lower()).ratio()
+            if similarity > 0.6:  # Threshold for auto-search
+                await auto_filter(client, techvj, msg, reply_msg, vj_search_new)
+                return
 
         await handle_no_results(client, reply_msg, mv_rqst, reqstr)
         return

@@ -74,10 +74,21 @@ async def users_page(request):
     if not check_auth(request):
         return web.HTTPFound('/admin/login')
     
-    users = await db.get_all_users() # This returns a cursor
-    users_list = await users.to_list(length=100) # Limit to 100 for now to avoid load
+    try:
+        page = int(request.query.get('page', 1))
+    except ValueError:
+        page = 1
+        
+    limit = 50
+    total_users = await db.total_users_count()
+    total_pages = (total_users + limit - 1) // limit
     
-    return web.Response(text=render_template("users.html", users=users_list), content_type='text/html')
+    users_list = await db.get_all_users_paginated(page, limit)
+    
+    return web.Response(text=render_template("users.html", 
+                                             users=users_list,
+                                             page=page,
+                                             total_pages=total_pages), content_type='text/html')
 
 @routes.get("/admin/groups")
 async def groups_page(request):
@@ -95,11 +106,13 @@ async def searches_page(request):
         return web.HTTPFound('/admin/login')
     
     top_searches = await stats_db.get_top_searches()
-    no_result_searches = await stats_db.get_no_result_stats() # Most anticipated
+    no_result_searches = await stats_db.get_no_result_stats() 
+    top_users = await stats_db.get_top_active_users()
     
     return web.Response(text=render_template("searches.html", 
                                              top_searches=top_searches,
-                                             no_result_searches=no_result_searches), content_type='text/html')
+                                             no_result_searches=no_result_searches,
+                                             top_users=top_users), content_type='text/html')
 
 @routes.get("/admin/pm_searches")
 async def pm_searches_page(request):

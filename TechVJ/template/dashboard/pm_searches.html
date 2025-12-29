@@ -10,6 +10,7 @@
         <thead>
             <tr>
                 <th>User ID</th>
+                <th>Name</th>
                 <th>Query</th>
                 <th>Timestamp</th>
             </tr>
@@ -18,6 +19,7 @@
             {% for search in pm_searches %}
             <tr>
                 <td>{{ search.user_id }}</td>
+                <td>{{ search.user_info.name if search.user_info else 'Unknown' }}</td>
                 <td>{{ search.query }}</td>
                 <td>{{ search.timestamp }}</td>
             </tr>

@@ -177,6 +177,11 @@ class Database:
 
     async def get_all_users(self):
         return self.col.find({})
+        
+    async def get_all_users_paginated(self, page=1, limit=50):
+        skip = (page - 1) * limit
+        cursor = self.col.find({}).sort('_id', -1).skip(skip).limit(limit)
+        return await cursor.to_list(length=limit)
     
 
     async def delete_user(self, user_id):

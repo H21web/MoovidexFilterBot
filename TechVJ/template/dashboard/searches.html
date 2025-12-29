@@ -41,5 +41,27 @@
             </tbody>
         </table>
     </div>
+    
+    <div class="card" style="grid-column: span 2;">
+        <h3>Top Active Users</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>User ID</th>
+                    <th>Search Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in top_users %}
+                <tr>
+                    <td>{{ user.user_info.name if user.user_info else 'Unknown' }}</td>
+                    <td>{{ user._id }}</td> <!-- Aggregated group key is user_id -->
+                    <td>{{ user.count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 {% endblock %}

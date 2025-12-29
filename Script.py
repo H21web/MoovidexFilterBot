@@ -794,4 +794,5 @@ Example:- /set_caption 📕 File Name: {filename}
 # Ask Doubt on telegram @KingVJ01
 
 
-    
+    DASHBOARD_TXT = """<b>Admin Dashboard</b>
+Please click the button below to access the admin dashboard."""

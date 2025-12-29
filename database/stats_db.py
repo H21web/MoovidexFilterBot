@@ -53,14 +53,32 @@ class StatsDB:
         return await cursor.to_list(length=limit)
 
     async def get_recent_pm_searches(self, limit=50):
-        cursor = self.pm_search_logs.find().sort('timestamp', -1).limit(limit)
+        pipeline = [
+            {"$sort": {"timestamp": -1}},
+            {"$limit": limit},
+            {"$lookup": {
+                "from": "users",  # Verify this matches COLLECTION_NAME in users_chats_db logic
+                "localField": "user_id",
+                "foreignField": "id",
+                "as": "user_info"
+            }},
+            {"$unwind": {"path": "$user_info", "preserveNullAndEmptyArrays": True}}
+        ]
+        cursor = self.pm_search_logs.aggregate(pipeline)
         return await cursor.to_list(length=limit)
 
     async def get_top_active_users(self, limit=10):
         pipeline = [
             {"$group": {"_id": "$user_id", "count": {"$sum": 1}}},
             {"$sort": {"count": -1}},
-            {"$limit": limit}
+            {"$limit": limit},
+            {"$lookup": {
+                "from": "users",
+                "localField": "_id",
+                "foreignField": "id",
+                "as": "user_info"
+            }},
+            {"$unwind": {"path": "$user_info", "preserveNullAndEmptyArrays": True}}
         ]
         cursor = self.search_logs.aggregate(pipeline)
         return await cursor.to_list(length=limit)
