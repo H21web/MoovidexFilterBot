@@ -172,7 +172,16 @@ async def start(client, message):
         if vj and PREMIUM_AND_REFERAL_MODE == True:
             await message.reply(f"<b>You have joined using the referral link of user with ID {user_id}\n\nSend /start again to use the bot</b>")
             num_referrals = await get_referal_users_count(user_id)
-            await client.send_message(chat_id = user_id, text = "<b>{} start the bot with your referral link\n\nTotal Referals - {}</b>".format(message.from_user.mention, num_referrals))
+            await client.send_message(
+                chat_id=user_id,
+                text=(
+                    f"🔔 <b>New Referral Joined!</b> 🔔\n\n"
+                    f"👤 <b>User:</b> {message.from_user.mention}\n"
+                    f"🆔 <b>ID:</b> <code>{message.from_user.id}</code>\n\n"
+                    f"📊 <b>Total Referrals:</b> {num_referrals}/{REFERAL_COUNT}\n\n"
+                    f"<i>Keep referring to unlock premium access!</i>"
+                )
+            )
             if num_referrals == REFERAL_COUNT:
                 time = REFERAL_PREMEIUM_TIME       
                 seconds = await get_seconds(time)
@@ -181,7 +190,16 @@ async def start(client, message):
                     user_data = {"id": user_id, "expiry_time": expiry_time} 
                     await db.update_user(user_data)  # Use the update_user method to update or insert user data
                     await delete_all_referal_users(user_id)
-                    await client.send_message(chat_id = user_id, text = "<b>You Have Successfully Completed Total Referal.\n\nYou Added In Premium For {}</b>".format(REFERAL_PREMEIUM_TIME))
+                    await client.send_message(
+                        chat_id=user_id,
+                        text=(
+                            f"🎉 <b>CONGRATULATIONS!</b> 🎉\n\n"
+                            f"<b>You have successfully completed the referral requirement!</b> 🚀\n\n"
+                            f"✅ <b>Reward:</b> 3 Months Unlimited Access\n"
+                            f"⏳ <b>Valid Until:</b> {expiry_time.strftime('%d %B %Y')}\n\n"
+                            f"<i>Enjoy your premium access to movies and series!</i> 🍿🎬"
+                        )
+                    )
                     return 
         else:
             if PREMIUM_AND_REFERAL_MODE == True:
