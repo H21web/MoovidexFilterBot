@@ -19,6 +19,7 @@ from database.config_db import mdb
 from database.topdb import JsTopDB
 from plugins.Extra.latest import latest_movies_command
 from plugins.Extra.ott import ott_command_handler
+from plugins.referral import process_referral
 from TechVJ.util.file_properties import get_name, get_hash, get_media_file_size
 logger = logging.getLogger(__name__)
 
@@ -166,41 +167,14 @@ async def start(client, message):
         )
         return
     data = message.command[1]
-    if data.split("-", 1)[0] == "VJ":
-        user_id = int(data.split("-", 1)[1])
-        vj = await referal_add_user(user_id, message.from_user.id)
-        if vj and PREMIUM_AND_REFERAL_MODE == True:
-            await message.reply(f"<b>You have joined using the referral link of user with ID {user_id}\n\nSend /start again to use the bot</b>")
-            num_referrals = await get_referal_users_count(user_id)
-            await client.send_message(
-                chat_id=user_id,
-                text=(
-                    f"🔔 <b>New Referral Joined!</b> 🔔\n\n"
-                    f"👤 <b>User:</b> {message.from_user.mention}\n"
-                    f"🆔 <b>ID:</b> <code>{message.from_user.id}</code>\n\n"
-                    f"📊 <b>Total Referrals:</b> {num_referrals}/{REFERAL_COUNT}\n\n"
-                    f"<i>Keep referring to unlock premium access!</i>"
-                )
-            )
-            if num_referrals == REFERAL_COUNT:
-                time = REFERAL_PREMEIUM_TIME       
-                seconds = await get_seconds(time)
-                if seconds > 0:
-                    expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
-                    user_data = {"id": user_id, "expiry_time": expiry_time} 
-                    await db.update_user(user_data)  # Use the update_user method to update or insert user data
-                    await delete_all_referal_users(user_id)
-                    await client.send_message(
-                        chat_id=user_id,
-                        text=(
-                            f"🎉 <b>CONGRATULATIONS!</b> 🎉\n\n"
-                            f"<b>You have successfully completed the referral requirement!</b> 🚀\n\n"
-                            f"✅ <b>Reward:</b> 3 Months Unlimited Access\n"
-                            f"⏳ <b>Valid Until:</b> {expiry_time.strftime('%d %B %Y')}\n\n"
-                            f"<i>Enjoy your premium access to movies and series!</i> 🍿🎬"
-                        )
-                    )
-                    return 
+    if data.startswith("VJ-"):
+        try:
+            referrer_id = int(data.split("-", 1)[1])
+            await process_referral(client, message, referrer_id)
+            return
+        except Exception as e:
+            print(f"Referral Error: {e}")
+            pass 
         else:
             if PREMIUM_AND_REFERAL_MODE == True:
                 buttons = [
@@ -1527,3 +1501,39 @@ Type the series name followed by season and episode.
 @Client.on_callback_query(filters.regex("close_help"))
 async def close_help_callback(client, callback_query):
     await callback_query.message.delete()
+
+@Client.on_message(filters.command("referrals") & filters.incoming)
+async def referrals_handler(client, message):
+    user_id = message.from_user.id
+    invite_link = f"https://t.me/{temp.U_NAME}?start=VJ-{user_id}"
+    num_referrals = await get_referal_users_count(user_id)
+    
+    # Check premium status
+    user = await db.get_user(user_id)
+    expiry = None
+    if user:
+        expiry = user.get("expiry_time")
+    
+    if expiry and isinstance(expiry, datetime.datetime) and datetime.datetime.now() < expiry:
+        status = f"✅ Premium Active (Expires: {expiry.strftime('%d %B %Y')})"
+    else:
+        status = "❌ Free Plan (Limited Searches)"
+
+    # Get bonus stats
+    bonus = user.get("bonus_searches", 0) if user else 0
+
+    text = (
+        f"<b>📊 Referral Stats & Info</b>\n\n"
+        f"👤 <b>User:</b> {message.from_user.mention}\n"
+        f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
+        f"🏆 <b>Status:</b> {status}\n\n"
+        f"👥 <b>Total Referrals:</b> {num_referrals}/{REFERAL_COUNT}\n"
+        f"🎁 <b>Active Bonus Searches:</b> {bonus}\n"
+        f"🔗 <b>Your Link:</b>\n<code>{invite_link}</code>\n\n"
+        f"<i>Refer 1 friend to get 3 Months Premium Access instantly!</i>\n"
+        f"<i>Your friend gets 10 EXTRA searches as a welcome gift! 🎁</i>"
+    )
+    
+    share_url = f"https://t.me/share/url?url={quote_plus(invite_link)}"
+    btn = [[InlineKeyboardButton("🚀 Share Link", url=share_url)]]
+    await message.reply(text, reply_markup=InlineKeyboardMarkup(btn))
