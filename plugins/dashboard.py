@@ -46,60 +46,61 @@ async def logout_handler(request):
 
 @routes.get("/admin")
 async def dashboard_home(request):
-    if not check_auth(request):
-        return web.HTTPFound('/admin/login')
-    
-    total_users = await db.total_users_count()
-    users_today = await db.get_users_joined_today_count()
-    total_chats = await db.total_chat_count()
-    total_searches = await stats_db.get_total_searches()
-    
-    # Bot status (online/uptime would require tracking start time, assuming bot is online if this works)
-    # We can get uptime from a global variable if we stored it, or just show "Online"
-    
-    success_ratio = await stats_db.get_global_success_ratio()
-    fulfillment_ratio = await stats_db.get_average_user_fulfillment()
-    
-    success_ratio = await stats_db.get_global_success_ratio()
-    today_ratio = await stats_db.get_today_success_ratio()
-    weekly_ratio = await stats_db.get_weekly_success_ratio()
-    fulfillment_ratio = await stats_db.get_average_user_fulfillment()
-    
-    # New Stats for Chart and Box
-    no_result_ratio = await stats_db.get_no_result_ratio()
-    no_result_data = await stats_db.get_no_results_per_day(days=7)
-    
-    # Database Stats
-    db_stats = await stats_db.get_database_stats()
-    
-    # Prepare Chart Data
-    # Fill in missing days for last 7 days for a complete graph
-    chart_labels = []
-    chart_data = []
-    
-    # Map data by date
-    data_map = {item['_id']: item['count'] for item in no_result_data}
-    
-    for i in range(6, -1, -1):
-        d = datetime.date.today() - datetime.timedelta(days=i)
-        date_str = d.strftime("%Y-%m-%d")
-        chart_labels.append(date_str)
-        chart_data.append(data_map.get(date_str, 0))
+    try:
+        if not check_auth(request):
+            return web.HTTPFound('/admin/login')
+        
+        total_users = await db.total_users_count()
+        users_today = await db.get_users_joined_today_count()
+        total_chats = await db.total_chat_count()
+        total_searches = await stats_db.get_total_searches()
+        
+        # Bot status (online/uptime would require tracking start time, assuming bot is online if this works)
+        # We can get uptime from a global variable if we stored it, or just show "Online"
+        
+        success_ratio = await stats_db.get_global_success_ratio()
+        today_ratio = await stats_db.get_today_success_ratio()
+        weekly_ratio = await stats_db.get_weekly_success_ratio()
+        fulfillment_ratio = await stats_db.get_average_user_fulfillment()
+        
+        # New Stats for Chart and Box
+        no_result_ratio = await stats_db.get_no_result_ratio()
+        no_result_data = await stats_db.get_no_results_per_day(days=7)
+        
+        # Database Stats
+        db_stats = await stats_db.get_database_stats()
+        
+        # Prepare Chart Data
+        # Fill in missing days for last 7 days for a complete graph
+        chart_labels = []
+        chart_data = []
+        
+        # Map data by date
+        data_map = {item['_id']: item['count'] for item in no_result_data}
+        
+        for i in range(6, -1, -1):
+            d = datetime.date.today() - datetime.timedelta(days=i)
+            date_str = d.strftime("%Y-%m-%d")
+            chart_labels.append(date_str)
+            chart_data.append(data_map.get(date_str, 0))
 
-    return web.Response(text=render_template("index.html", 
-                                             total_users=total_users,
-                                             users_today=users_today,
-                                             total_chats=total_chats,
-                                             total_searches=total_searches,
-                                             success_ratio=success_ratio,
-                                             today_ratio=today_ratio,
-                                             weekly_ratio=weekly_ratio,
-                                             fulfillment_ratio=fulfillment_ratio,
-                                             db_stats=db_stats,
-                                             no_result_ratio=no_result_ratio,
-                                             no_result_chart_labels=chart_labels,
-                                             no_result_chart_data=chart_data,
-                                             status="Online"), content_type='text/html')
+        return web.Response(text=render_template("index.html", 
+                                                 total_users=total_users,
+                                                 users_today=users_today,
+                                                 total_chats=total_chats,
+                                                 total_searches=total_searches,
+                                                 success_ratio=success_ratio,
+                                                 today_ratio=today_ratio,
+                                                 weekly_ratio=weekly_ratio,
+                                                 fulfillment_ratio=fulfillment_ratio,
+                                                 db_stats=db_stats,
+                                                 no_result_ratio=no_result_ratio,
+                                                 no_result_chart_labels=chart_labels,
+                                                 no_result_chart_data=chart_data,
+                                                 status="Online"), content_type='text/html')
+    except Exception as e:
+        import traceback
+        return web.Response(text=f"Error: {e}\n\n{traceback.format_exc()}", status=500)
 
 @routes.get("/admin/users")
 async def users_page(request):
