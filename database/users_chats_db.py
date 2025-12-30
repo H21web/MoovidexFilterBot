@@ -13,29 +13,9 @@ import datetime
 my_client = MongoClient(OTHER_DB_URI)
 mydb = my_client["referal_user"]
 
-async def referal_add_user(user_id, ref_user_id):
-    user_db = mydb[str(user_id)]
-    user = {'_id': ref_user_id}
-    try:
-        user_db.insert_one(user)
-        return True
-    except DuplicateKeyError:
-        return False
-    
 
-async def get_referal_all_users(user_id):
-    user_db = mydb[str(user_id)]
-    return user_db.find()
-    
-async def get_referal_users_count(user_id):
-    user_db = mydb[str(user_id)]
-    count = user_db.count_documents({})
-    return count
-    
-
-async def delete_all_referal_users(user_id):
-    user_db = mydb[str(user_id)]
-    user_db.delete_many({}) 
+# Standalone functions moved to Database class
+ 
 
 default_setgs = {
     'button': BUTTON_MODE,
@@ -69,6 +49,29 @@ class Database:
         self.posted = self.db.posted_movies
         self.upcoming = self.db.upcoming_movies
         self.alerts = self.db.movie_alerts
+        self.referal_db = mydb # Use global connection for referrals
+
+    async def referal_add_user(self, user_id, ref_user_id):
+        user_db = self.referal_db[str(user_id)]
+        user = {'_id': ref_user_id}
+        try:
+            user_db.insert_one(user)
+            return True
+        except DuplicateKeyError:
+            return False
+
+    async def get_referal_all_users(self, user_id):
+        user_db = self.referal_db[str(user_id)]
+        return user_db.find()
+        
+    async def get_referal_users_count(self, user_id):
+        user_db = self.referal_db[str(user_id)]
+        count = await user_db.count_documents({}) # Added await for consistency if motor
+        return count
+        
+    async def delete_all_referal_users(self, user_id):
+        user_db = self.referal_db[str(user_id)]
+        await user_db.delete_many({}) # Added await for consistency if motor
 
 
     def new_user(self, id, name):

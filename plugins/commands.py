@@ -174,7 +174,7 @@ async def start(client, message):
             return
         except Exception as e:
             print(f"Referral Error: {e}")
-            pass 
+            return 
         else:
             if PREMIUM_AND_REFERAL_MODE == True:
                 buttons = [
