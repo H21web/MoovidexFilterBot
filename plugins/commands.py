@@ -19,7 +19,6 @@ from database.config_db import mdb
 from database.topdb import JsTopDB
 from plugins.Extra.latest import latest_movies_command
 from plugins.Extra.ott import ott_command_handler
-from plugins.referral import process_referral
 from TechVJ.util.file_properties import get_name, get_hash, get_media_file_size
 logger = logging.getLogger(__name__)
 
@@ -170,7 +169,60 @@ async def start(client, message):
     if data.startswith("VJ-"):
         try:
             referrer_id = int(data.split("-", 1)[1])
-            await process_referral(client, message, referrer_id)
+            
+            # Use db method
+            # Check if self-referral
+            if referrer_id == message.from_user.id:
+                await message.reply("<b>🤦‍♂️ You cannot refer yourself!</b>")
+                return
+
+            vj = await db.referal_add_user(referrer_id, message.from_user.id)
+            if vj and PREMIUM_AND_REFERAL_MODE == True:
+                # Add 10 Bonus Searches
+                await db.add_bonus_searches(message.from_user.id, 10)
+                
+                await message.reply(
+                    f"<b>You have joined using the referral link of user with ID {referrer_id}\n"
+                    f"🎁 Bonus: You got 10 EXTRA Free Searches for today!\n\n"
+                    f"Send /start again to use the bot</b>"
+                )
+                
+                num_referrals = await db.get_referal_users_count(referrer_id)
+                try:
+                    await client.send_message(
+                        chat_id=referrer_id,
+                        text=(
+                            f"🔔 <b>New Referral Joined!</b> 🔔\n\n"
+                            f"👤 <b>User:</b> {message.from_user.mention}\n"
+                            f"🆔 <b>ID:</b> <code>{message.from_user.id}</code>\n\n"
+                            f"📊 <b>Total Referrals:</b> {num_referrals}/{REFERAL_COUNT}\n\n"
+                            f"<i>Keep referring to unlock premium access!</i>"
+                        )
+                    )
+                except:
+                    pass
+
+                if num_referrals == REFERAL_COUNT:
+                    time = REFERAL_PREMEIUM_TIME       
+                    seconds = await get_seconds(time)
+                    if seconds > 0:
+                        expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+                        user_data = {"id": referrer_id, "expiry_time": expiry_time} 
+                        await db.update_user(user_data)
+                        await db.delete_all_referal_users(referrer_id)
+                        try:
+                            await client.send_message(
+                                chat_id=referrer_id,
+                                text=(
+                                    f"🎉 <b>CONGRATULATIONS!</b> 🎉\n\n"
+                                    f"<b>You have successfully completed the referral requirement!</b> 🚀\n\n"
+                                    f"✅ <b>Reward:</b> 3 Months Unlimited Access\n"
+                                    f"⏳ <b>Valid Until:</b> {expiry_time.strftime('%d %B %Y')}\n\n"
+                                    f"<i>Enjoy your premium access to movies and series!</i> 🍿🎬"
+                                )
+                            )
+                        except:
+                            pass
             return
         except Exception as e:
             print(f"Referral Error: {e}")
