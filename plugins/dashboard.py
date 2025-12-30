@@ -60,9 +60,17 @@ async def dashboard_home(request):
     success_ratio = await stats_db.get_global_success_ratio()
     fulfillment_ratio = await stats_db.get_average_user_fulfillment()
     
+    success_ratio = await stats_db.get_global_success_ratio()
+    today_ratio = await stats_db.get_today_success_ratio()
+    weekly_ratio = await stats_db.get_weekly_success_ratio()
+    fulfillment_ratio = await stats_db.get_average_user_fulfillment()
+    
     # New Stats for Chart and Box
     no_result_ratio = await stats_db.get_no_result_ratio()
     no_result_data = await stats_db.get_no_results_per_day(days=7)
+    
+    # Database Stats
+    db_stats = await stats_db.get_database_stats()
     
     # Prepare Chart Data
     # Fill in missing days for last 7 days for a complete graph
@@ -83,8 +91,13 @@ async def dashboard_home(request):
                                              users_today=users_today,
                                              total_chats=total_chats,
                                              total_searches=total_searches,
+                                             total_searches=total_searches,
                                              success_ratio=success_ratio,
+                                             today_ratio=today_ratio,
+                                             weekly_ratio=weekly_ratio,
                                              fulfillment_ratio=fulfillment_ratio,
+                                             db_stats=db_stats,
+                                             no_result_ratio=no_result_ratio,
                                              no_result_ratio=no_result_ratio,
                                              no_result_chart_labels=chart_labels,
                                              no_result_chart_data=chart_data,
