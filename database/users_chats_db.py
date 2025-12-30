@@ -282,6 +282,31 @@ class Database:
                 await self.users.update_one({"id": user_id}, {"$set": {"expiry_time": None}})
         return False
     
+    async def get_daily_usage(self, user_id):
+        user_data = await self.get_user(user_id)
+        if user_data:
+            usage_data = user_data.get("daily_usage", {})
+            today = datetime.date.today().isoformat()
+            if usage_data.get("date") == today:
+                return usage_data.get("count", 0)
+        return 0
+
+    async def increment_daily_usage(self, user_id):
+        today = datetime.date.today().isoformat()
+        user_data = await self.get_user(user_id)
+        if user_data:
+            usage_data = user_data.get("daily_usage", {})
+            if usage_data.get("date") == today:
+                new_count = usage_data.get("count", 0) + 1
+            else:
+                new_count = 1
+            
+            await self.users.update_one(
+                {"id": user_id},
+                {"$set": {"daily_usage": {"date": today, "count": new_count}}},
+                upsert=True
+            )
+    
     async def check_remaining_uasge(self, userid):
         user_id = userid
         user_data = await self.get_user(user_id)        

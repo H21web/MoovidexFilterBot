@@ -996,17 +996,17 @@ async def get_seconds(time_string):
             value = int(value)
         return value, unit
     value, unit = extract_value_and_unit(time_string)
-    if unit == 's':
+    if unit in ['s', 'sec', 'secs', 'second', 'seconds']:
         return value
-    elif unit == 'min':
+    elif unit in ['min', 'mins', 'minute', 'minutes']:
         return value * 60
-    elif unit == 'hour':
+    elif unit in ['hour', 'hours', 'hr', 'hrs']:
         return value * 3600
-    elif unit == 'day':
+    elif unit in ['day', 'days']:
         return value * 86400
-    elif unit == 'month':
+    elif unit in ['month', 'months']:
         return value * 86400 * 30
-    elif unit == 'year':
+    elif unit in ['year', 'years']:
         return value * 86400 * 365
     else:
         return 0

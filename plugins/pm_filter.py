@@ -127,6 +127,31 @@ async def give_filter(client, message):
                         )
                         return
 
+                    # Daily Usage Check (Free Tier)
+                    daily_usage = await db.get_daily_usage(user_id)
+                    if daily_usage < 4:
+                        await db.increment_daily_usage(user_id)
+                    else:
+                        invite_link = f"https://t.me/{temp.U_NAME}?start=VJ-{user_id}"
+                        share_text = f"Hey! Check out this amazing bot for downloading movies and series. Join now using my link: {invite_link}"
+                        share_url = f"https://t.me/share/url?url={invite_link}&text={quote_plus(share_text)}"
+                        
+                        btn = [[
+                            InlineKeyboardButton("🚀 Share Referral Link", url=share_url)
+                        ]]
+                        await message.reply_text(
+                            text=(
+                                f"<b>⚠️ Daily Limit Reached! ⚠️</b>\n\n"
+                                f"You have used your <b>4 free searches</b> for today.\n\n"
+                                f"To get <b>UNLIMITED ACCESS</b> for <b>3 MONTHS</b>, simply refer <b>1 friend</b>!\n\n"
+                                f"<b>Your Referral Link:</b>\n<code>{invite_link}</code>\n\n"
+                                f"<i>Share this link with your friends. Once 1 friend joins, you will get instant access!</i>"
+                            ),
+                            reply_markup=InlineKeyboardMarkup(btn),
+                            disable_web_page_preview=True
+                        )
+                        return
+
                     ai_search = True
                     reply_msg = await message.reply_text(f"<b><i>Searching For {message.text} 🔍</i></b>")
                     await auto_filter(client, message.text, message, reply_msg, ai_search)
@@ -184,6 +209,31 @@ async def pm_text(bot, message):
                     text=(
                         f"<b>⚠️ Access Denied! ⚠️</b>\n\n"
                         f"You need to refer <b>1 friend</b> to get <b>3 months</b> of access.\n\n"
+                        f"<b>Your Referral Link:</b>\n<code>{invite_link}</code>\n\n"
+                        f"<i>Share this link with your friends. Once 1 friend joins, you will get instant access!</i>"
+                    ),
+                    reply_markup=InlineKeyboardMarkup(btn),
+                    disable_web_page_preview=True
+                )
+                return
+
+            # Daily Usage Check (Free Tier)
+            daily_usage = await db.get_daily_usage(user_id)
+            if daily_usage < 4:
+                await db.increment_daily_usage(user_id)
+            else:
+                invite_link = f"https://t.me/{temp.U_NAME}?start=VJ-{user_id}"
+                share_text = f"Hey! Check out this amazing bot for downloading movies and series. Join now using my link: {invite_link}"
+                share_url = f"https://t.me/share/url?url={invite_link}&text={quote_plus(share_text)}"
+                
+                btn = [[
+                    InlineKeyboardButton("🚀 Share Referral Link", url=share_url)
+                ]]
+                await message.reply_text(
+                    text=(
+                        f"<b>⚠️ Daily Limit Reached! ⚠️</b>\n\n"
+                        f"You have used your <b>4 free searches</b> for today.\n\n"
+                        f"To get <b>UNLIMITED ACCESS</b> for <b>3 MONTHS</b>, simply refer <b>1 friend</b>!\n\n"
                         f"<b>Your Referral Link:</b>\n<code>{invite_link}</code>\n\n"
                         f"<i>Share this link with your friends. Once 1 friend joins, you will get instant access!</i>"
                     ),
