@@ -287,9 +287,20 @@ class Database:
         if user_data:
             usage_data = user_data.get("daily_usage", {})
             today = datetime.date.today().isoformat()
+            
+            # Check for bonus
+            bonus = user_data.get("bonus_searches", 0)
+            
             if usage_data.get("date") == today:
-                return usage_data.get("count", 0)
-        return 0
+                return usage_data.get("count", 0), bonus
+        return 0, 0
+
+    async def add_bonus_searches(self, user_id, amount):
+        await self.users.update_one(
+            {"id": user_id},
+            {"$inc": {"bonus_searches": amount}},
+            upsert=True
+        )
 
     async def increment_daily_usage(self, user_id):
         today = datetime.date.today().isoformat()

@@ -128,8 +128,10 @@ async def give_filter(client, message):
                         return
 
                     # Daily Usage Check (Free Tier)
-                    daily_usage = await db.get_daily_usage(user_id)
-                    if daily_usage < 4:
+                    daily_usage, bonus = await db.get_daily_usage(user_id)
+                    limit = 4 + bonus
+                    
+                    if daily_usage < limit:
                         await db.increment_daily_usage(user_id)
                     else:
                         invite_link = f"https://t.me/{temp.U_NAME}?start=VJ-{user_id}"
@@ -142,7 +144,7 @@ async def give_filter(client, message):
                         await message.reply_text(
                             text=(
                                 f"<b>⚠️ Daily Limit Reached! ⚠️</b>\n\n"
-                                f"You have used your <b>4 free searches</b> for today.\n\n"
+                                f"You have used your <b>{limit} free searches</b> for today.\n\n"
                                 f"To get <b>UNLIMITED ACCESS</b> for <b>3 MONTHS</b>, simply refer <b>1 friend</b>!\n\n"
                                 f"<b>Your Referral Link:</b>\n<code>{invite_link}</code>\n\n"
                                 f"<i>Share this link with your friends. Once 1 friend joins, you will get instant access!</i>"
@@ -218,8 +220,10 @@ async def pm_text(bot, message):
                 return
 
             # Daily Usage Check (Free Tier)
-            daily_usage = await db.get_daily_usage(user_id)
-            if daily_usage < 4:
+            daily_usage, bonus = await db.get_daily_usage(user_id)
+            limit = 4 + bonus
+            
+            if daily_usage < limit:
                 await db.increment_daily_usage(user_id)
             else:
                 invite_link = f"https://t.me/{temp.U_NAME}?start=VJ-{user_id}"
@@ -232,7 +236,7 @@ async def pm_text(bot, message):
                 await message.reply_text(
                     text=(
                         f"<b>⚠️ Daily Limit Reached! ⚠️</b>\n\n"
-                        f"You have used your <b>4 free searches</b> for today.\n\n"
+                        f"You have used your <b>{limit} free searches</b> for today.\n\n"
                         f"To get <b>UNLIMITED ACCESS</b> for <b>3 MONTHS</b>, simply refer <b>1 friend</b>!\n\n"
                         f"<b>Your Referral Link:</b>\n<code>{invite_link}</code>\n\n"
                         f"<i>Share this link with your friends. Once 1 friend joins, you will get instant access!</i>"
