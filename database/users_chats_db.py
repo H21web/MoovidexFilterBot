@@ -13,9 +13,29 @@ import datetime
 my_client = MongoClient(OTHER_DB_URI)
 mydb = my_client["referal_user"]
 
+async def referal_add_user(user_id, ref_user_id):
+    user_db = mydb[str(user_id)]
+    user = {'_id': ref_user_id}
+    try:
+        user_db.insert_one(user)
+        return True
+    except DuplicateKeyError:
+        return False
+    
 
-# Standalone functions moved to Database class
- 
+async def get_referal_all_users(user_id):
+    user_db = mydb[str(user_id)]
+    return user_db.find()
+    
+async def get_referal_users_count(user_id):
+    user_db = mydb[str(user_id)]
+    count = user_db.count_documents({})
+    return count
+    
+
+async def delete_all_referal_users(user_id):
+    user_db = mydb[str(user_id)]
+    user_db.delete_many({}) 
 
 default_setgs = {
     'button': BUTTON_MODE,
@@ -49,29 +69,6 @@ class Database:
         self.posted = self.db.posted_movies
         self.upcoming = self.db.upcoming_movies
         self.alerts = self.db.movie_alerts
-        self.referal_db = mydb # Use global connection for referrals
-
-    async def referal_add_user(self, user_id, ref_user_id):
-        user_db = self.referal_db[str(user_id)]
-        user = {'_id': ref_user_id}
-        try:
-            user_db.insert_one(user)
-            return True
-        except DuplicateKeyError:
-            return False
-
-    async def get_referal_all_users(self, user_id):
-        user_db = self.referal_db[str(user_id)]
-        return user_db.find()
-        
-    async def get_referal_users_count(self, user_id):
-        user_db = self.referal_db[str(user_id)]
-        count = await user_db.count_documents({}) # Added await for consistency if motor
-        return count
-        
-    async def delete_all_referal_users(self, user_id):
-        user_db = self.referal_db[str(user_id)]
-        await user_db.delete_many({}) # Added await for consistency if motor
 
 
     def new_user(self, id, name):
@@ -284,42 +281,6 @@ class Database:
             else:
                 await self.users.update_one({"id": user_id}, {"$set": {"expiry_time": None}})
         return False
-    
-    async def get_daily_usage(self, user_id):
-        user_data = await self.get_user(user_id)
-        if user_data:
-            usage_data = user_data.get("daily_usage", {})
-            today = datetime.date.today().isoformat()
-            
-            # Check for bonus
-            bonus = user_data.get("bonus_searches", 0)
-            
-            if usage_data.get("date") == today:
-                return usage_data.get("count", 0), bonus
-        return 0, 0
-
-    async def add_bonus_searches(self, user_id, amount):
-        await self.users.update_one(
-            {"id": user_id},
-            {"$inc": {"bonus_searches": amount}},
-            upsert=True
-        )
-
-    async def increment_daily_usage(self, user_id):
-        today = datetime.date.today().isoformat()
-        user_data = await self.get_user(user_id)
-        if user_data:
-            usage_data = user_data.get("daily_usage", {})
-            if usage_data.get("date") == today:
-                new_count = usage_data.get("count", 0) + 1
-            else:
-                new_count = 1
-            
-            await self.users.update_one(
-                {"id": user_id},
-                {"$set": {"daily_usage": {"date": today, "count": new_count}}},
-                upsert=True
-            )
     
     async def check_remaining_uasge(self, userid):
         user_id = userid
