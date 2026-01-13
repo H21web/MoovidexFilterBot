@@ -2,14 +2,15 @@ import re
 import html
 import asyncio
 import aiohttp
+from datetime import datetime, timedelta
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
 from info import *
-from plugins.Extra.binged import HEADERS, DETAIL_URL, ADMIN_IDS, clean_text, build_released_message, build_upcoming_message, get_similar_movies, format_search_title, find_tmdb_id, get_tmdb_details, search_tmdb_advanced
-from database.ia_filterdb import get_search_results
+from plugins.Extra.binged import HEADERS, ADMIN_IDS, clean_text, find_tmdb_id, get_tmdb_details, search_tmdb_advanced, format_search_title
 from database.users_chats_db import db
 from TechVJ.bot import TechVJBot
+from plugins.Extra.image_gen import generate_status_image
 
 # Configuration
 UPDATE_CHANNEL_ID = -1001680629032  # Update Channel ID
@@ -24,352 +25,392 @@ async def fetch_url(url):
         print(f"Request Error: {e}")
     return None
 
-# Function to fetch movies
-async def fetch_movies(mode="streaming-today"):
-    url = f"https://www.binged.com/wp-json/binged-api/v1/movies?mode={mode}"
+async def fetch_ottplay_releases(from_date, to_date):
+    url = f"https://api2.ottplay.com/api/v4.7/web/new-release?limit=10&from_date={from_date}&to_date={to_date}&content_type=all&language=&provider="
     data = await fetch_url(url)
     if data:
-        return data.get('data', [])
-    return None
+        return data.get('result', [])
+    return []
 
 # Background Loop for Auto-Updates
 async def check_releases_loop():
-    print("Auto-Update Loop Started")
+    print("Auto-Update Loop Started (Ottplay)")
     # Wait for bot to be ready
     await asyncio.sleep(10) 
     
-    
     while True:
         try:
-            # Fetch from both categories to catch all available movies
-            week_movies = await fetch_movies("streaming-week") or []
-            soon_movies = await fetch_movies("streaming-soon") or []
+            # Dynamic Dates: Today - 5 to Today + 5
+            today = datetime.now()
+            from_date = (today - timedelta(days=5)).strftime("%Y-%m-%d")
+            to_date = (today + timedelta(days=5)).strftime("%Y-%m-%d")
             
-            # Combine and remove duplicates based on ID
-            all_movies = {str(m.get('id')): m for m in (week_movies + soon_movies)}.values()
+            print(f"Fetching Ottplay releases from {from_date} to {to_date}")
             
-            if all_movies:
-                for movie in all_movies:
+            movies = await fetch_ottplay_releases(from_date, to_date)
+            
+            if movies:
+                for movie in movies:
                     try:
-                        movie_id = str(movie.get("id"))
-                        
-                        title = clean_text(movie.get("title", ""))
+                        movie_id = str(movie.get("_id"))
+                        title = clean_text(movie.get("name", ""))
                         if not title:
                             continue
                             
-                        year = movie.get("release_year") or movie.get("year") or movie.get("theatrical-year")
+                        year = movie.get("release_year")
                         
-                        # Check if movie exists in our database
-                        search_query = f"{title} {year}" if year else title
-                        _, _, total_results = await get_search_results(0, search_query)
+                        # Check if movie exists in our database (using _id as unique key)
+                        is_posted = await db.is_movie_posted(movie_id)
+                        if is_posted:
+                            continue
+
+                        print(f"Found new release: {title} ({year})")
                         
-                        if total_results > 0:
-                            # --- RELEASED ---
-                            is_posted = await db.is_movie_posted(movie_id)
-                            if is_posted:
-                                continue
-
-                            print(f"Found match for {title} in DB! Posting as Released...")
+                        # --- Gather Details ---
+                        # Type
+                        content_type = movie.get("content_type", "movie")
+                        media_type = "movie" if content_type == "movie" else "tv"
+                        type_str = "Movie" if media_type == "movie" else "Series"
+                        
+                        # Language
+                        lang = movie.get("primary_language", {}).get("logo_text", "Unknown")
+                        
+                        # Genres
+                        genres = [g.get("name") for g in movie.get("genres", [])]
+                        genre_str = ", ".join(genres) if genres else "N/A"
+                        
+                        # Providers
+                        providers_data = movie.get("where_to_watch", [])
+                        provider_names = []
+                        provider_logos = []
+                        platform_links = []
+                        
+                        for p in providers_data:
+                            prov = p.get("provider", {})
+                            p_name = prov.get("name")
+                            if p_name:
+                                provider_names.append(p_name)
+                            logo = prov.get("logo_url") or prov.get("icon_url")
+                            if logo:
+                                provider_logos.append(logo)
                             
-                            # Fetch full details
-                            movie_data = await fetch_url(f"{DETAIL_URL}/{movie_id}")
-                            if not movie_data:
-                                continue
+                            # Link
+                            p_link = p.get("movie_url") or p.get("show_url") or prov.get("seourl")
+                            if p_link:
+                                if not p_link.startswith("http"):
+                                    p_link = f"https://www.ottplay.com/{p_link}"
+                                platform_links.append(f"[{p_name}]({p_link})")
+                            elif p_name:
+                                platform_links.append(p_name)
+
+                        provider_str = ", ".join(platform_links[:3]) if platform_links else "N/A"
+                        
+                        # Release Date
+                        api_date = movie.get("release_date")
+                        if api_date:
+                            try:
+                                r_date = datetime.fromisoformat(api_date.replace("Z", "+00:00")).strftime("%d-%m-%Y")
+                            except:
+                                r_date = api_date
+                        else:
+                            r_date = "N/A"
+
+                        # Certifications
+                        certs = [c.get("certification") for c in movie.get("certifications", [])]
+                        cert_str = "/".join(certs) if certs else "N/A"
+
+                        # Images from Ottplay
+                        posters = movie.get("posters", [])
+                        ottplay_poster = posters[0] if posters else None
+                        
+                        # --- TMDB Integration for Backdrop & Extras ---
+                        tmdb_backdrop = None
+                        tmdb_poster = None
+                        tmdb_rating = None
+                        tmdb_plot = None
+                        cast_str = "N/A"
+                        
+                        tmdb_results = search_tmdb_advanced(title, year=year, media_type=media_type)
+                        if tmdb_results:
+                            tmdb_id = tmdb_results[0].get("id")
+                            tmdb_details = get_tmdb_details(tmdb_id, media_type)
+                            if tmdb_details:
+                                # Get better images
+                                tmdb_img = tmdb_details.get("image") # usually backdrop
+                                if tmdb_img:
+                                    tmdb_backdrop = tmdb_img
                                 
-                            # Build Message
-                            msg, image = build_released_message(movie_data, temp.U_NAME, source='binged')
-                            
-                            # --- TMDB INTEGRATION START ---
-                            imdb_id = movie_data.get("imdb_id")
-                            tmdb_image = None
-                            
-                            if imdb_id:
-                                try:
-                                    tmdb_results = find_tmdb_id(imdb_id)
-                                    if tmdb_results:
-                                        tmdb_id = tmdb_results[0].get("id")
-                                        tmdb_details = get_tmdb_details(tmdb_id, "movie")
-                                        if tmdb_details and tmdb_details.get("image"):
-                                            tmdb_image = tmdb_details.get("image")
-                                except Exception as e:
-                                    print(f"TMDB Fetch Error in Loop: {e}")
-                            
-                            # Fallback: Search by Title if no IMDB ID or no image found
-                            if not tmdb_image:
-                                title_search = clean_text(movie.get("title", ""))
-                                year_search = movie.get("release_year") or movie.get("year")
-                                
-                                # Determine media type (today is usually streaming movies/series)
-                                media_type_hint = "movie"
-                                # Basic check for series pattern
-                                if "season" in title_search.lower() or re.search(r'S\d+', title_search, re.IGNORECASE):
-                                     media_type_hint = "tv"
+                                # Poster from TMDB if available (often better quality)
+                                # get_tmdb_details returns 'image' which is best_backdrop. 
+                                # Access original_data for specific poster
+                                t_orig = tmdb_details.get("original_data", {})
+                                p_path = t_orig.get("poster_path")
+                                if p_path:
+                                    tmdb_poster = f"https://image.tmdb.org/t/p/original{p_path}"
 
-                                if title_search:
-                                    print(f"Searching TMDB Advanced (Loop): {title_search} ({year_search})")
-                                    # Use specific year search
-                                    tmdb_results = search_tmdb_advanced(title_search, year=year_search, media_type=media_type_hint)
-                                    
-                                    if tmdb_results:
-                                        tmdb_id = tmdb_results[0].get("id")
-                                        tmdb_details = get_tmdb_details(tmdb_id, "movie") # get_tmdb_details handles generic types well
-                                        
-                                        if tmdb_details and tmdb_details.get("image"):
-                                            tmdb_image = tmdb_details.get("image")
-                                            print(f"Found TMDB Image via Advanced Search (Loop): {tmdb_image}")
+                                tmdb_rating = tmdb_details.get("rating")
+                                tmdb_plot = tmdb_details.get("plot")
+                                cast = tmdb_details.get("cast", [])
+                                cast_str = ", ".join(cast[:5]) if cast else "N/A"
 
-                            # Use TMDB image if available, otherwise fallback to Binged image
-                            final_image = tmdb_image if tmdb_image else image
-                            # --- TMDB INTEGRATION END ---
-                            
-                            safe_title = format_search_title(title, year)
-                                                        
-                            # Buttons
-                            buttons = [[
-                                InlineKeyboardButton(
-                                    f"🔍 Search: {title}", 
-                                    url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
+                        # Use Ottplay rating/plot if TMDB failed
+                        rating = tmdb_rating if tmdb_rating else (str(movie.get("ottplay_rating")) + "/10" if movie.get("ottplay_rating") else "N/A")
+                        
+                        # Plot: Ottplay doesn't easily give plot in list.
+                        plot = tmdb_plot if tmdb_plot else "No description available."
+                        
+                        # --- Build Message ---
+                        # Template:
+                        # ✅ **Title** · Year · `Type`
+                        #
+                        # >**>🉑 #Lang**
+                        # >🎭 Genre · 📺 Platform
+                        # >⏱️ Runtime · ®️ Censor
+                        # >📅 Date
+                        # >👥 Cast
+                        # >
+                        # >__Plot:__
+                        # >Plot**
+                        #  **@MooviDex** 
+
+                        safe_title = format_search_title(title, year)
+                        lang_tag = f"#{lang.replace(' ', '')}"
+                        
+                        msg = f"✅ **{title}** · {year} · `{type_str}`\n\n"
+                        msg += f"**>🉑 {lang_tag}\n"
+                        msg += f">🎭 {genre_str} · 📺 {provider_str}\n"
+                        msg += f">®️ {cert_str} · ⭐ {rating}\n"
+                        msg += f">📅 {r_date}\n"
+                        msg += f">👥 {cast_str}\n"
+                        msg += f">\n"
+                        msg += f">__Plot:__\n"
+                        msg += f">{plot}**\n"
+                        msg += f" **@MooviDex** "
+
+                        # --- Generate Image ---
+                        # Prioritize TMDB backdrop, else use Ottplay poster as background (blurred)?
+                        # Prioritize Ottplay poster for foreground, or TMDB. Ottplay posters might be localized.
+                        
+                        backdrop_url = tmdb_backdrop if tmdb_backdrop else ottplay_poster
+                        poster_url = ottplay_poster if ottplay_poster else tmdb_poster
+                        
+                        # If we have no images, skip image gen
+                        final_image_io = None
+                        if backdrop_url and poster_url:
+                            print(f"Generating image for {title}...")
+                            final_image_io = await generate_status_image(backdrop_url, poster_url, provider_logos)
+
+                        # --- Buttons ---
+                        buttons = [[
+                            InlineKeyboardButton(
+                                f"🔍 Search: {title}", 
+                                url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
+                            )
+                        ]]
+                        
+                        # Trailer logic (from TMDB details if available)
+                        if tmdb_details:
+                             videos = tmdb_details.get("videos", [])
+                             if videos:
+                                 video_url = videos[0].get("url")
+                                 if video_url:
+                                     trailer_url = f"https://www.youtube.com/watch?v={video_url}"
+                                     buttons.append([InlineKeyboardButton("🎬 Trailer", url=trailer_url)])
+
+                        # Send to Channel
+                        try:
+                            if final_image_io:
+                                await TechVJBot.send_photo(
+                                    chat_id=UPDATE_CHANNEL_ID,
+                                    photo=final_image_io,
+                                    caption=msg,
+                                    reply_markup=InlineKeyboardMarkup(buttons)
                                 )
-                            ]]
-                            
-                            row2 = []
-                            # Trailer Button
-                            videos = movie_data.get("videos", [])
-                            if videos and len(videos) > 0:
-                                video_url = videos[0].get("url", "")
-                                if video_url:
-                                    trailer_url = f"https://www.youtube.com/watch?v={video_url}"
-                                    row2.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
-                                    
-                            # More Like This Button
-                            similar_movies = get_similar_movies(movie_data, count=1)
-                            if similar_movies:
-                                similar_title = clean_text(similar_movies[0].get("title", ""))
-                                safe_similar = format_search_title(similar_title, None)
-                                row2.append(InlineKeyboardButton(
-                                    "🔄 More like this", 
-                                    url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
-                                ))
+                            elif backdrop_url: # Fallback to single image
+                                await TechVJBot.send_photo(
+                                    chat_id=UPDATE_CHANNEL_ID,
+                                    photo=backdrop_url,
+                                    caption=msg,
+                                    reply_markup=InlineKeyboardMarkup(buttons)
+                                )
+                            else:
+                                await TechVJBot.send_message(
+                                    chat_id=UPDATE_CHANNEL_ID,
+                                    text=msg,
+                                    reply_markup=InlineKeyboardMarkup(buttons),
+                                    disable_web_page_preview=True
+                                )
                                 
-                            if row2:
-                                buttons.append(row2)
-                            
-                            # Send to Channel
-                            try:
-                                if final_image:
-                                    await TechVJBot.send_photo(
-                                        chat_id=UPDATE_CHANNEL_ID,
-                                        photo=final_image,
-                                        caption=msg,
-                                        reply_markup=InlineKeyboardMarkup(buttons)
-                                    )
-                                else:
-                                    await TechVJBot.send_message(
-                                        chat_id=UPDATE_CHANNEL_ID,
-                                        text=msg,
-                                        reply_markup=InlineKeyboardMarkup(buttons),
-                                        disable_web_page_preview=True
-                                    )
-                            except Exception as e:
-                                print(f"Error sending to channel: {e}")
-                            
-                            # --- NOTIFICATION SYSTEM ---
-                            try:
-                                alert_users = await db.get_movie_alerts(movie_id)
-                                if alert_users:
-                                    notify_msg = f"🎬 **{title} ({year})** has been released and is now available!"
-                                    btn = [[InlineKeyboardButton("🔍 Get Movie", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]]
-                                    
-                                    for user_id in alert_users:
-                                        try:
-                                            await TechVJBot.send_message(
-                                                chat_id=user_id,
-                                                text=notify_msg,
-                                                reply_markup=InlineKeyboardMarkup(btn)
-                                            )
-                                            await asyncio.sleep(0.5) # Floodwait prevention
-                                        except Exception as u_e:
-                                            print(f"Failed to notify user {user_id}: {u_e}")
-                                            
-                                    await db.delete_movie_alerts(movie_id)
-                            except Exception as e:
-                                print(f"Error in notification system: {e}")
-                            # ---------------------------
-                                
-                            # Mark as posted in DB
+                            # Mark as posted
                             await db.add_posted_movie(movie_id)
-
-                        # Avoid spamming
-                        await asyncio.sleep(5)
                             
+                            # Floodwait
+                            await asyncio.sleep(5)
+                            
+                        except Exception as e:
+                            print(f"Error sending to channel: {e}")
 
                     except Exception as e:
-                        print(f"Error processing movie {movie.get('title')}: {e}")
+                        print(f"Error processing movie {movie.get('name')}: {e}")
             
         except Exception as e:
             print(f"Error in check_releases_loop: {e}")
             
-        # Check every 1 hour
-        await asyncio.sleep(3600)
+        # Check every 4 hours (daily update but checking more often is safer for uptime)
+        await asyncio.sleep(14400) 
 
-# /today command - show movie buttons
+# /today command - mapped to new logic? 
+# The user asked to "fetch latest... update daily", implying the loop.
+# But I should probably update the /today command to fetch specifically "today's" releases from this API if needed.
+# For now, I'll update /today to fetch releases for the *current day* using the same API.
+
 @Client.on_message(filters.command("today"))
 async def send_movie_buttons(client, message):
-    movies_data = await fetch_movies("streaming-today")
+    today = datetime.now().strftime("%Y-%m-%d")
+    # Fetch just for today
+    movies_data = await fetch_ottplay_releases(today, today)
 
-    if movies_data and isinstance(movies_data, list):
-        if not movies_data:
-            await message.reply_text("🚫 No movies streaming today.")
-            return
+    if not movies_data:
+        await message.reply_text("🚫 No new releases found today.")
+        return
 
-        buttons = []
-        for movie in movies_data:  # No reverse here
-            title = movie.get('title', 'No title available')
-            movie_id = str(movie.get("id"))
-            clean_title = clean_text(title)
-            # Use same callback pattern but distinct prefix to fetch details
-            callback_data = f"today_detail_{movie_id}"
-            buttons.append([InlineKeyboardButton(clean_title, callback_data=callback_data)])
-
-        buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
-        reply_markup = InlineKeyboardMarkup(buttons)
-
-        await message.reply_text("🎬 **Today's Streaming Movies:**", reply_markup=reply_markup)
-    else:
-        await message.reply_text("⚠️ Failed to fetch today's movies or no movies found. Please try again later.")
-
-
-# When a movie title button is clicked
-@Client.on_callback_query(filters.regex(r"today_detail_(\d+)"))
-async def show_movie_detail(client, cq):
-    movie_id = cq.data.split("_")[-1]
-    user_id = cq.from_user.id
-    import re as regex_module
-
-    # Fetch detailed movie data using Binged API (same as binged.py)
-    movie_data = await fetch_url(f"{DETAIL_URL}/{movie_id}")
-    
-    if not movie_data or "ID" not in movie_data:
-        return await cq.answer("Movie data not found.", show_alert=True)
-    
-    # Store full movie data in temp.BINGED_RESULTS (Reusing binged.py storage)
-    temp.BINGED_RESULTS[user_id] = temp.BINGED_RESULTS.get(user_id, {})
-    temp.BINGED_RESULTS[user_id][movie_id] = movie_data
-    
-    # Force status to released since it is "today streaming"
-    temp.MOVIE_STATUS[movie_id] = "released"
-
-    title = clean_text(movie_data.get("post_title", "Unknown"))
-    year = movie_data.get("release_year", "N/A")
-    safe_title = format_search_title(title, year)
-    
-    # Build message using shared function
-    msg, image = build_released_message(movie_data, temp.U_NAME, source='binged')
-
-    # --- TMDB INTEGRATION START ---
-    imdb_id = movie_data.get("imdb_id")
-    tmdb_image = None
-    
-    if imdb_id:
-        try:
-            tmdb_results = find_tmdb_id(imdb_id)
-            if tmdb_results:
-                tmdb_id = tmdb_results[0].get("id")
-                tmdb_details = get_tmdb_details(tmdb_id, "movie")
-                if tmdb_details and tmdb_details.get("image"):
-                    tmdb_image = tmdb_details.get("image")
-        except Exception as e:
-            print(f"TMDB Fetch Error in Detail: {e}")
-            
-    # Fallback: Search by Title if no IMDB ID or no image found
-    if not tmdb_image:
-        title_search = clean_text(movie_data.get("post_title", ""))
-        year_search = movie_data.get("release_year")
-        
-        # Determine media type from categories
-        media_type_hint = "movie"
-        if "categories" in movie_data:
-             cats = str(movie_data["categories"]).lower()
-             if "tv" in cats or "series" in cats or "show" in cats:
-                 media_type_hint = "tv"
-        
-        # Also check title pattern
-        if re.search(r'S\d+', title_search, re.IGNORECASE):
-             media_type_hint = "tv"
-
-        if title_search:
-            print(f"Searching TMDB Advanced (Detail): {title_search} ({year_search})")
-            
-            # Use specific year search
-            tmdb_results = search_tmdb_advanced(title_search, year=year_search, media_type=media_type_hint)
-            
-            if tmdb_results:
-                tmdb_id = tmdb_results[0].get("id")
-                tmdb_details = get_tmdb_details(tmdb_id, "movie")
-                
-                if tmdb_details and tmdb_details.get("image"):
-                    tmdb_image = tmdb_details.get("image")
-                    print(f"Found TMDB Image via Advanced Search (Detail): {tmdb_image}")
-
-    # Use TMDB image if available, otherwise fallback to Binged image
-    final_image = tmdb_image if tmdb_image else image
-    movie_data["image"] = final_image # Sync for consistency
-    # --- TMDB INTEGRATION END ---
-    
-    # Build buttons
     buttons = []
-    
-    # Search Button
-    buttons.append([InlineKeyboardButton(
-        f"{title} · {year}", 
-        url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
-    )])
-    
-    row2 = []
-    # Trailer Button
-    videos = movie_data.get("videos", [])
-    if videos and len(videos) > 0:
-        video_url = videos[0].get("url", "")
-        if video_url:
-            trailer_url = f"https://www.youtube.com/watch?v={video_url}"
-            row2.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
-            
-    # More Like This Button (New)
-    similar_movies = get_similar_movies(movie_data, count=1)
-    if similar_movies:
-        similar_title = clean_text(similar_movies[0].get("title", ""))
-        safe_similar = format_search_title(similar_title, None)
-        row2.append(InlineKeyboardButton(
-            "🔄 More like this", 
-            url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
-        ))
+    for movie in movies_data[:10]: # Limit to 10
+        title = clean_text(movie.get('name', 'No title'))
+        movie_id = str(movie.get("_id"))
         
-    if row2:
-        buttons.append(row2)
-
-    # Admin buttons (Reusing binged.py callbacks)
-    if user_id in ADMIN_IDS:
-        buttons.append([
-            InlineKeyboardButton("✏️ Edit & Post", callback_data=f"binged_edit_post_{movie_id}"),
-            InlineKeyboardButton("📣 Post Default", callback_data=f"binged_post_{movie_id}")
-        ])
+        # We can use a callback to show details (reuse logic?)
+        # Since I changed the ID system (Ottplay IDs vs Binged/TMDB IDs), 
+        # I need a callback that processes Ottplay IDs.
+        # I'll create a new callback `ottplay_detail_`
+        
+        callback_data = f"ottplay_detail_{movie_id}"
+        buttons.append([InlineKeyboardButton(title, callback_data=callback_data)])
 
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
     reply_markup = InlineKeyboardMarkup(buttons)
 
-    # Send with image
-    if final_image:
-        await cq.message.reply_photo(
-            photo=final_image,
-            caption=msg,
-            reply_markup=reply_markup
-        )
+    await message.reply_text(f"🎬 **Releases for {today}:**", reply_markup=reply_markup)
+
+
+# Callback for Ottplay details
+@Client.on_callback_query(filters.regex(r"^ottplay_detail_(.+)$"))
+async def ottplay_detail(client, cq):
+    movie_id = cq.data.split("_")[-1]
+    
+    # We need to fetch details for this specific ID. 
+    # Because there isn't a direct "get by ID" readily available in previously assumed contexts,
+    # and /today fetched "today", we fetch today's list again to find it.
+    today = datetime.now().strftime("%Y-%m-%d")
+    movies = await fetch_ottplay_releases(today, today)
+    
+    movie = next((m for m in movies if str(m.get("_id")) == movie_id), None)
+    
+    if not movie:
+         return await cq.answer("Movie details not found.", show_alert=True)
+
+    # Now build the message and image (Reuse logic from loop essentially)
+    
+    title = clean_text(movie.get("name", ""))
+    year = movie.get("release_year")
+    content_type = movie.get("content_type", "movie")
+    media_type = "movie" if content_type == "movie" else "tv"
+    type_str = "Movie" if media_type == "movie" else "Series"
+    lang = movie.get("primary_language", {}).get("logo_text", "Unknown")
+    genres = [g.get("name") for g in movie.get("genres", [])]
+    genre_str = ", ".join(genres) if genres else "N/A"
+    
+    # Providers
+    providers_data = movie.get("where_to_watch", [])
+    provider_logos = []
+    platform_links = []
+    
+    for p in providers_data:
+        prov = p.get("provider", {})
+        p_name = prov.get("name")
+        logo = prov.get("logo_url") or prov.get("icon_url")
+        if logo:
+            provider_logos.append(logo)
+        
+        p_link = p.get("movie_url") or p.get("show_url") or prov.get("seourl")
+        if p_link:
+             if not p_link.startswith("http"):
+                 p_link = f"https://www.ottplay.com/{p_link}"
+             platform_links.append(f"[{p_name}]({p_link})")
+        elif p_name:
+             platform_links.append(p_name)
+    provider_str = ", ".join(platform_links[:3]) if platform_links else "N/A"
+    
+    api_date = movie.get("release_date")
+    if api_date:
+        try:
+            r_date = datetime.fromisoformat(api_date.replace("Z", "+00:00")).strftime("%d-%m-%Y")
+        except:
+            r_date = api_date
     else:
-        await cq.message.reply_text(
-            msg,
-            reply_markup=InlineKeyboardMarkup(buttons),
-            disable_web_page_preview=True
-        )
+        r_date = "N/A"
+
+    certs = [c.get("certification") for c in movie.get("certifications", [])]
+    cert_str = "/".join(certs) if certs else "N/A"
+    posters = movie.get("posters", [])
+    ottplay_poster = posters[0] if posters else None
+    
+    # TMDB Helper
+    tmdb_backdrop = None
+    tmdb_poster = None
+    tmdb_rating = None
+    tmdb_plot = None
+    cast_str = "N/A"
+    
+    tmdb_results = search_tmdb_advanced(title, year=year, media_type=media_type)
+    if tmdb_results:
+        tmdb_id = tmdb_results[0].get("id")
+        tmdb_details = get_tmdb_details(tmdb_id, media_type)
+        if tmdb_details:
+            tmdb_img = tmdb_details.get("image")
+            if tmdb_img: tmdb_backdrop = tmdb_img
+            t_orig = tmdb_details.get("original_data", {})
+            p_path = t_orig.get("poster_path")
+            if p_path: tmdb_poster = f"https://image.tmdb.org/t/p/original{p_path}"
+            tmdb_rating = tmdb_details.get("rating")
+            tmdb_plot = tmdb_details.get("plot")
+            cast = tmdb_details.get("cast", [])
+            cast_str = ", ".join(cast[:5]) if cast else "N/A"
+            
+    rating = tmdb_rating if tmdb_rating else (str(movie.get("ottplay_rating")) + "/10" if movie.get("ottplay_rating") else "N/A")
+    plot = tmdb_plot if tmdb_plot else "No description available."
+    safe_title = format_search_title(title, year)
+    lang_tag = f"#{lang.replace(' ', '')}"
+    
+    msg = f"✅ **{title}** · {year} · `{type_str}`\n\n"
+    msg += f"**>🉑 {lang_tag}\n"
+    msg += f">🎭 {genre_str} · 📺 {provider_str}\n"
+    msg += f">®️ {cert_str} · ⭐ {rating}\n"
+    msg += f">📅 {r_date}\n"
+    msg += f">👥 {cast_str}\n"
+    msg += f">\n"
+    msg += f">__Plot:__\n"
+    msg += f">{plot}**\n"
+    msg += f" **@MooviDex** "
+    
+    backdrop_url = tmdb_backdrop if tmdb_backdrop else ottplay_poster
+    poster_url = ottplay_poster if ottplay_poster else tmdb_poster
+    
+    final_image_io = None
+    if backdrop_url and poster_url:
+        await cq.answer("Generating image...", cache_time=0)
+        final_image_io = await generate_status_image(backdrop_url, poster_url, provider_logos)
+    
+    buttons = [[InlineKeyboardButton(f"🔍 Search: {title}", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]]
+    buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
+    
+    if final_image_io:
+        await cq.message.reply_photo(photo=final_image_io, caption=msg, reply_markup=InlineKeyboardMarkup(buttons))
+    elif backdrop_url:
+        await cq.message.reply_photo(photo=backdrop_url, caption=msg, reply_markup=InlineKeyboardMarkup(buttons))
+    else:
+        await cq.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(buttons), disable_web_page_preview=True)
+    
     await cq.answer()
 
 # Close button handler
