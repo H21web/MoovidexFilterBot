@@ -106,54 +106,6 @@ async def give_filter(client, message):
             settings = await get_settings(message.chat.id)
             try:
                 if settings['auto_ffilter']:
-                    # Check for Premium/Referral Access
-                    if not await db.has_premium_access(user_id):
-                        invite_link = f"https://t.me/{temp.U_NAME}?start=VJ-{user_id}"
-                        share_text = f"Hey! Check out this amazing bot for downloading movies and series. Join now using my link: {invite_link}"
-                        share_url = f"https://t.me/share/url?url={invite_link}&text={quote_plus(share_text)}"
-                        
-                        btn = [[
-                            InlineKeyboardButton("🚀 Share Referral Link", url=share_url)
-                        ]]
-                        await message.reply_text(
-                            text=(
-                                f"<b>⚠️ Access Denied! ⚠️</b>\n\n"
-                                f"You need to refer <b>1 friend</b> to get <b>3 months</b> of access.\n\n"
-                                f"<b>Your Referral Link:</b>\n<code>{invite_link}</code>\n\n"
-                                f"<i>Share this link with your friends. Once 1 friend joins, you will get instant access!</i>"
-                            ),
-                            reply_markup=InlineKeyboardMarkup(btn),
-                            disable_web_page_preview=True
-                        )
-                        return
-
-                    # Daily Usage Check (Free Tier)
-                    daily_usage, bonus = await db.get_daily_usage(user_id)
-                    limit = 4 + bonus
-                    
-                    if daily_usage < limit:
-                        await db.increment_daily_usage(user_id)
-                    else:
-                        invite_link = f"https://t.me/{temp.U_NAME}?start=VJ-{user_id}"
-                        share_text = f"Hey! Check out this amazing bot for downloading movies and series. Join now using my link: {invite_link}"
-                        share_url = f"https://t.me/share/url?url={invite_link}&text={quote_plus(share_text)}"
-                        
-                        btn = [[
-                            InlineKeyboardButton("🚀 Share Referral Link", url=share_url)
-                        ]]
-                        await message.reply_text(
-                            text=(
-                                f"<b>⚠️ Daily Limit Reached! ⚠️</b>\n\n"
-                                f"You have used your <b>{limit} free searches</b> for today.\n\n"
-                                f"To get <b>UNLIMITED ACCESS</b> for <b>3 MONTHS</b>, simply refer <b>1 friend</b>!\n\n"
-                                f"<b>Your Referral Link:</b>\n<code>{invite_link}</code>\n\n"
-                                f"<i>Share this link with your friends. Once 1 friend joins, you will get instant access!</i>"
-                            ),
-                            reply_markup=InlineKeyboardMarkup(btn),
-                            disable_web_page_preview=True
-                        )
-                        return
-
                     ai_search = True
                     reply_msg = await message.reply_text(f"<b><i>Searching For {message.text} 🔍</i></b>")
                     await auto_filter(client, message.text, message, reply_msg, ai_search)
@@ -198,54 +150,6 @@ async def pm_text(bot, message):
     kd = await global_filters(bot, message)
     if kd is False:
         if PM_SEARCH == True:
-            # Check for Premium/Referral Access
-            if not await db.has_premium_access(user_id):
-                invite_link = f"https://t.me/{temp.U_NAME}?start=VJ-{user_id}"
-                share_text = f"Hey! Check out this amazing bot for downloading movies and series. Join now using my link: {invite_link}"
-                share_url = f"https://t.me/share/url?url={invite_link}&text={quote_plus(share_text)}"
-                
-                btn = [[
-                    InlineKeyboardButton("🚀 Share Referral Link", url=share_url)
-                ]]
-                await message.reply_text(
-                    text=(
-                        f"<b>⚠️ Access Denied! ⚠️</b>\n\n"
-                        f"You need to refer <b>1 friend</b> to get <b>3 months</b> of access.\n\n"
-                        f"<b>Your Referral Link:</b>\n<code>{invite_link}</code>\n\n"
-                        f"<i>Share this link with your friends. Once 1 friend joins, you will get instant access!</i>"
-                    ),
-                    reply_markup=InlineKeyboardMarkup(btn),
-                    disable_web_page_preview=True
-                )
-                return
-
-            # Daily Usage Check (Free Tier)
-            daily_usage, bonus = await db.get_daily_usage(user_id)
-            limit = 4 + bonus
-            
-            if daily_usage < limit:
-                await db.increment_daily_usage(user_id)
-            else:
-                invite_link = f"https://t.me/{temp.U_NAME}?start=VJ-{user_id}"
-                share_text = f"Hey! Check out this amazing bot for downloading movies and series. Join now using my link: {invite_link}"
-                share_url = f"https://t.me/share/url?url={invite_link}&text={quote_plus(share_text)}"
-                
-                btn = [[
-                    InlineKeyboardButton("🚀 Share Referral Link", url=share_url)
-                ]]
-                await message.reply_text(
-                    text=(
-                        f"<b>⚠️ Daily Limit Reached! ⚠️</b>\n\n"
-                        f"You have used your <b>{limit} free searches</b> for today.\n\n"
-                        f"To get <b>UNLIMITED ACCESS</b> for <b>3 MONTHS</b>, simply refer <b>1 friend</b>!\n\n"
-                        f"<b>Your Referral Link:</b>\n<code>{invite_link}</code>\n\n"
-                        f"<i>Share this link with your friends. Once 1 friend joins, you will get instant access!</i>"
-                    ),
-                    reply_markup=InlineKeyboardMarkup(btn),
-                    disable_web_page_preview=True
-                )
-                return
-
             await stats_db.add_pm_search_log(content, user_id)
             ai_search = True
             reply_msg = await bot.send_message(
@@ -1312,14 +1216,6 @@ async def filter_qualities_cb_handler(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex(r"^smart_lang"))
 async def smart_lang_handler(client, query):
-    try:
-        if int(query.from_user.id) not in [query.message.reply_to_message.from_user.id, 0]:
-             return await query.answer(
-                f"⚠️ Hello {query.from_user.first_name},\n🎬 Only the person who requested this can change options.",
-                show_alert=True,
-            )
-    except:
-        pass
     _, lang, key = query.data.split("#")
     
     # Retrieve all files for this query
@@ -1387,14 +1283,6 @@ async def smart_lang_handler(client, query):
 
 @Client.on_callback_query(filters.regex(r"^smart_season"))
 async def smart_season_handler(client, query):
-    try:
-        if int(query.from_user.id) not in [query.message.reply_to_message.from_user.id, 0]:
-             return await query.answer(
-                f"⚠️ Hello {query.from_user.first_name},\n🎬 Only the person who requested this can change options.",
-                show_alert=True,
-            )
-    except:
-        pass
     data_parts = query.data.split("#")
     season_str = data_parts[1] # "Season 1"
     key = data_parts[2]
@@ -1445,14 +1333,6 @@ async def smart_season_handler(client, query):
 
 @Client.on_callback_query(filters.regex(r"^smart_quality"))
 async def smart_quality_handler(client, query):
-    try:
-        if int(query.from_user.id) not in [query.message.reply_to_message.from_user.id, 0]:
-             return await query.answer(
-                f"⚠️ Hello {query.from_user.first_name},\n🎬 Only the person who requested this can change options.",
-                show_alert=True,
-            )
-    except:
-        pass
     data_parts = query.data.split("#")
     qual = data_parts[1]
     key = data_parts[2]
@@ -1481,14 +1361,6 @@ async def smart_quality_handler(client, query):
 
 @Client.on_callback_query(filters.regex(r"^smart_default"))
 async def smart_default_handler(client, query):
-    try:
-        if int(query.from_user.id) not in [query.message.reply_to_message.from_user.id, 0]:
-             return await query.answer(
-                f"⚠️ Hello {query.from_user.first_name},\n🎬 Only the person who requested this can change options.",
-                show_alert=True,
-            )
-    except:
-        pass
     data_parts = query.data.split("#")
     key = data_parts[1]
     lang = data_parts[2] if len(data_parts) > 2 else None
