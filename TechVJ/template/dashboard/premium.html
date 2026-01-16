@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>👑 Premium User Manager</h2>
+
+<div class="card">
+    <h3>Check / Manage User</h3>
+    <form action="/admin/premium" method="get">
+        <input type="text" name="user_id" placeholder="User ID" value="{{ searched_id }}" required style="padding: 8px; border-radius: 4px; border: 1px solid #555; background: #333; color: white;">
+        <button type="submit" style="padding: 8px 15px; background: #2196F3; border: none; color: white; border-radius: 4px; cursor: pointer;">Check Status</button>
+    </form>
+
+    {% if message %}
+    <p style="color: #4CAF50; margin-top: 10px;">{{ message }}</p>
+    {% endif %}
+
+    {% if user_data %}
+    <div style="margin-top: 20px; padding: 15px; background: #383838; border-radius: 5px;">
+        <p><strong>Name:</strong> {{ user_data.name }}</p>
+        <p><strong>ID:</strong> {{ user_data.id }}</p>
+        <p><strong>Status:</strong> 
+            {% if is_premium %}
+            <span style="color: gold; font-weight: bold;">PREMIUM</span> (Expires: {{ expiry_time }})
+            {% else %}
+            <span style="color: #ccc;">FREE</span>
+            {% endif %}
+        </p>
+
+        <hr style="border-color: #555;">
+        
+        <h4>Grant Premium</h4>
+        <form action="/admin/premium/add" method="post" style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <input type="hidden" name="user_id" value="{{ user_data.id }}">
+            <select name="duration" style="padding: 8px; border-radius: 4px; border: 1px solid #555; background: #333; color: white;">
+                <option value="1_day">1 Day</option>
+                <option value="1_week">1 Week</option>
+                <option value="1_month" selected>1 Month</option>
+                <option value="3_months">3 Months</option>
+                <option value="6_months">6 Months</option>
+                <option value="1_year">1 Year</option>
+                <option value="lifetime">Lifetime (100 Years)</option>
+            </select>
+            <button type="submit" style="padding: 8px 15px; background: #4CAF50; border: none; color: white; border-radius: 4px; cursor: pointer;">Add Premium</button>
+        </form>
+
+        {% if is_premium %}
+        <br>
+        <form action="/admin/premium/remove" method="post">
+            <input type="hidden" name="user_id" value="{{ user_data.id }}">
+            <button type="submit" style="padding: 8px 15px; background: #f44336; border: none; color: white; border-radius: 4px; cursor: pointer;">Revoke Premium</button>
+        </form>
+        {% endif %}
+    </div>
+    {% elif error %}
+    <p style="color: #ff6b6b; margin-top: 10px;">{{ error }}</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>📊 Premium Stats</h3>
+    <p>Total Premium Users: <strong style="color: gold;">{{ total_premium }}</strong></p>
+</div>
+{% endblock %}

@@ -176,7 +176,31 @@ class StatsDB:
             },
             {"$sort": {"_id": 1}}
         ]
-        cursor = self.search_logs.aggregate(pipeline)
         return await cursor.to_list(length=days)
+
+    async def get_search_count_by_date(self, date_str):
+        """Get total searches for a specific YYYY-MM-DD string"""
+        try:
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+            start = date_obj
+            end = date_obj + timedelta(days=1)
+            return await self.search_logs.count_documents({
+                "timestamp": {"$gte": start, "$lt": end}
+            })
+        except Exception:
+            return 0
+
+    async def get_no_result_count_by_date(self, date_str):
+        """Get no-result searches for a specific YYYY-MM-DD string"""
+        try:
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+            start = date_obj
+            end = date_obj + timedelta(days=1)
+            return await self.search_logs.count_documents({
+                "timestamp": {"$gte": start, "$lt": end},
+                "results_count": 0
+            })
+        except Exception:
+            return 0
 
 stats_db = StatsDB(DATABASE_URI, DATABASE_NAME)

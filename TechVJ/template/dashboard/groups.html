@@ -3,29 +3,31 @@
 <h1>Groups</h1>
 <div class="card">
     <h3>Bot Groups</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Title</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for chat in chats %}
-            <tr>
-                <td>{{ chat.id }}</td>
-                <td>{{ chat.title }}</td>
-                <td>
-                    {% if chat.chat_status.is_disabled %}
-                    <span style="color: red;">Disabled</span>
-                    {% else %}
-                    <span style="color: green;">Active</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Title</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for chat in chats %}
+                <tr>
+                    <td>{{ chat.id }}</td>
+                    <td>{{ chat.title }}</td>
+                    <td>
+                        {% if chat.chat_status.is_disabled %}
+                        <span style="color: red;">Disabled</span>
+                        {% else %}
+                        <span style="color: green;">Active</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 {% endblock %}

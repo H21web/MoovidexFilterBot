@@ -15,6 +15,8 @@ from plugins.Extra.image_gen import generate_status_image
 # Configuration
 UPDATE_CHANNEL_ID = -1001680629032  # Update Channel ID
 
+from database.ia_filterdb import get_search_results
+
 async def fetch_url(url):
     try:
         async with aiohttp.ClientSession() as session:
@@ -59,12 +61,22 @@ async def check_releases_loop():
                             
                         year = movie.get("release_year")
                         
-                        # Check if movie exists in our database (using _id as unique key)
+                        # Check if movie exists in our database (using _id as unique key to prevent re-posting)
                         is_posted = await db.is_movie_posted(movie_id)
                         if is_posted:
                             continue
 
-                        print(f"Found new release: {title} ({year})")
+                        # --- NEW: Check if file is available in Channel DB ---
+                        # "only post movies with the exact name and year file available"
+                        search_query = f"{title} {year}"
+                        files, _, total_files = await get_search_results(UPDATE_CHANNEL_ID, search_query, max_results=1)
+                        if total_files == 0:
+                            # Try just title if year fails? No, user said "exact name and year".
+                            # Maybe try w/o year just in case? No user said "exact".
+                            print(f"Skipping {title} ({year}) - No compatible file found.")
+                            continue
+
+                        print(f"Found new release with available file: {title} ({year})")
                         
                         # --- Gather Details ---
                         # Type
@@ -128,7 +140,9 @@ async def check_releases_loop():
                         tmdb_poster = None
                         tmdb_rating = None
                         tmdb_plot = None
+                        tmdb_id = None
                         cast_str = "N/A"
+                        trailer_url = None
                         
                         tmdb_results = search_tmdb_advanced(title, year=year, media_type=media_type)
                         if tmdb_results:
@@ -141,8 +155,6 @@ async def check_releases_loop():
                                     tmdb_backdrop = tmdb_img
                                 
                                 # Poster from TMDB if available (often better quality)
-                                # get_tmdb_details returns 'image' which is best_backdrop. 
-                                # Access original_data for specific poster
                                 t_orig = tmdb_details.get("original_data", {})
                                 p_path = t_orig.get("poster_path")
                                 if p_path:
@@ -153,6 +165,12 @@ async def check_releases_loop():
                                 cast = tmdb_details.get("cast", [])
                                 cast_str = ", ".join(cast[:5]) if cast else "N/A"
 
+                                videos = tmdb_details.get("videos", [])
+                                if videos:
+                                     video_url = videos[0].get("url")
+                                     if video_url:
+                                         trailer_url = f"https://www.youtube.com/watch?v={video_url}"
+
                         # Use Ottplay rating/plot if TMDB failed
                         rating = tmdb_rating if tmdb_rating else (str(movie.get("ottplay_rating")) + "/10" if movie.get("ottplay_rating") else "N/A")
                         
@@ -160,19 +178,6 @@ async def check_releases_loop():
                         plot = tmdb_plot if tmdb_plot else "No description available."
                         
                         # --- Build Message ---
-                        # Template:
-                        # ✅ **Title** · Year · `Type`
-                        #
-                        # >**>🉑 #Lang**
-                        # >🎭 Genre · 📺 Platform
-                        # >⏱️ Runtime · ®️ Censor
-                        # >📅 Date
-                        # >👥 Cast
-                        # >
-                        # >__Plot:__
-                        # >Plot**
-                        #  **@MooviDex** 
-
                         safe_title = format_search_title(title, year)
                         lang_tag = f"#{lang.replace(' ', '')}"
                         
@@ -188,34 +193,40 @@ async def check_releases_loop():
                         msg += f" **@MooviDex** "
 
                         # --- Generate Image ---
-                        # Prioritize TMDB backdrop, else use Ottplay poster as background (blurred)?
-                        # Prioritize Ottplay poster for foreground, or TMDB. Ottplay posters might be localized.
-                        
                         backdrop_url = tmdb_backdrop if tmdb_backdrop else ottplay_poster
                         poster_url = ottplay_poster if ottplay_poster else tmdb_poster
                         
-                        # If we have no images, skip image gen
                         final_image_io = None
                         if backdrop_url and poster_url:
                             print(f"Generating image for {title}...")
-                            final_image_io = await generate_status_image(backdrop_url, poster_url, provider_logos)
+                            # Pass details to image generator
+                            final_image_io = await generate_status_image(
+                                backdrop_url, poster_url, provider_logos,
+                                title, year, rating, genre_str, plot
+                            )
 
                         # --- Buttons ---
-                        buttons = [[
-                            InlineKeyboardButton(
-                                f"🔍 Search: {title}", 
-                                url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
-                            )
-                        ]]
+                        buttons = []
                         
-                        # Trailer logic (from TMDB details if available)
-                        if tmdb_details:
-                             videos = tmdb_details.get("videos", [])
-                             if videos:
-                                 video_url = videos[0].get("url")
-                                 if video_url:
-                                     trailer_url = f"https://www.youtube.com/watch?v={video_url}"
-                                     buttons.append([InlineKeyboardButton("🎬 Trailer", url=trailer_url)])
+                        # Search Button: Only for movies as per request (not series)
+                        if media_type != "tv":
+                            buttons.append([
+                                InlineKeyboardButton(
+                                    f"🔍 Search: {title}", 
+                                    url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
+                                )
+                            ])
+                            
+                        # Trailer & More Like This
+                        row = []
+                        if trailer_url:
+                            row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
+                        
+                        if tmdb_id:
+                            row.append(InlineKeyboardButton("More like this", callback_data=f"more_like_{tmdb_id}_{media_type}")) # Handles "nore like this button"
+                            
+                        if row:
+                            buttons.append(row)
 
                         # Send to Channel
                         try:
@@ -259,11 +270,32 @@ async def check_releases_loop():
         # Check every 4 hours (daily update but checking more often is safer for uptime)
         await asyncio.sleep(14400) 
 
-# /today command - mapped to new logic? 
-# The user asked to "fetch latest... update daily", implying the loop.
-# But I should probably update the /today command to fetch specifically "today's" releases from this API if needed.
-# For now, I'll update /today to fetch releases for the *current day* using the same API.
+# More Like This Callback
+@Client.on_callback_query(filters.regex(r"^more_like_(\d+)_(.+)$"))
+async def more_like_callback(client, cq):
+    tmdb_id = cq.matches[0].group(1)
+    media_type = cq.matches[0].group(2)
+    
+    details = get_tmdb_details(tmdb_id, media_type)
+    if not details:
+        return await cq.answer("Error fetching details", show_alert=True)
+        
+    similar = details.get("similar", [])
+    if not similar:
+        return await cq.answer("No similar content found.", show_alert=True)
+        
+    buttons = []
+    for sim in similar[:6]:
+        title = sim.get("title") or sim.get("name")
+        safe_title = format_search_title(title, None)
+        buttons.append([InlineKeyboardButton(f"🔍 {title}", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")])
+        
+    buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
+    
+    await cq.message.reply_text(f"**More like: {details['title']}**", reply_markup=InlineKeyboardMarkup(buttons))
+    await cq.answer()
 
+# /today command - mapped to new logic? 
 @Client.on_message(filters.command("today"))
 async def send_movie_buttons(client, message):
     today = datetime.now().strftime("%Y-%m-%d")

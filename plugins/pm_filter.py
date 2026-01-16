@@ -3203,7 +3203,8 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
     if not spoll:
         message = msg
         text = message.caption or message.text or ""
-        if len(text) < 50:
+        # Changed limit from 50 to 400 to support long file names
+        if len(text) < 400:
             search = name.lower()
             # Clean search query
             search = re.sub(r"\b(pl(i|e)*?(s|z+|ease|se|ese|(e+)s(e)?)|((send|snd|giv(e)?|gib)(\sme)?)|movie(s)?|new|latest|bro|bruh|broh|helo|that|find|dubbed|link|venum|iruka|pannunga|pannungga|anuppunga|anupunga|anuppungga|anupungga|film|undo|kitti|kitty|tharu|kittumo|kittum|movie|any(one)|with\ssubtitle(s)?)", "", search, flags=re.IGNORECASE)
@@ -3216,6 +3217,11 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             # Usually removing generic special chars is safer.
             search = re.sub(r"[\[\]\(\)\{\}]", "", search)
             search = re.sub(r"[^\w\s]", "", search) # Keep only alphanumeric and whitespace
+            
+            # Limit to first 20 words to prevent excessive regex complexity in DB
+            s_words = search.split()
+            if len(s_words) > 20:
+                search = ' '.join(s_words[:20])
             
             # Fetch MORE results for analysis (up to 100)
             files, offset, total_results = await get_search_results(message.chat.id ,search, offset=0, max_results=100, filter=True)
@@ -3239,6 +3245,9 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
                     return await advantage_spell_chok(client, name, msg, reply_msg, ai_search)
                 else:
                     return await reply_msg.edit_text(f"**⚠️ No File Found For Your Query - {name}**\n**Make Sure Spelling Is Correct.**")
+        else:
+            # Handle too long query to prevent hanging
+            await reply_msg.edit_text("<b>⚠️ Your query is too long! Please try a shorter keyword.</b>")
     else:
         message = msg.message.reply_to_message  # msg will be callback query
         search, files, offset, total_results = spoll
