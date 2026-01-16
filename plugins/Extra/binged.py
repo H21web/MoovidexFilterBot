@@ -541,7 +541,8 @@ async def binged_search(client, message):
     query = " ".join(message.command[1:]).strip()
     
     # Updated API URL
-    url = f"{SEARCH_URL}?query={query}&languages=&providers=&limit=20&type=all&listing=true&source=web&page=1&article_source=&ispremium=false&is_parental=off&castCrewSearchId=&storiesSearchId=&request_type=DIRECT&state=1"
+    # Updated API URL - Removed empty optional params that might cause 422
+    url = f"{SEARCH_URL}?query={query}&limit=20&type=all&listing=true&source=web&page=1&request_type=DIRECT"
 
     try:
         resp = requests.get(url, headers=HEADERS, timeout=10)

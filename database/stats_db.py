@@ -179,10 +179,7 @@ class StatsDB:
             {
                 "$match": {
                     "results_count": 0,
-                "$match": {
-                    "results_count": 0,
                     "timestamp": {"$gte": datetime.now(IST) - timedelta(days=days)}
-                }
                 }
             },
             {

@@ -116,7 +116,7 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
         current_y += 80
         
         # Meta: Year | Rating
-        meta_text = f"{year}   |   ⭐ {rating}"
+        meta_text = f"{year}   |   Rat: {rating}"
         draw.text((text_start_x, current_y), meta_text, font=meta_font, fill="#FFD700") # Gold color
         current_y += 60
         
