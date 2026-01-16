@@ -540,12 +540,21 @@ async def binged_search(client, message):
 
     query = " ".join(message.command[1:]).strip()
     
-    # Updated API URL
-    # Updated API URL - Removed empty optional params that might cause 422
-    url = f"{SEARCH_URL}?query={query}&limit=20&type=all&listing=true&source=web&page=1&request_type=DIRECT"
+    # Updated API URL with proper params dict to avoid encoding errors and 422
+    params = {
+        "query": query,
+        "limit": 20,
+        "type": "all",
+        "listing": "true",
+        "source": "web",
+        "page": 1,
+        "request_type": "DIRECT",
+        "module": "search",
+        "section": "all"
+    }
 
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=10)
+        resp = requests.get(SEARCH_URL, headers=HEADERS, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
     except requests.RequestException as e:

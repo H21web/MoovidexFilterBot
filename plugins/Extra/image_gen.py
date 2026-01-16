@@ -16,6 +16,24 @@ async def download_image(session, url):
     return None
 
 async def generate_status_image(backdrop_url, poster_url, provider_urls, title, year, rating, genres, plot):
+    # Helper to clean text for PIL default font compatibility
+    def clean_text_safe(text):
+        if not text: return ""
+        replacements = {
+            "\u2018": "'", "\u2019": "'",
+            "\u201c": '"', "\u201d": '"',
+            "\u2013": "-", "\u2014": "-",
+            "…": "...", "⭐": "*"
+        }
+        for k, v in replacements.items():
+            text = str(text).replace(k, v)
+        
+        # If using default font, force Latin-1 or ASCII
+        try:
+            return text.encode('latin-1', 'ignore').decode('latin-1')
+        except:
+            return text.encode('ascii', 'ignore').decode('ascii')
+
     async with aiohttp.ClientSession() as session:
         # Download images
         backdrop_task = download_image(session, backdrop_url)
@@ -35,32 +53,25 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
 
         # 1. Backdrop
         if backdrop:
-            # Resize backdrop to cover
             bg_w, bg_h = backdrop.size
             ratio = max(width/bg_w, height/bg_h)
             new_size = (int(bg_w*ratio), int(bg_h*ratio))
             backdrop = backdrop.resize(new_size, Image.Resampling.LANCZOS)
             
-            # Crop center
             left = (new_size[0] - width)/2
             top = (new_size[1] - height)/2
             backdrop = backdrop.crop((left, top, left+width, top+height))
             
-            # Apply blur
             backdrop = backdrop.filter(ImageFilter.GaussianBlur(5))
-            
-            # Paste backdrop
             canvas.paste(backdrop, (0, 0))
             
-            # Add darken overlay
-            overlay = Image.new("RGBA", (width, height), (0, 0, 0, 160)) # Darker overlay for text readability
+            overlay = Image.new("RGBA", (width, height), (0, 0, 0, 160)) 
             canvas = Image.alpha_composite(canvas, overlay)
         else:
-             # Fallback background
              canvas = Image.new("RGBA", (width, height), (20, 20, 20))
              draw = ImageDraw.Draw(canvas)
 
-        # 2. Poster with Shadow and Radius
+        # 2. Poster
         if poster:
             target_h = 600
             p_w, p_h = poster.size
@@ -68,7 +79,6 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
             new_p_w = int(p_w * ratio)
             poster = poster.resize((new_p_w, target_h), Image.Resampling.LANCZOS)
             
-            # Shadow
             shadow = Image.new("RGBA", (new_p_w + 20, target_h + 20), (0, 0, 0, 0))
             shadow_draw = ImageDraw.Draw(shadow)
             shadow_draw.rounded_rectangle([(10, 10), (new_p_w+10, target_h+10)], radius=20, fill=(0, 0, 0, 150))
@@ -79,13 +89,11 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
             
             canvas.paste(shadow, (pos_x - 5, pos_y - 5), shadow)
 
-            # Rounded Poster
             mask = Image.new("L", (new_p_w, target_h), 0)
             mask_draw = ImageDraw.Draw(mask)
             mask_draw.rounded_rectangle([(0, 0), (new_p_w, target_h)], radius=20, fill=255)
             
             poster_rgba = poster.convert("RGBA")
-            
             canvas.paste(poster_rgba, (pos_x, pos_y), mask)
             
             text_start_x = pos_x + new_p_w + 60
@@ -93,36 +101,52 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
             text_start_x = 60
 
         # 3. Text Info
-        text_width = width - text_start_x - 60
-        
+        # Font Loading Logic
+        using_default = False
         try:
-            # Try loading Arial
             title_font = ImageFont.truetype("arial.ttf", 60)
             meta_font = ImageFont.truetype("arial.ttf", 35)
             plot_font = ImageFont.truetype("arial.ttf", 30)
             genre_font = ImageFont.truetype("arial.ttf", 30)
-        except:
-            title_font = ImageFont.load_default()
-            meta_font = ImageFont.load_default()
-            plot_font = ImageFont.load_default()
-            genre_font = ImageFont.load_default()
+        except IOError:
+            try:
+                # Try common Linux font
+                title_font = ImageFont.truetype("DejaVuSans.ttf", 60)
+                meta_font = ImageFont.truetype("DejaVuSans.ttf", 35)
+                plot_font = ImageFont.truetype("DejaVuSans.ttf", 30)
+                genre_font = ImageFont.truetype("DejaVuSans.ttf", 30)
+            except IOError:
+                title_font = ImageFont.load_default()
+                meta_font = ImageFont.load_default()
+                plot_font = ImageFont.load_default()
+                genre_font = ImageFont.load_default()
+                using_default = True
 
-        # Title
-        # textwrap for title? Usually title is short enough or we start new line
-        current_y = 100
-        
+        # Clean text if using default font or just generally to be safe from smart quotes
+        # We always apply basic replacement, and aggressive strip if default font
+        if using_default:
+            title = clean_text_safe(title)
+            year = clean_text_safe(year)
+            rating = clean_text_safe(rating)
+            genres = clean_text_safe(genres)
+            plot = clean_text_safe(plot)
+        else:
+            # Just do simple replacements for smart quotes even with good fonts to be tidy
+            replacements = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "…": "..."}
+            for k, v in replacements.items():
+                plot = str(plot).replace(k, v)
+                title = str(title).replace(k, v)
+
         # Draw Title
+        current_y = 100
         draw.text((text_start_x, current_y), str(title), font=title_font, fill="white")
         current_y += 80
         
-        # Meta: Year | Rating
         meta_text = f"{year}   |   Rat: {rating}"
-        draw.text((text_start_x, current_y), meta_text, font=meta_font, fill="#FFD700") # Gold color
+        draw.text((text_start_x, current_y), meta_text, font=meta_font, fill="#FFD700")
         current_y += 60
         
-        # Genres
         if genres:
-             # Draw simplified genre tags logic or just text
              draw.text((text_start_x, current_y), str(genres), font=genre_font, fill="#A0A0A0")
              current_y += 60
 
@@ -130,10 +154,10 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
         draw.line([(text_start_x, current_y), (text_start_x + 300, current_y)], fill="white", width=2)
         current_y += 40
 
-        # Plot
         import textwrap
-        plot_lines = textwrap.wrap(str(plot), width=50) # Approx char width
-        for line in plot_lines[:6]: # Limit lines
+        plot = str(plot) if plot else "No description available."
+        plot_lines = textwrap.wrap(plot, width=50)
+        for line in plot_lines[:6]:
             draw.text((text_start_x, current_y), line, font=plot_font, fill="white")
             current_y += 40
 
@@ -152,7 +176,6 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
                     p_resized = p.resize((new_pw, logo_size), Image.Resampling.LANCZOS)
                     resized_providers.append(p_resized)
                 
-                # Place from right to left at bottom
                 current_x = width - 60
                 bottom_y = height - 60 - logo_size
                 
@@ -161,7 +184,6 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
                     canvas.paste(p, (current_x, bottom_y), p if p.mode == 'RGBA' else None)
                     current_x -= padding
                     
-        # Output
         out_io = BytesIO()
         canvas = canvas.convert("RGB")
         canvas.save(out_io, 'JPEG', quality=95)
