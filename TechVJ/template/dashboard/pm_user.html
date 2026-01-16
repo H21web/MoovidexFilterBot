@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>📩 PM User (Direct Message)</h2>
+
+<div class="card">
+    {% if success %}
+    <div style="background-color: #d4edda; color: #155724; padding: 10px; border-radius: 5px; margin-bottom: 20px;">
+        {{ success }}
+    </div>
+    {% endif %}
+    {% if error %}
+    <div style="background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; margin-bottom: 20px;">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    <form action="/admin/pm_user/send" method="post">
+        <label>User ID:</label><br>
+        <input type="number" name="user_id" required style="width: 100%; max-width: 400px; padding: 10px; border-radius: 4px; border: 1px solid #555; background: #333; color: white;" placeholder="e.g. 123456789"><br><br>
+        
+        <label>Message:</label><br>
+        <textarea name="message" rows="6" required style="width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #555; background: #333; color: white;" placeholder="Type your message..."></textarea><br><br>
+        
+        <button type="submit" style="padding: 10px 20px; background: #2196F3; border: none; color: white; border-radius: 4px; cursor: pointer; font-size: 16px;">Send Message</button>
+    </form>
+</div>
+{% endblock %}

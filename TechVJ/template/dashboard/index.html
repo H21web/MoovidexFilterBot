@@ -1,10 +1,30 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Dashboard</h1>
+<h1>Dashboard <small style="font-size: 14px; color: #888;">{{ server_os }} | Python {{ py_ver }}</small></h1>
 <div class="stats-grid">
     <div class="stat-box">
         <div class="stat-value">{{ status }}</div>
         <div class="stat-label">Bot Status</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ uptime }}</div>
+        <div class="stat-label">Uptime</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ ram_usage }}</div>
+        <div class="stat-label">RAM Usage</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ cpu_usage }}%</div>
+        <div class="stat-label">CPU Usage</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ total_files }}</div>
+        <div class="stat-label">Total Files</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ db_size }}</div>
+        <div class="stat-label">DB Size</div>
     </div>
     <div class="stat-box">
         <div class="stat-value">{{ total_users }}</div>
@@ -74,34 +94,50 @@
 <script>
     const chartLabels = JSON.parse('{{ no_result_chart_labels|tojson }}');
     const noResultData = JSON.parse('{{ no_result_chart_data|tojson }}');
-    const totalSearches = Number("{{ total_searches|default(0) }}");
+    const totalSearchData = JSON.parse('{{ chart_searches_data|tojson }}');
 
     const ctx = document.getElementById('searchChart').getContext('2d');
     const searchChart = new Chart(ctx, {
-        type: 'line',
+        type: 'bar',
         data: {
             labels: chartLabels,
             datasets: [
                 {
-                    label: '# of Searches',
-                    data: [12, 19, 3, 5, 2, 3, totalSearches % 100], 
-                    backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                    borderColor: 'rgba(76, 175, 80, 1)',
+                    label: 'Total Requests',
+                    data: totalSearchData, 
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
                     borderWidth: 1
                 },
                 {
-                    label: '# No Results',
+                    label: 'No Results Found',
                     data: noResultData,
-                    backgroundColor: 'rgba(255, 87, 34, 0.2)',
+                    backgroundColor: 'rgba(255, 87, 34, 0.5)',
                     borderColor: 'rgba(255, 87, 34, 1)',
                     borderWidth: 1
                 }
             ]
         },
         options: {
+            responsive: true,
             scales: {
                 y: {
-                    beginAtZero: true
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                },
+                x: {
+                    grid: {
+                         color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    labels: {
+                        color: 'white'
+                    }
                 }
             }
         }

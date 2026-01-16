@@ -193,7 +193,6 @@ class StatsDB:
             },
             {"$sort": {"_id": 1}}
         ]
-        cursor = self.search_logs.aggregate(pipeline)
         return await cursor.to_list(length=days)
 
     async def get_today_success_ratio(self):

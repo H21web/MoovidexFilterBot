@@ -1,11 +1,20 @@
 import logging
 import jinja2
 import datetime
+import psutil
+import time
+import sys
+import platform
 from aiohttp import web
 from info import ADMIN_USERNAME, ADMIN_PASSWORD
 from database.users_chats_db import db
 from database.stats_db import stats_db
+from database.config_db import mdb
+from database.ia_filterdb import get_search_results, col, sec_col
 from TechVJ.bot import TechVJBot
+from utils import get_size
+import asyncio
+import re
 
 routes = web.RouteTableDef()
 
@@ -117,7 +126,7 @@ async def users_page(request):
     
     if search_query:
         users_list = await db.search_users(search_query)
-        total_users = len(users_list) # Simplified pagination for search
+        total_users = len(users_list)
         total_pages = 1
     else:
         total_users = await db.total_users_count()
@@ -194,3 +203,194 @@ async def clear_pm_searches(request):
     
     await stats_db.clear_pm_search_logs()
     return web.HTTPFound('/admin/pm_searches')
+
+# --- NEW FEATURES ---
+
+# Broadcast
+async def run_broadcast(target, text, pin):
+    total = 0
+    success = 0
+    failed = 0
+    
+    if target == 'users':
+        users = await db.get_all_users()
+        async for user in users:
+            try:
+                msg = await TechVJBot.send_message(chat_id=int(user['id']), text=text)
+                if pin:
+                    try: await msg.pin()
+                    except: pass
+                success += 1
+            except Exception as e:
+                failed += 1
+            total += 1
+            # Rate limiting / yielding
+            if total % 50 == 0: await asyncio.sleep(0.5)
+    else:
+        groups = await db.get_all_chats()
+        async for group in groups:
+            try:
+                msg = await TechVJBot.send_message(chat_id=int(group['id']), text=text)
+                if pin:
+                    try: await msg.pin()
+                    except: pass
+                success += 1
+            except:
+                failed += 1
+            total += 1
+            if total % 50 == 0: await asyncio.sleep(0.5)
+            
+    logging.info(f"Broadcast Finished. Total: {total}, Success: {success}, Failed: {failed}")
+
+@routes.get("/admin/broadcast")
+async def broadcast_page(request):
+    if not check_auth(request): return web.HTTPFound('/admin/login')
+    return web.Response(text=render_template("broadcast.html"), content_type='text/html')
+
+@routes.post("/admin/broadcast/send")
+async def broadcast_send_handler(request):
+    if not check_auth(request): return web.HTTPFound('/admin/login')
+    data = await request.post()
+    message_text = data.get('message')
+    target = data.get('target') 
+    pin = data.get('pin') == 'true'
+    
+    asyncio.create_task(run_broadcast(target, message_text, pin))
+    
+    return web.Response(text=render_template("broadcast.html", success="Broadcast started in background! This may take a while depending on user count."), content_type='text/html')
+
+# Premium
+@routes.get("/admin/premium")
+async def premium_page(request):
+    if not check_auth(request): return web.HTTPFound('/admin/login')
+    user_id = request.query.get('user_id')
+    user_data = None
+    is_premium = False
+    expiry_time = None
+    message = request.query.get('message')
+    error = None
+    
+    total_premium = await db.all_premium_users()
+    
+    if user_id:
+        try:
+            user_id = int(user_id)
+            user_data = await db.get_user(user_id)
+            if user_data:
+                is_premium = await db.has_premium_access(user_id)
+                expiry_time = user_data.get('expiry_time')
+            else:
+                error = "User not found in database."
+        except ValueError:
+            error = "Invalid User ID"
+            
+    return web.Response(text=render_template("premium.html", user_data=user_data, is_premium=is_premium, expiry_time=expiry_time, searched_id=user_id or "", error=error, message=message, total_premium=total_premium), content_type='text/html')
+
+@routes.post("/admin/premium/add")
+async def premium_add_handler(request):
+    if not check_auth(request): return web.HTTPFound('/admin/login')
+    data = await request.post()
+    user_id = int(data.get('user_id'))
+    duration = data.get('duration')
+    
+    seconds = 0
+    if duration == '1_day': seconds = 86400
+    elif duration == '1_week': seconds = 86400 * 7
+    elif duration == '1_month': seconds = 86400 * 30
+    elif duration == '3_months': seconds = 86400 * 90
+    elif duration == '6_months': seconds = 86400 * 180
+    elif duration == '1_year': seconds = 86400 * 365
+    elif duration == 'lifetime': seconds = 86400 * 365 * 100
+    
+    new_expiry = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+    await db.update_user({'id': user_id, 'expiry_time': new_expiry})
+    
+    return web.HTTPFound(f'/admin/premium?user_id={user_id}&message=Premium Added!')
+
+@routes.post("/admin/premium/remove")
+async def premium_remove_handler(request):
+    if not check_auth(request): return web.HTTPFound('/admin/login')
+    data = await request.post()
+    user_id = int(data.get('user_id'))
+    await db.update_user({'id': user_id, 'expiry_time': None})
+    return web.HTTPFound(f'/admin/premium?user_id={user_id}&message=Premium Revoked!')
+
+# Files
+@routes.get("/admin/files")
+async def files_page(request):
+    if not check_auth(request): return web.HTTPFound('/admin/login')
+    query = request.query.get('query')
+    files = []
+    total_count = 0
+    message = request.query.get('message')
+    
+    if query:
+        results, _, total_count = await get_search_results(0, query, max_results=50) 
+        for f in results:
+            f['file_size_human'] = get_size(f['file_size'])
+            files.append(f)
+            
+    return web.Response(text=render_template("files.html", files=files, query=query or "", total_count=total_count, message=message), content_type='text/html')
+
+@routes.post("/admin/files/delete")
+async def files_delete_handler(request):
+    if not check_auth(request): return web.HTTPFound('/admin/login')
+    data = await request.post()
+    file_id = data.get('file_id')
+    query = data.get('return_query')
+    
+    if file_id:
+        try:
+            col.delete_one({'file_id': file_id})
+            sec_col.delete_one({'file_id': file_id})
+        except Exception:
+            pass
+            
+    return web.HTTPFound(f'/admin/files?query={query}&message=File Deleted')
+
+# Settings
+@routes.get("/admin/settings")
+async def settings_page(request):
+    if not check_auth(request): return web.HTTPFound('/admin/login')
+    config = {}
+    config['maintenance_mode'] = await mdb.get_configuration_value('maintenance_mode')
+    config['auto_accept'] = await mdb.get_configuration_value('auto_accept')
+    config['private_filter'] = await mdb.get_configuration_value('private_filter')
+    config['group_filter'] = await mdb.get_configuration_value('group_filter')
+    config['forcesub'] = await mdb.get_configuration_value('forcesub')
+    config['spoll_check'] = await mdb.get_configuration_value('spoll_check')
+    
+    return web.Response(text=render_template("settings.html", config=config), content_type='text/html')
+
+@routes.post("/admin/settings/update")
+async def settings_update_handler(request):
+    if not check_auth(request): return web.HTTPFound('/admin/login')
+    data = await request.post()
+    
+    keys = ['maintenance_mode', 'auto_accept', 'private_filter', 'group_filter', 'forcesub', 'spoll_check']
+    for key in keys:
+        val = data.get(key) == 'on'
+        await mdb.update_configuration(key, val)
+        
+    return web.HTTPFound('/admin/settings')
+
+# PM User
+@routes.get("/admin/pm_user")
+async def pm_user_page(request):
+    if not check_auth(request): return web.HTTPFound('/admin/login')
+    return web.Response(text=render_template("pm_user.html"), content_type='text/html')
+
+@routes.post("/admin/pm_user/send")
+async def pm_user_send_handler(request):
+    if not check_auth(request): return web.HTTPFound('/admin/login')
+    data = await request.post()
+    user_id = data.get('user_id')
+    message = data.get('message')
+    
+    try:
+        await TechVJBot.send_message(chat_id=int(user_id), text=message)
+        success = f"Message sent successfully to {user_id}!"
+        return web.Response(text=render_template("pm_user.html", success=success), content_type='text/html')
+    except Exception as e:
+        error = f"Failed to send: {str(e)}"
+        return web.Response(text=render_template("pm_user.html", error=error), content_type='text/html')

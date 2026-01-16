@@ -12,33 +12,34 @@
             {% endif %}
         </form>
     </div>
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Joined Date</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for user in users %}
-            <tr>
-                <td>{{ user.id }}</td>
-                <td>{{ user.name }}</td>
-                <td>{{ user.joined_date or 'N/A' }}</td>
-                <td>
-                    {% if user.ban_status.is_banned %}
-                    <span style="color: red;">Banned</span>
-                    {% else %}
-                    <span style="color: green;">Active</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    </table>
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Joined Date</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.id }}</td>
+                    <td>{{ user.name }}</td>
+                    <td>{{ user.joined_date or 'N/A' }}</td>
+                    <td>
+                        {% if user.ban_status.is_banned %}
+                        <span style="color: red;">Banned</span>
+                        {% else %}
+                        <span style="color: green;">Active</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     
     <div style="margin-top: 20px; text-align: center;">
         {% if page > 1 %}

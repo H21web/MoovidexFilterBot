@@ -6,25 +6,41 @@
 </form>
 <div class="card">
     <h3>Recent PM Searches</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>User ID</th>
-                <th>Name</th>
-                <th>Query</th>
-                <th>Timestamp</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for search in pm_searches %}
-            <tr>
-                <td>{{ search.user_id }}</td>
-                <td>{{ search.user_info.name if search.user_info else 'Unknown' }}</td>
-                <td>{{ search.query }}</td>
-                <td>{{ search.timestamp }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>User ID</th>
+                    <th>Name</th>
+                    <th>Query</th>
+                    <th>Timestamp</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for search in pm_searches %}
+                <tr>
+                    <td>{{ search.user_id }}</td>
+                    <td>{{ search.user_info.name if search.user_info else 'Unknown' }}</td>
+                    <td>{{ search.query }}</td>
+                    <td>{{ search.timestamp }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
+        {% if page > 1 %}
+        <a href="/admin/pm_searches?page={{ page - 1 }}" style="padding: 5px 10px; background: #007bff; color: white; text-decoration: none; border-radius: 4px;">&laquo; Previous</a>
+        {% else %}
+        <span></span>
+        {% endif %}
+        
+        <span>Page {{ page }} of {{ total_pages }}</span>
+        
+        {% if page < total_pages %}
+        <a href="/admin/pm_searches?page={{ page + 1 }}" style="padding: 5px 10px; background: #007bff; color: white; text-decoration: none; border-radius: 4px;">Next &raquo;</a>
+        {% endif %}
+    </div>
 </div>
 {% endblock %}

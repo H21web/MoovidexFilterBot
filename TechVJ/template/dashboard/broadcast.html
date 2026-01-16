@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>📢 Broadcast Manager</h2>
+<div class="card">
+    {% if success %}
+    <div style="background-color: #d4edda; color: #155724; padding: 10px; border-radius: 5px; margin-bottom: 20px;">
+        {{ success }}
+    </div>
+    {% endif %}
+    <form action="/admin/broadcast/send" method="post">
+        <label style="color: #ccc;">Message Content:</label><br>
+        <textarea name="message" rows="8" style="width: 100%; background: #333; color: white; border: 1px solid #555; border-radius: 5px; padding: 10px; margin-top: 5px;" required placeholder="Type your message here... markdown is supported."></textarea><br><br>
+        
+        <label style="color: #ccc;">Target Audience:</label><br>
+        <div style="margin-top: 5px;">
+            <input type="radio" name="target" id="t_users" value="users" checked> <label for="t_users">All Users</label> &nbsp;&nbsp;
+            <input type="radio" name="target" id="t_groups" value="groups"> <label for="t_groups">All Groups</label>
+        </div><br>
+        
+        <div style="margin-top: 5px;">
+             <input type="checkbox" name="pin" id="pin" value="true"> <label for="pin">Pin Message</label>
+        </div><br>
+        
+        <button type="submit" style="padding: 10px 20px; background: #4CAF50; border: none; color: white; border-radius: 5px; cursor: pointer; font-size: 16px;">🚀 Start Broadcast</button>
+    </form>
+</div>
+{% endblock %}

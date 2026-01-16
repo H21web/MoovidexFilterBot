@@ -1,93 +1,111 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Search Statistics</h1>
-<div class="styles-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+<style>
+    .search-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .search-grid .full-width { grid-column: span 2; }
+    
+    @media (max-width: 768px) {
+        .search-grid { grid-template-columns: 1fr; }
+        .search-grid .full-width { grid-column: span 1; }
+    }
+</style>
+
+<div class="search-grid">
     <div class="card">
         <h3>Top Searches</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Query</th>
-                    <th>Count</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for search in top_searches %}
-                <tr>
-                    <td>{{ search._id }}</td>
-                    <td>{{ search.count }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Query</th>
+                        <th>Count</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for search in top_searches %}
+                    <tr>
+                        <td>{{ search._id }}</td>
+                        <td>{{ search.count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
     
     <div class="card">
         <h3>Most Anticipated (No Results)</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Query</th>
-                    <th>Count</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for search in no_result_searches %}
-                <tr>
-                    <td>{{ search._id }}</td>
-                    <td>{{ search.count }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Query</th>
+                        <th>Count</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for search in no_result_searches %}
+                    <tr>
+                        <td>{{ search._id }}</td>
+                        <td>{{ search.count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
     
-    <div class="card" style="grid-column: span 2;">
+    <div class="card full-width">
         <h3>Top Active Users</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>User ID</th>
-                    <th>Search Count</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for user in top_users %}
-                <tr>
-                    <td>{{ user.user_info.name if user.user_info else 'Unknown' }}</td>
-                    <td>{{ user._id }}</td> <!-- Aggregated group key is user_id -->
-                    <td>{{ user.count }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>User ID</th>
+                        <th>Search Count</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in top_users %}
+                    <tr>
+                        <td>{{ user.user_info.name if user.user_info else 'Unknown' }}</td>
+                        <td>{{ user._id }}</td> <!-- Aggregated group key is user_id -->
+                        <td>{{ user.count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 
-    <div class="card" style="grid-column: span 2;">
+    <div class="card full-width">
         <h3>Recent Searches (Global)</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Time</th>
-                    <th>User</th>
-                    <th>Source</th>
-                    <th>Query</th>
-                    <th>Results</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for log in recent_searches %}
-                <tr>
-                    <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                    <td>{{ log.user_info.name if log.user_info else log.user_id }}</td>
-                    <td>{{ log.source|default('auto_filter') }}</td>
-                    <td>{{ log.query }}</td>
-                    <td>{{ log.results_count }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>User</th>
+                        <th>Source</th>
+                        <th>Query</th>
+                        <th>Results</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in recent_searches %}
+                    <tr>
+                        <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td>{{ log.user_info.name if log.user_info else log.user_id }}</td>
+                        <td>{{ log.source|default('auto_filter') }}</td>
+                        <td>{{ log.query }}</td>
+                        <td>{{ log.results_count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 {% endblock %}
