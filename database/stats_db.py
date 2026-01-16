@@ -1,6 +1,10 @@
 from datetime import datetime, timedelta
 import motor.motor_asyncio
-from info import DATABASE_URI, DATABASE_NAME
+import pytz
+from info import DATABASE_URI, DATABASE_NAME, FILE_DB_URI, SEC_FILE_DB_URI, COLLECTION_NAME, MULTIPLE_DATABASE
+from pymongo import MongoClient
+
+IST = pytz.timezone('Asia/Kolkata')
 
 class StatsDB:
     def __init__(self, uri, database_name):
@@ -8,6 +12,16 @@ class StatsDB:
         self.db = self._client[database_name]
         self.search_logs = self.db.search_logs
         self.pm_search_logs = self.db.pm_search_logs
+        
+        # File DB Connections for Stats
+        self.file_client = MongoClient(FILE_DB_URI)
+        self.file_db = self.file_client[DATABASE_NAME]
+        self.file_col = self.file_db[COLLECTION_NAME]
+        
+        if MULTIPLE_DATABASE:
+            self.sec_file_client = MongoClient(SEC_FILE_DB_URI)
+            self.sec_file_db = self.sec_file_client[DATABASE_NAME]
+            self.sec_file_col = self.sec_file_db[COLLECTION_NAME]
 
     async def add_search_log(self, query, user_id, results_count, source=None):
         log = {
@@ -15,7 +29,7 @@ class StatsDB:
             'user_id': user_id,
             'results_count': results_count,
             'source': source or 'auto_filter',
-            'timestamp': datetime.utcnow()
+            'timestamp': datetime.now(IST)
         }
         await self.search_logs.insert_one(log)
 
@@ -23,7 +37,7 @@ class StatsDB:
         log = {
             'query': query,
             'user_id': user_id,
-            'timestamp': datetime.utcnow()
+            'timestamp': datetime.now(IST)
         }
         await self.pm_search_logs.insert_one(log)
     
@@ -165,7 +179,10 @@ class StatsDB:
             {
                 "$match": {
                     "results_count": 0,
-                    "timestamp": {"$gte": datetime.utcnow() - timedelta(days=days)}
+                "$match": {
+                    "results_count": 0,
+                    "timestamp": {"$gte": datetime.now(IST) - timedelta(days=days)}
+                }
                 }
             },
             {
@@ -179,29 +196,53 @@ class StatsDB:
         cursor = self.search_logs.aggregate(pipeline)
         return await cursor.to_list(length=days)
 
-    async def get_search_count_by_date(self, date_str):
-        """Get total searches for a specific YYYY-MM-DD string"""
-        try:
-            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-            start = date_obj
-            end = date_obj + timedelta(days=1)
-            return await self.search_logs.count_documents({
-                "timestamp": {"$gte": start, "$lt": end}
-            })
-        except Exception:
-            return 0
+    async def get_today_success_ratio(self):
+        today = datetime.now(IST).replace(hour=0, minute=0, second=0, microsecond=0)
+        total = await self.search_logs.count_documents({"timestamp": {"$gte": today}})
+        if total == 0: return 0
+        success = await self.search_logs.count_documents({
+            "timestamp": {"$gte": today},
+            "results_count": {"$gt": 0}
+        })
+        return round((success / total) * 100, 2)
 
-    async def get_no_result_count_by_date(self, date_str):
-        """Get no-result searches for a specific YYYY-MM-DD string"""
+    async def get_weekly_success_ratio(self):
+        week_ago = datetime.now(IST) - timedelta(days=7)
+        total = await self.search_logs.count_documents({"timestamp": {"$gte": week_ago}})
+        if total == 0: return 0
+        success = await self.search_logs.count_documents({
+            "timestamp": {"$gte": week_ago},
+            "results_count": {"$gt": 0}
+        })
+        return round((success / total) * 100, 2)
+
+    async def get_database_stats(self):
+        stats = {}
+        
+        # Primary DB
         try:
-            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-            start = date_obj
-            end = date_obj + timedelta(days=1)
-            return await self.search_logs.count_documents({
-                "timestamp": {"$gte": start, "$lt": end},
-                "results_count": 0
-            })
-        except Exception:
-            return 0
+            p_count = self.file_col.count_documents({})
+            # dbStats returns size in bytes
+            p_db_stats = self.file_db.command("dbStats")
+            p_size = p_db_stats.get("dataSize", 0) / (1024 * 1024) # MB
+            stats['primary'] = {"count": p_count, "size": round(p_size, 2)}
+        except Exception as e:
+            stats['primary'] = {"count": 0, "size": 0, "error": str(e)}
+
+        # Secondary DB
+        if MULTIPLE_DATABASE:
+            try:
+                s_count = self.sec_file_col.count_documents({})
+                s_db_stats = self.sec_file_db.command("dbStats")
+                s_size = s_db_stats.get("dataSize", 0) / (1024 * 1024) # MB
+                stats['secondary'] = {"count": s_count, "size": round(s_size, 2)}
+                stats['total_files'] = p_count + s_count
+            except:
+                stats['secondary'] = {"count": 0, "size": 0}
+                stats['total_files'] = p_count
+        else:
+            stats['total_files'] = p_count
+            
+        return stats
 
 stats_db = StatsDB(DATABASE_URI, DATABASE_NAME)

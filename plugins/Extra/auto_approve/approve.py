@@ -4,7 +4,7 @@ from pyrogram import Client, filters, enums
 from pyrogram.errors import ChatAdminRequired, FloodWait
 from pyrogram.types import *
 from database.ia_filterdb import get_file_details, unpack_new_file_id, get_bad_files
-from database.users_chats_db import db, delete_all_referal_users, get_referal_users_count, get_referal_all_users, referal_add_user
+from database.users_chats_db import db
 from database.join_reqs import JoinReqs
 from info import *
 from utils import get_settings, pub_is_subscribed, get_size, is_subscribed, save_group_settings, temp, verify_user, check_token, check_verification, get_token, get_shortlink, get_tutorial, get_seconds
@@ -46,10 +46,10 @@ async def auto_approve(client, message: ChatJoinRequest):
         
     if data.split("-", 1)[0] == "VJ":
         user_id = int(data.split("-", 1)[1])
-        vj = await referal_add_user(user_id, message.from_user.id)
+        vj = await db.referal_add_user(user_id, message.from_user.id)
         if vj and PREMIUM_AND_REFERAL_MODE == True:
             await message.reply(f"<b>You have joined using the referral link of user with ID {user_id}\n\nSend /start again to use the bot</b>")
-            num_referrals = await get_referal_users_count(user_id)
+            num_referrals = await db.get_referal_users_count(user_id)
             await client.send_message(chat_id = user_id, text = "<b>{} start the bot with your referral link\n\nTotal Referals - {}</b>".format(message.from_user.mention, num_referrals))
             if num_referrals == REFERAL_COUNT:
                 time = REFERAL_PREMEIUM_TIME       
@@ -58,7 +58,7 @@ async def auto_approve(client, message: ChatJoinRequest):
                     expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
                     user_data = {"id": user_id, "expiry_time": expiry_time} 
                     await db.update_user(user_data)  # Use the update_user method to update or insert user data
-                    await delete_all_referal_users(user_id)
+                    await db.delete_all_referal_users(user_id)
                     await client.send_message(chat_id = user_id, text = "<b>You Have Successfully Completed Total Referal.\n\nYou Added In Premium For {}</b>".format(REFERAL_PREMEIUM_TIME))
                     return 
         else:
