@@ -176,6 +176,7 @@ class StatsDB:
             },
             {"$sort": {"_id": 1}}
         ]
+        cursor = self.search_logs.aggregate(pipeline)
         return await cursor.to_list(length=days)
 
     async def get_search_count_by_date(self, date_str):

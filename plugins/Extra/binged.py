@@ -6,6 +6,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
 from info import *
+from plugins.Extra.image_gen import generate_status_image
 
 # Helper to format search title with Season numbering and Year
 def format_search_title(title, year):
@@ -50,8 +51,9 @@ from database.stats_db import stats_db
 from database.users_chats_db import db
 
 # Search APIs
-SEARCH_URL = "https://www.binged.com/wp-json/binged-api/v1/movies"
-DETAIL_URL = "https://www.binged.com/wp-json/binged-api/v1/movie"
+# Search APIs
+SEARCH_URL = "https://api2.ottplay.com/api/search-service/v1.1/universal-search"
+# DETAIL_URL = "https://www.binged.com/wp-json/binged-api/v1/movie"
 
 # Anti-403 Headers
 HEADERS = {
@@ -528,7 +530,7 @@ def build_upcoming_message(movie_data, bot_username, source='binged'):
         
         return msg, image
 
-# /binged command
+# /binged command (Ottplay)
 @Client.on_message(filters.command("binged"))
 async def binged_search(client, message):
     if message.from_user.id not in ADMIN_IDS:
@@ -537,36 +539,50 @@ async def binged_search(client, message):
         return await message.reply_text("Usage: /binged <movie name>")
 
     query = " ".join(message.command[1:]).strip()
+    
+    # Updated API URL
+    url = f"{SEARCH_URL}?query={query}&languages=&providers=&limit=20&type=all&listing=true&source=web&page=1&article_source=&ispremium=false&is_parental=off&castCrewSearchId=&storiesSearchId=&request_type=DIRECT&state=1"
 
     try:
-        resp = requests.get(f"{SEARCH_URL}?mode=all&search={query}", headers=HEADERS, timeout=10)
+        resp = requests.get(url, headers=HEADERS, timeout=10)
         resp.raise_for_status()
+        data = resp.json()
     except requests.RequestException as e:
         return await message.reply_text(f"API error: {e}")
 
-    results = resp.json().get("data", [])
-    
-    # Log search stats
-    try:
-        await stats_db.add_search_log(query, message.from_user.id, len(results), source='binged')
-    except Exception as e:
-        print(f"Error logging binged search: {e}")
-
+    # Ottplay Universal Search parsing
+    results = data.get("results", [])
+    if not results:
+        results = data.get("data", [])
+        
     if not results:
         return await message.reply_text("No results found.")
 
     temp.BINGED_RESULTS[message.from_user.id] = {}
     buttons = []
-    for movie in results:
-        movie_id = str(movie.get("id"))
-        title = clean_text(movie.get("title"))
-        year = movie.get("theatrical-year") or "N/A"
-        btn_text = f"{title} ({year})"
-        temp.BINGED_RESULTS[message.from_user.id][movie_id] = movie
+    for item in results:
+        # Check title
+        title = clean_text(item.get("name") or item.get("title"))
+        if not title: continue
+        
+        # ID - check for _id or id
+        movie_id = str(item.get("_id") or item.get("id"))
+        
+        # Year
+        year = item.get("release_year") or str(item.get("release_date", "")).split("-")[0] or "N/A"
+        
+        # Type
+        ctype = item.get("content_type", "movie")
+        
+        btn_text = f"{title} ({year}) - {ctype}"
+        
+        # Store item for details
+        temp.BINGED_RESULTS[message.from_user.id][movie_id] = item
         buttons.append([InlineKeyboardButton(btn_text, callback_data=f"binged_detail_{movie_id}")])
+
     buttons.append([InlineKeyboardButton("Close ❌", callback_data="close_message")])
     await message.reply_text(
-        f"Search results for: <b>{query}</b>",
+        f"Ottplay Search results for: <b>{query}</b>",
         reply_markup=InlineKeyboardMarkup(buttons),
         disable_web_page_preview=True
     )
@@ -738,114 +754,125 @@ async def imdb_status_select(client, cq):
         )
     await cq.answer()
 
-# Show Binged movie detail
-@Client.on_callback_query(filters.regex(r"^binged_detail_(\d+)$"))
+# Show Ottplay movie detail (replaces binged_detail)
+@Client.on_callback_query(filters.regex(r"^binged_detail_(.+)$"))
 async def binged_detail(client, cq):
-    import re as regex_module
-    
     movie_id = cq.data.split("_")[-1]
     user_id = cq.from_user.id
     
-    # Fetch detailed movie data
-    try:
-        resp = requests.get(f"{DETAIL_URL}/{movie_id}", headers=HEADERS, timeout=10)
-        resp.raise_for_status()
-        movie_data = resp.json()
-    except requests.RequestException as e:
-        return await cq.answer(f"Failed to fetch movie details: {e}", show_alert=True)
+    # Retrieve movie data from temp storage
+    movie = temp.BINGED_RESULTS.get(user_id, {}).get(movie_id)
     
-    if not movie_data or "ID" not in movie_data:
-        return await cq.answer("Movie data not found.", show_alert=True)
-        
-    # --- TMDB INTEGRATION START ---
-    imdb_id = movie_data.get("imdb_id")
-    tmdb_image = None
-    
-    if imdb_id:
-        print(f"Searching TMDB for IMDB ID: {imdb_id}")
-        tmdb_results = find_tmdb_id(imdb_id)
-        if tmdb_results:
-            tmdb_id = tmdb_results[0].get("id")
-            media_type = tmdb_results[0].get("media_type", "movie")
-            tmdb_details = get_tmdb_details(tmdb_id, media_type)
-            
-            if tmdb_details and tmdb_details.get("image"):
-                tmdb_image = tmdb_details.get("image")
-                print(f"Found TMDB Image via ID: {tmdb_image}")
+    if not movie:
+         return await cq.answer("Movie details not found (cache expired). Search again.", show_alert=True)
 
-            if tmdb_details and tmdb_details.get("image"):
-                tmdb_image = tmdb_details.get("image")
-                print(f"Found TMDB Image via ID: {tmdb_image}")
+    await cq.answer("Fetching details...")
 
-    # Fallback: Search by Title if no IMDB ID or no image found
-    if not tmdb_image:
-        title_search = clean_text(movie_data.get("post_title", ""))
-        year_search = movie_data.get("release_year")
+    # Now build the message and image (Same logic as today.py)
+    
+    title = clean_text(movie.get("name", ""))
+    year = movie.get("release_year")
+    content_type = movie.get("content_type", "movie")
+    media_type = "movie" if content_type == "movie" else "tv"
+    type_str = "Movie" if media_type == "movie" else "Series"
+    lang = movie.get("primary_language", {}).get("logo_text", "Unknown")
+    genres = [g.get("name") for g in movie.get("genres", [])]
+    genre_str = ", ".join(genres) if genres else "N/A"
+    
+    # Providers
+    providers_data = movie.get("where_to_watch", [])
+    provider_logos = []
+    platform_links = []
+    
+    for p in providers_data:
+        prov = p.get("provider", {})
+        p_name = prov.get("name")
+        logo = prov.get("logo_url") or prov.get("icon_url")
+        if logo:
+            provider_logos.append(logo)
         
-        # Determine media type from categories or title
-        media_type_hint = "movie"
-        if "categories" in movie_data:
-             cats = str(movie_data["categories"]).lower()
-             if "tv" in cats or "series" in cats or "show" in cats:
-                 media_type_hint = "tv"
-        
-        # Also check title pattern for S01 etc
-        if re.search(r'S\d+', title_search, re.IGNORECASE):
-             media_type_hint = "tv"
-
-        if title_search:
-            print(f"Searching TMDB Advanced: {title_search} ({year_search}) Type: {media_type_hint}")
-            
-            # Use specific year search
-            tmdb_results = search_tmdb_advanced(title_search, year=year_search, media_type=media_type_hint)
-            
-            if tmdb_results:
-                # Use first result
-                tmdb_id = tmdb_results[0].get("id")
-                media_type = tmdb_results[0].get("media_type", "movie")
-                tmdb_details = get_tmdb_details(tmdb_id, media_type)
-                
-                if tmdb_details and tmdb_details.get("image"):
-                    tmdb_image = tmdb_details.get("image")
-                    print(f"Found TMDB Image via Advanced Search: {tmdb_image}")
+        p_link = p.get("movie_url") or p.get("show_url") or prov.get("seourl")
+        if p_link:
+             if not p_link.startswith("http"):
+                 p_link = f"https://www.ottplay.com/{p_link}"
+             platform_links.append(f"[{p_name}]({p_link})")
+        elif p_name:
+             platform_links.append(p_name)
+    provider_str = ", ".join(platform_links[:3]) if platform_links else "N/A"
     
-    # Use TMDB image if available, otherwise fallback to Binged image
-    final_image = tmdb_image if tmdb_image else movie_data.get("image", "")
-    movie_data["image"] = final_image # Update the movie data with the new image
-    # --- TMDB INTEGRATION END ---
-    
-    # Store full movie data
-    temp.BINGED_RESULTS[user_id] = temp.BINGED_RESULTS.get(user_id, {})
-    temp.BINGED_RESULTS[user_id][movie_id] = movie_data
-    
-    title = clean_text(movie_data.get("post_title", "Unknown"))
-    safe_title = regex_module.sub(r'[^a-zA-Z0-9]', '_', title)
-    year = movie_data.get("release_year", "N/A")
-    
-    # Ask admin to choose status
-    buttons = [
-        [
-            InlineKeyboardButton("✅ Released", callback_data=f"binged_status_released_{movie_id}"),
-            InlineKeyboardButton("🔔 Upcoming", callback_data=f"binged_status_upcoming_{movie_id}")
-        ],
-        [InlineKeyboardButton("❌ Close", callback_data="close_message")]
-    ]
-    
-    preview_msg = f"**{title}** ({year})\n\nChoose movie status:"
-    
-    if final_image:
-        await cq.message.reply_photo(
-            photo=final_image,
-            caption=preview_msg,
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
+    api_date = movie.get("release_date")
+    if api_date:
+        try:
+            r_date = datetime.fromisoformat(api_date.replace("Z", "+00:00")).strftime("%d-%m-%Y")
+        except:
+            r_date = api_date
     else:
-        await cq.message.reply_text(
-            preview_msg,
-            reply_markup=InlineKeyboardMarkup(buttons),
-            disable_web_page_preview=True
-        )
+        r_date = "N/A"
+
+    certs = [c.get("certification") for c in movie.get("certifications", [])]
+    cert_str = "/".join(certs) if certs else "N/A"
+    posters = movie.get("posters", [])
+    ottplay_poster = posters[0] if posters else None
+    
+    # TMDB Helper
+    tmdb_backdrop = None
+    tmdb_poster = None
+    tmdb_rating = None
+    tmdb_plot = None
+    cast_str = "N/A"
+    
+    tmdb_results = search_tmdb_advanced(title, year=year, media_type=media_type)
+    if tmdb_results:
+        tmdb_id = tmdb_results[0].get("id")
+        tmdb_details = get_tmdb_details(tmdb_id, media_type)
+        if tmdb_details:
+            tmdb_img = tmdb_details.get("image")
+            if tmdb_img: tmdb_backdrop = tmdb_img
+            t_orig = tmdb_details.get("original_data", {})
+            p_path = t_orig.get("poster_path")
+            if p_path: tmdb_poster = f"https://image.tmdb.org/t/p/original{p_path}"
+            tmdb_rating = tmdb_details.get("rating")
+            tmdb_plot = tmdb_details.get("plot")
+            cast = tmdb_details.get("cast", [])
+            cast_str = ", ".join(cast[:5]) if cast else "N/A"
+            
+    rating = tmdb_rating if tmdb_rating else (str(movie.get("ottplay_rating")) + "/10" if movie.get("ottplay_rating") else "N/A")
+    plot = tmdb_plot if tmdb_plot else "No description available."
+    safe_title = format_search_title(title, year)
+    lang_tag = f"#{lang.replace(' ', '')}"
+    
+    msg = f"✅ **{title}** · {year} · `{type_str}`\n\n"
+    msg += f"**>🉑 {lang_tag}\n"
+    msg += f">🎭 {genre_str} · 📺 {provider_str}\n"
+    msg += f">®️ {cert_str} · ⭐ {rating}\n"
+    msg += f">📅 {r_date}\n"
+    msg += f">👥 {cast_str}\n"
+    msg += f">\n"
+    msg += f">__Plot:__\n"
+    msg += f">{plot}**\n"
+    msg += f" **@MooviDex** "
+    
+    backdrop_url = tmdb_backdrop if tmdb_backdrop else ottplay_poster
+    poster_url = ottplay_poster if ottplay_poster else tmdb_poster
+    
+    final_image_io = None
+    if backdrop_url and poster_url:
+        await cq.answer("Generating image...", cache_time=0)
+        final_image_io = await generate_status_image(backdrop_url, poster_url, provider_logos, title, year, rating, genre_str, plot)
+    
+    buttons = [[InlineKeyboardButton(f"🔍 Search: {title}", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]]
+    buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
+    
+    if final_image_io:
+        await cq.message.reply_photo(photo=final_image_io, caption=msg, reply_markup=InlineKeyboardMarkup(buttons))
+    elif backdrop_url:
+        await cq.message.reply_photo(photo=backdrop_url, caption=msg, reply_markup=InlineKeyboardMarkup(buttons))
+    else:
+        await cq.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(buttons), disable_web_page_preview=True)
+    
     await cq.answer()
+            
+
 
 # Handle Binged movie status selection
 @Client.on_callback_query(filters.regex(r"^binged_status_(released|upcoming)_(\d+)$"))
