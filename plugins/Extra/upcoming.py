@@ -288,6 +288,106 @@ async def upcoming_detail(client, cq):
         await cq.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(buttons), disable_web_page_preview=True)
     await cq.answer()
 
+
+async def process_upcoming_data(movie, user_id):
+    title = clean_text(movie.get("name", ""))
+    year = movie.get("release_year")
+    content_type = movie.get("content_type", "movie")
+    media_type = "movie" if content_type == "movie" else "tv"
+    type_str = "Movie" if media_type == "movie" else "Series"
+    lang = movie.get("primary_language", {}).get("logo_text", "Unknown")
+    genres = [g.get("name") for g in movie.get("genres", [])]
+    genre_str = ", ".join(genres) if genres else "N/A"
+    
+    providers_data = movie.get("where_to_watch", [])
+    provider_logos = []
+    platform_links = []
+    
+    for p in providers_data:
+        prov = p.get("provider", {})
+        p_name = prov.get("name")
+        logo = prov.get("logo_url") or prov.get("icon_url")
+        if logo: provider_logos.append(logo)
+        p_link = p.get("movie_url") or p.get("show_url")
+        
+        if not p_link and p_name and p.get("partner_title_id"):
+            ptid = p.get("partner_title_id")
+            if "netflix" in p_name.lower():
+                 p_link = f"https://www.netflix.com/title/{ptid}"
+            elif "zee5" in p_name.lower():
+                 p_link = f"https://www.zee5.com/global/content/{ptid}"
+            elif "sonyliv" in p_name.lower():
+                 p_link = f"https://www.sonyliv.com/shows/{ptid}"
+
+        if p_link:
+             if p_link.startswith("http"): pass
+             elif p_link.startswith("www."): p_link = f"https://{p_link}"
+             else: p_link = None
+        
+        if p_link: platform_links.append(f"[{p_name}]({p_link})")
+        elif p_name: platform_links.append(p_name)
+    provider_str = ", ".join(platform_links[:3]) if platform_links else "N/A"
+    
+    api_date = movie.get("release_date")
+    if not api_date and movie.get("where_to_watch"):
+        wht = movie.get("where_to_watch")[0]
+        api_date = wht.get("available_from")
+    
+    if api_date:
+        try: r_date = datetime.fromisoformat(api_date.replace("Z", "+00:00")).strftime("%d-%m-%Y")
+        except: r_date = api_date
+    else: r_date = "N/A"
+
+    certs = [c.get("certification") for c in movie.get("certifications", [])]
+    cert_str = "/".join(certs) if certs else "N/A"
+    posters = movie.get("posters", [])
+    ottplay_poster = posters[0] if posters else None
+    
+    tmdb_backdrop, tmdb_poster, tmdb_rating, tmdb_plot, tmdb_id = None, None, None, None, None
+    cast_str = "N/A"
+    trailer_url = None
+    
+    tmdb_results = search_tmdb_advanced(title, year=year, media_type=media_type)
+    if tmdb_results:
+        tmdb_id = tmdb_results[0].get("id")
+        tmdb_details = get_tmdb_details(tmdb_id, media_type)
+        if tmdb_details:
+            tmdb_img = tmdb_details.get("image")
+            if tmdb_img: tmdb_backdrop = tmdb_img
+            t_orig = tmdb_details.get("original_data", {})
+            p_path = t_orig.get("poster_path")
+            if p_path: tmdb_poster = f"https://image.tmdb.org/t/p/original{p_path}"
+            tmdb_rating = tmdb_details.get("rating")
+            tmdb_plot = tmdb_details.get("plot")
+            cast = tmdb_details.get("cast", [])
+            cast_str = ", ".join(cast[:5]) if cast else "N/A"
+            videos = tmdb_details.get("videos", [])
+            if videos and videos[0].get("url"):
+                 trailer_url = f"https://www.youtube.com/watch?v={videos[0].get('url')}"
+
+    rating = tmdb_rating if tmdb_rating else (str(movie.get("ottplay_rating")) + "/10" if movie.get("ottplay_rating") else "N/A")
+    plot = tmdb_plot if tmdb_plot else "No description available."
+    safe_title = format_search_title(title, year)
+    lang_tag = f"#{lang.replace(' ', '')}"
+    
+    # Cache
+    movie_id = str(movie.get("_id"))
+    if not hasattr(temp, "OTTPLAY_RESULTS"): temp.OTTPLAY_RESULTS = {}
+    if user_id not in temp.OTTPLAY_RESULTS: temp.OTTPLAY_RESULTS[user_id] = {}
+    
+    temp.OTTPLAY_RESULTS[user_id][movie_id] = {
+        "title": title, "year": year, "type_str": type_str, "lang_tag": lang_tag,
+        "genre_str": genre_str, "provider_str": provider_str, "cert_str": cert_str,
+        "rating": rating, "r_date": r_date, "cast_str": cast_str, "plot": plot,
+        "backdrop_url": tmdb_backdrop if tmdb_backdrop else ottplay_poster,
+        "poster_url": ottplay_poster if ottplay_poster else tmdb_poster,
+        "provider_logos": provider_logos,
+        "safe_title": safe_title, "movie_id": movie_id,
+        "trailer_url": trailer_url, "tmdb_id": tmdb_id,
+        "is_upcoming": True
+    }
+    return temp.OTTPLAY_RESULTS[user_id][movie_id]
+
 @Client.on_callback_query(filters.regex(r"^upcoming_post_(.+)$"))
 async def upcoming_post(client, cq):
     movie_id = cq.data.split("_")[-1]
@@ -298,7 +398,13 @@ async def upcoming_post(client, cq):
         
     data = temp.OTTPLAY_RESULTS.get(user_id, {}).get(movie_id)
     if not data:
-        return await cq.answer("Movie data expired. Please search again.", show_alert=True)
+         await cq.answer("♻️ Session expired. Refetching...", cache_time=0)
+         movies = await fetch_ottplay_upcoming()
+         movie = next((m for m in movies if str(m.get("_id")) == movie_id), None)
+         if movie:
+             data = await process_upcoming_data(movie, user_id)
+         else:
+             return await cq.answer("Movie data expired/not found.", show_alert=True)
     
     await cq.answer("Posting...", cache_time=0)
     
@@ -377,8 +483,17 @@ async def upcoming_edit_post(client, cq):
     
     if user_id not in ADMIN_IDS:
         return await cq.answer("🚫 Authorized for Admins only!", show_alert=True)
+
+    data = temp.OTTPLAY_RESULTS.get(user_id, {}).get(movie_id)
+    if not data:
+         # Try Re-fetch
+         movies = await fetch_ottplay_upcoming()
+         movie = next((m for m in movies if str(m.get("_id")) == movie_id), None)
+         if movie:
+             data = await process_upcoming_data(movie, user_id)
+         else:
+             return await cq.answer("❌ Error: Movie data not found.", show_alert=True)
         
-    # Use 'ottplay' as source but data has is_upcoming flag which we check in binged.py
     temp.EDITING_POST[user_id] = {"movie_id": movie_id, "source": "ottplay"}
     await cq.message.reply_text("✏️ Send the **new search keyword** or **full URL** to use in the search button.", quote=True)
     await cq.answer()

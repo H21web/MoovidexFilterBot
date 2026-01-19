@@ -2169,8 +2169,19 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
             user = await client.get_users(from_user)
             reply_markup = InlineKeyboardMarkup(btn)
-            new_text = query.message.text.replace("#Pending", "#Unavailable")
-            if "#Unavailable" not in new_text: new_text += "\n\n#Unavailable"
+            new_text = f"""
+<b>♻️ Request Status Update</b>
+━━━━━━━━━━━━━━━━━━
+<b>👤 User:</b> {user.mention}
+<b>🆔 ID:</b> <code>{from_user}</code>
+
+<b>🎞️ Title:</b>
+<blockquote expandable>{req.get('content') if req else 'Your Request'}</blockquote>
+
+<b>🔰 Status:</b> #Unavailable
+<b>📅 Date:</b> {req.get('request_date', datetime.datetime.now()).strftime("%d %B %Y") if req else 'N/A'}
+━━━━━━━━━━━━━━━━━━
+"""
             
             await query.message.edit_text(new_text)
             await query.message.edit_reply_markup(reply_markup)
@@ -2203,8 +2214,19 @@ async def cb_handler(client: Client, query: CallbackQuery):
             
             user = await client.get_users(from_user)
             reply_markup = InlineKeyboardMarkup(btn)
-            new_text = query.message.text.replace("#Pending", "#Uploaded")
-            if "#Uploaded" not in new_text: new_text += "\n\n#Uploaded"
+            new_text = f"""
+<b>♻️ Request Status Update</b>
+━━━━━━━━━━━━━━━━━━
+<b>👤 User:</b> {user.mention}
+<b>🆔 ID:</b> <code>{from_user}</code>
+
+<b>🎞️ Title:</b>
+<blockquote expandable>{req.get('content')}</blockquote>
+
+<b>🔰 Status:</b> #Uploaded
+<b>📅 Date:</b> {req.get('request_date', datetime.datetime.now()).strftime("%d %B %Y")}
+━━━━━━━━━━━━━━━━━━
+"""
             
             await query.message.edit_text(new_text)
             await query.message.edit_reply_markup(reply_markup)
@@ -2241,8 +2263,19 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
             user = await client.get_users(from_user)
             reply_markup = InlineKeyboardMarkup(btn)
-            new_text = query.message.text.replace("#Pending", "#Available")
-            if "#Available" not in new_text: new_text += "\n\n#Available"
+            new_text = f"""
+<b>♻️ Request Status Update</b>
+━━━━━━━━━━━━━━━━━━
+<b>👤 User:</b> {user.mention}
+<b>🆔 ID:</b> <code>{from_user}</code>
+
+<b>🎞️ Title:</b>
+<blockquote expandable>{req.get('content') if req else 'Your Request'}</blockquote>
+
+<b>🔰 Status:</b> #Available
+<b>📅 Date:</b> {req.get('request_date', datetime.datetime.now()).strftime("%d %B %Y") if req else 'N/A'}
+━━━━━━━━━━━━━━━━━━
+"""
             
             await query.message.edit_text(new_text)
             await query.message.edit_reply_markup(reply_markup)

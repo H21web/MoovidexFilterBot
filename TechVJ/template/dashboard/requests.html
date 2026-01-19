@@ -2,44 +2,55 @@
 
 {% block content %}
 <style>
-    .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold; }
-    .status-pending { background-color: #ffc107; color: #333; }
-    .status-fulfilled { background-color: #4CAF50; color: white; }
-    .status-rejected { background-color: #f44336; color: white; }
+    .status-badge { padding: 5px 10px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .status-pending { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+    .status-fulfilled { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .status-rejected { background-color: #ffcccc; color: #cc0000; border: 1px solid #ffb3b3; } /* Brighter Red */
     
-    .action-btn { padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; margin-right: 5px; color: white; text-align: center; text-decoration: none; display: inline-block;}
-    .btn-uploaded { background-color: #2196F3; } /* Blue */
-    .btn-available { background-color: #4CAF50; } /* Green */
-    .btn-unavailable { background-color: #f44336; } /* Red */
-    .btn-delete { background-color: #666; }
+    .action-btn { padding: 6px 12px; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85rem; margin-right: 5px; color: white; text-align: center; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-weight: 500; transition: opacity 0.2s; }
+    .action-btn:hover { opacity: 0.9; }
+    .btn-uploaded { background-color: #0d6efd; } /* Bootstrap Primary Blue */
+    .btn-available { background-color: #198754; } /* Bootstrap Success Green */
+    .btn-unavailable { background-color: #dc3545; } /* Bootstrap Danger Red */
+    .btn-delete { background-color: #6c757d; } /* Bootstrap Secondary Grey */
+
+    /* Table Styles */
+    table { width: 100%; border-collapse: separate; border-spacing: 0; background: #2c2c2c; border-radius: 8px; overflow: hidden; }
+    th { background: #333; color: #fff; text-align: left; padding: 12px 15px; font-weight: 600; border-bottom: 2px solid #444; }
+    td { padding: 12px 15px; border-bottom: 1px solid #444; color: #e0e0e0; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover { background-color: #383838; }
 
     /* Modal */
-    .modal { display: none; position: fixed; z-index: 1001; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.7); }
-    .modal-content { background-color: #2c2c2c; margin: 10% auto; padding: 20px; border: 1px solid #444; width: 90%; max-width: 500px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
-    .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+    .modal { display: none; position: fixed; z-index: 1001; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.7); backdrop-filter: blur(2px); }
+    .modal-content { background-color: #2c2c2c; margin: 10% auto; padding: 25px; border: 1px solid #444; width: 90%; max-width: 500px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+    .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; line-height: 20px;}
     .close:hover { color: #fff; }
     
-    .form-group { margin-bottom: 15px; }
-    .form-group label { display: block; margin-bottom: 5px; }
-    .form-group input, .form-group textarea { width: 100%; padding: 8px; box-sizing: border-box; background: #333; border: 1px solid #555; color: white; border-radius: 4px; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; margin-bottom: 8px; font-weight: 500; color: #ccc;}
+    .form-group input, .form-group textarea { width: 100%; padding: 10px; box-sizing: border-box; background: #3a3a3a; border: 1px solid #555; color: white; border-radius: 6px; font-family: inherit; }
+    .form-group input:focus, .form-group textarea:focus { border-color: #2196F3; outline: none; }
     
-    .filter-bar { margin-bottom: 20px; }
-    .filter-bar a { margin-right: 15px; color: #aaa; text-decoration: none; padding-bottom: 5px; border-bottom: 2px solid transparent; }
-    .filter-bar a.active { color: #4CAF50; border-bottom: 2px solid #4CAF50; }
-    .filter-bar a:hover { color: white; }
+    .filter-bar { margin-bottom: 25px; display: flex; gap: 15px; border-bottom: 1px solid #444; padding-bottom: 1px; }
+    .filter-bar a { color: #888; text-decoration: none; padding-bottom: 10px; border-bottom: 3px solid transparent; font-weight: 500; transition: all 0.2s; }
+    .filter-bar a.active { color: #fff; border-bottom: 3px solid #2196F3; }
+    .filter-bar a:hover { color: #ddd; }
 </style>
 
-<h2>📩 Request Management</h2>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; display: flex; align-items: center; gap: 10px;">📩 <span style="font-weight: 300;">Request Management</span></h2>
+</div>
 
 {% if message %}
-<div style="background: #4CAF50; color: white; padding: 10px; margin-bottom: 15px; border-radius: 4px;">
-    {{ message }}
+<div style="background: linear-gradient(135deg, #198754, #20c997); color: white; padding: 12px 15px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 10px;">
+    <span>✓</span> {{ message }}
 </div>
 {% endif %}
 
-<div class="card">
+<div class="card" style="padding: 0; background: transparent; box-shadow: none;">
     <div class="filter-bar">
-        <a href="/admin/requests?status=all" class="{% if status_filter == 'all' %}active{% endif %}">All</a>
+        <a href="/admin/requests?status=all" class="{% if status_filter == 'all' %}active{% endif %}">All Requests</a>
         <a href="/admin/requests?status=pending" class="{% if status_filter == 'pending' %}active{% endif %}">Pending</a>
         <a href="/admin/requests?status=fulfilled" class="{% if status_filter == 'fulfilled' %}active{% endif %}">Fulfilled</a>
         <a href="/admin/requests?status=rejected" class="{% if status_filter == 'rejected' %}active{% endif %}">Rejected</a>
@@ -49,22 +60,34 @@
         <table>
             <thead>
                 <tr>
-                    <th>Date</th>
-                    <th>User</th>
-                    <th>Request</th>
-                    <th>Status</th>
-                    <th>Actions</th>
+                    <th style="width: 15%;">Date</th>
+                    <th style="width: 20%;">User</th>
+                    <th>Request Content</th>
+                    <th style="width: 10%;">Status</th>
+                    <th style="width: 25%;">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for req in requests %}
                 <tr>
-                    <td>{{ req.request_date.strftime('%Y-%m-%d %H:%M') }}</td>
                     <td>
-                        {{ req.user_name }} <br>
-                        <small style="color: #888;">ID: {{ req.user_id }}</small>
+                        <div style="color: #fff; font-weight: 500;">{{ req.request_date.strftime('%Y-%m-%d') }}</div>
+                        <small style="color: #888;">{{ req.request_date.strftime('%H:%M') }}</small>
                     </td>
-                    <td style="max-width: 300px; white-space: normal;">{{ req.content }}</td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="width: 30px; height: 30px; background: #444; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff;">
+                                {{ req.user_name[0] | upper }}
+                            </div>
+                            <div>
+                                <div style="font-weight: 500;">{{ req.user_name }}</div>
+                                <small style="color: #888; font-family: monospace;">{{ req.user_id }}</small>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="white-space: normal;">
+                        <div style="font-weight: 500; color: #fff;">{{ req.content }}</div>
+                    </td>
                     <td>
                         <span class="status-badge status-{{ req.status }}">
                             {{ req.status|title }}
@@ -72,39 +95,37 @@
                     </td>
                     <td>
                         {% if req.status == 'pending' %}
-                    <td>
-                        {% if req.status == 'pending' %}
-                        <!-- New Action Buttons with data-attributes for safety -->
-                        <button class="action-btn btn-uploaded" 
-                            data-id="{{ req._id }}" 
-                            data-content="{{ req.content|e }}" 
-                            onclick="openModal('uploaded', this.dataset.id, this.dataset.content)">
-                            ✅ Uploaded
-                        </button>
-                        <button class="action-btn btn-available" 
-                            data-id="{{ req._id }}" 
-                            data-content="{{ req.content|e }}" 
-                            onclick="openModal('available', this.dataset.id, this.dataset.content)">
-                            📂 Available
-                        </button>
-                        <button class="action-btn btn-unavailable" 
-                            data-id="{{ req._id }}" 
-                            data-content="{{ req.content|e }}" 
-                            onclick="openModal('unavailable', this.dataset.id, this.dataset.content)">
-                            ❌ Unavailable
-                        </button>
+                        <!-- New Action Buttons -->
+                        <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                            <button class="action-btn btn-uploaded" 
+                                data-id="{{ req._id }}" 
+                                data-content="{{ req.content|e }}" 
+                                title="Mark Uploaded"
+                                onclick="openModal('uploaded', this.dataset.id, this.dataset.content)">
+                                ✅ Upload
+                            </button>
+                            <button class="action-btn btn-available" 
+                                data-id="{{ req._id }}" 
+                                data-content="{{ req.content|e }}" 
+                                title="Mark Available"
+                                onclick="openModal('available', this.dataset.id, this.dataset.content)">
+                                📂 Avail
+                            </button>
+                            <button class="action-btn btn-unavailable" 
+                                data-id="{{ req._id }}" 
+                                data-content="{{ req.content|e }}" 
+                                title="Mark Unavailable"
+                                onclick="openModal('unavailable', this.dataset.id, this.dataset.content)">
+                                ❌ Unavail
+                            </button>
+                        </div>
                         {% else %}
-                        <form action="/admin/requests/action" method="POST" style="display:inline;" onsubmit="return confirm('Delete this record?');">
+                        <form action="/admin/requests/action" method="POST" style="display:inline;" onsubmit="return confirm('Permanently delete this request record?');">
                             <input type="hidden" name="request_id" value="{{ req._id }}">
                             <input type="hidden" name="action" value="delete">
-                            <button type="submit" class="action-btn btn-delete">🗑 Delete</button>
-                        </form>
-                        {% endif %}
-                    </td>
-                        <form action="/admin/requests/action" method="POST" style="display:inline;" onsubmit="return confirm('Delete this record?');">
-                            <input type="hidden" name="request_id" value="{{ req._id }}">
-                            <input type="hidden" name="action" value="delete">
-                            <button type="submit" class="action-btn btn-delete">🗑 Delete</button>
+                            <button type="submit" class="action-btn btn-delete">
+                                🗑 Delete
+                            </button>
                         </form>
                         {% endif %}
                     </td>

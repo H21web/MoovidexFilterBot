@@ -1003,18 +1003,19 @@ async def process_request(bot, message, data=None):
 
     # 1. Construct Premium Message for Request Channel
     request_msg = f"""
-<b>📩 New Request Recieved</b>
-
-<b>👤 Requester:</b> {mention}
+<b>🔔 New Request Submitted</b>
+━━━━━━━━━━━━━━━━━━
+<b>👤 User:</b> {mention}
 <b>🆔 ID:</b> <code>{reporter_id}</code>
 
-<b>🎬 Requested Content:</b>
+<b>🎞️ Title:</b>
 <blockquote expandable>{content}</blockquote>
 
-<b>⏳ Status:</b> #Pending
+<b>🔰 Status:</b> #Pending
 <b>📅 Date:</b> {datetime.datetime.now().strftime("%d %B %Y")}
+━━━━━━━━━━━━━━━━━━
 """
-    
+
     # 2. Send to Request Channel
     try:
         if REQST_CHANNEL:
@@ -1044,7 +1045,11 @@ async def process_request(bot, message, data=None):
         text = f"<b>✅ Request Submitted Successfully!</b>\n\n<b>Requested:</b> {content}\n\n<i>We will upload it as soon as possible. You will be notified!</i>"
         buttons = []
         if link:
-            buttons.append([InlineKeyboardButton('📢 Join Request Channel', url=link.invite_link)])
+            # Check if chat id is private channel (starts with -100) or public username
+            chat_id_str = str(REQST_CHANNEL)
+            invite_link = link.invite_link
+            
+            buttons.append([InlineKeyboardButton('📢 Join Request Channel', url=invite_link)])
             
         await message.reply_text(
             text, 

@@ -464,22 +464,35 @@ async def requests_action_handler(request):
             user_mention = f"<a href='tg://user?id={req['user_id']}'>{req['user_name']}</a>"
             
             updated_text = f"""
-<b>📩 Request Update</b>
-
-<b>👤 Requester:</b> {user_mention}
+<b>♻️ Request Status Update</b>
+━━━━━━━━━━━━━━━━━━
+<b>👤 User:</b> {user_mention}
 <b>🆔 ID:</b> <code>{req['user_id']}</code>
 
-<b>🎬 Requested Content:</b>
+<b>🎞️ Title:</b>
 <blockquote expandable>{original_content}</blockquote>
 
-<b>⏳ Status:</b> #{action.capitalize()}
+<b>🔰 Status:</b> #{action.capitalize()}
 <b>📅 Date:</b> {req['request_date'].strftime("%d %B %Y")}
+━━━━━━━━━━━━━━━━━━
 """
+            # Define Button for Channel Message
+            action_btn = []
+            if action == 'uploaded':
+                action_btn = [[InlineKeyboardButton("✅ Uᴘʟᴏᴀᴅᴇᴅ ✅", callback_data=f"upalert#{req['user_id']}")]]
+            elif action == 'available':
+                action_btn = [[InlineKeyboardButton("✅ Aᴠᴀɪʟᴀʙʟᴇ ✅", callback_data=f"upalert#{req['user_id']}")]]
+            elif action == 'unavailable':
+                action_btn = [[InlineKeyboardButton("⚠️ Uɴᴀᴠᴀɪʟᴀʙʟᴇ ⚠️", callback_data=f"unalert#{req['user_id']}")]]
+            
+            reply_markup_obj = InlineKeyboardMarkup(action_btn) if action_btn else None
+
             await TechVJBot.edit_message_text(
                 chat_id=REQST_CHANNEL,
                 message_id=req['message_id'],
                 text=updated_text,
-                disable_web_page_preview=True
+                disable_web_page_preview=True,
+                reply_markup=reply_markup_obj
             )
         except Exception as e:
             msg_result += f" (Channel Sync Failed: {e})"
