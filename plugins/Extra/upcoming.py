@@ -65,10 +65,11 @@ async def fetch_ottplay_upcoming():
     
     try:
         data = await fetch_url(base_url)
+        # Parse based on User provided structure (v4.7/web/new-release)
+        if data and 'result' in data:
+            return data['result']
         if data and 'data' in data:
             return data['data']
-        # Fallback if structure is different?
-        if data and 'results' in data: return data['results']
     except Exception as e:
         print(f"Upcoming Fetch Error: {e}")
             

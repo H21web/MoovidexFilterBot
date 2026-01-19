@@ -796,19 +796,52 @@ async def binged_detail(client, cq):
     
     tmdb_plot, tmdb_rating, genres, cast_str = "No description available.", "N/A", [], "N/A"
     tmdb_backdrop, tmdb_poster = None, None
-    lang_tag = "#English" # Default
+    lang_tag = "#Unknown"
 
     if tmdb_id:
-         tmdb_details = get_tmdb_details(tmdb_id, media_type)
-         if tmdb_details:
-             tmdb_plot = tmdb_details.get("plot", tmdb_plot)
-             tmdb_rating = tmdb_details.get("rating", tmdb_rating)
-             genres = tmdb_details.get("genres", [])
-             cast = tmdb_details.get("cast", [])
-             cast_str = ", ".join(cast[:5]) if cast else "N/A"
-             
-             # Fallback images if JW missing
-             if not jw_backdrop: jw_backdrop = tmdb_details.get("image")
+        tmdb_details = get_tmdb_details(tmdb_id, media_type)
+    else:
+        # Search match
+        tmdb_results = search_tmdb_advanced(title, year=year, media_type=media_type)
+        if tmdb_results:
+             tmdb_id = tmdb_results[0].get("id")
+             tmdb_details = get_tmdb_details(tmdb_id, media_type)
+        else:
+             tmdb_details = None
+
+    if tmdb_details:
+        tmdb_plot = tmdb_details.get("plot")
+        tmdb_rating = tmdb_details.get("rating")
+        genres = tmdb_details.get("genres", [])
+        cast = tmdb_details.get("cast", [])
+        cast_str = ", ".join(cast[:5]) if cast else "N/A"
+        
+        # Language Logic
+        t_orig = tmdb_details.get("original_data", {})
+        spoken = t_orig.get("spoken_languages", [])
+        if spoken:
+             langs = [l.get("english_name") for l in spoken]
+             # Filter duplicates and limit
+             seen_langs = set()
+             final_langs = []
+             for l in langs:
+                 if l not in seen_langs:
+                     final_langs.append(l)
+                     seen_langs.add(l)
+             lang_tag = " ".join([f"#{l.replace(' ', '')}" for l in final_langs[:3]])
+        else:
+             # Fallback to original language code if no spoken info
+             ol = t_orig.get("original_language", "en")
+             lang_map = {"en": "English", "hi": "Hindi", "ta": "Tamil", "te": "Telugu", "ml": "Malayalam", "kn": "Kannada"}
+             l_name = lang_map.get(ol, ol)
+             lang_tag = f"#{l_name}"
+
+        # Image Logic
+        tmdb_img = tmdb_details.get("image")
+        if tmdb_img: tmdb_backdrop = tmdb_img
+        
+        p_path = t_orig.get("poster_path")
+        if p_path: tmdb_poster = f"https://image.tmdb.org/t/p/original{p_path}"
              
     genre_str = ", ".join(genres) if genres else "N/A"
     
