@@ -139,76 +139,28 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
                 plot = str(plot).replace(k, v)
                 title = str(title).replace(k, v)
 
-        # Helper for wrapping text based on pixel width
-        def wrap_text_pixel(draw, text, font, max_width):
-            import textwrap
-            avg_char_w = draw.textlength("a", font=font)
-            if avg_char_w <= 0: avg_char_w = 10
-            
-            approx_chars = int(max_width / avg_char_w)
-            lines = textwrap.wrap(str(text), width=approx_chars)
-            return lines
-
-        # Available width for text
-        max_text_width = width - text_start_x - 40 # 40px right padding
-        font_path = "arial.ttf" # Default we try to use
-
         # Draw Title
         current_y = 100
-        title_str = str(title)
+        draw.text((text_start_x, current_y), str(title), font=title_font, fill="white")
+        current_y += 80
         
-        # Use fixed size 60 for title
-        try:
-            title_font_final = ImageFont.truetype(font_path, 60)
-        except:
-            title_font_final = ImageFont.load_default()
-            
-        # Wrap title if it's too long
-        title_lines = wrap_text_pixel(draw, title_str, title_font_final, max_text_width)
-        for line in title_lines[:2]: # Limit title to 2 lines max
-            draw.text((text_start_x, current_y), line, font=title_font_final, fill="white")
-            current_y += 70
-
-        current_y += 10 # Spacer
-        
-        # Draw Meta
-        meta_text = f"{year}   |   {rating}"
-        try:
-            meta_font_final = ImageFont.truetype(font_path, 35)
-        except:
-             meta_font_final = ImageFont.load_default()
-             
-        draw.text((text_start_x, current_y), meta_text, font=meta_font_final, fill="#FFD700")
+        meta_text = f"{year}   |   Rat: {rating}"
+        draw.text((text_start_x, current_y), meta_text, font=meta_font, fill="#FFD700")
         current_y += 60
         
-        # Draw Genres
         if genres:
-             genre_str = str(genres)
-             try:
-                 genre_font_final = ImageFont.truetype(font_path, 30)
-             except:
-                 genre_font_final = ImageFont.load_default()
-                 
-             draw.text((text_start_x, current_y), genre_str, font=genre_font_final, fill="#A0A0A0")
+             draw.text((text_start_x, current_y), str(genres), font=genre_font, fill="#A0A0A0")
              current_y += 60
 
         # Divider
-        draw.line([(text_start_x, current_y), (text_start_x + min(300, max_text_width), current_y)], fill="white", width=2)
+        draw.line([(text_start_x, current_y), (text_start_x + 300, current_y)], fill="white", width=2)
         current_y += 40
 
-        # Draw Plot
+        import textwrap
         plot = str(plot) if plot else "No description available."
-        
-        # Use fixed size 30 for plot
-        try:
-             plot_font_final = ImageFont.truetype(font_path, 30)
-        except:
-             plot_font_final = ImageFont.load_default()
-             
-        plot_lines = wrap_text_pixel(draw, plot, plot_font_final, max_text_width)
-        
+        plot_lines = textwrap.wrap(plot, width=50)
         for line in plot_lines[:6]:
-            draw.text((text_start_x, current_y), line, font=plot_font_final, fill="white")
+            draw.text((text_start_x, current_y), line, font=plot_font, fill="white")
             current_y += 40
 
         # 4. Provider Logos
@@ -296,7 +248,6 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
                 draw.text((text_x, text_y), wm_text, font=wm_font, fill="white")
         except Exception as e:
             print(f"Error adding watermark: {e}")
-
                     
         out_io = BytesIO()
         canvas = canvas.convert("RGB")
