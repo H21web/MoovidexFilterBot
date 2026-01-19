@@ -11,6 +11,7 @@ from database.users_chats_db import db
 from database.stats_db import stats_db
 from database.config_db import mdb
 from database.ia_filterdb import get_search_results, col, sec_col
+from database.requests_db import requests_db
 from TechVJ.bot import TechVJBot
 from utils import get_size
 import asyncio
@@ -394,3 +395,81 @@ async def pm_user_send_handler(request):
     except Exception as e:
         error = f"Failed to send: {str(e)}"
         return web.Response(text=render_template("pm_user.html", error=error), content_type='text/html')
+
+@routes.get("/admin/requests")
+async def requests_page(request):
+    if not check_auth(request): return web.HTTPFound('/admin/login')
+    
+    try:
+        page = int(request.query.get('page', 1))
+    except ValueError:
+        page = 1
+        
+    status_filter = request.query.get('status')
+    if status_filter == 'all': status_filter = None
+    
+    limit = 20
+    requests_list = await requests_db.get_all_requests(page=page, limit=limit, status=status_filter)
+    total_count = await requests_db.get_total_requests_count(status=status_filter)
+    total_pages = (total_count + limit - 1) // limit
+    
+    message = request.query.get('message')
+    
+    return web.Response(text=render_template("requests.html", 
+                                             requests=requests_list,
+                                             page=page,
+                                             total_pages=total_pages,
+                                             status_filter=status_filter or 'all',
+                                             message=message), content_type='text/html')
+
+@routes.post("/admin/requests/action")
+async def requests_action_handler(request):
+    if not check_auth(request): return web.HTTPFound('/admin/login')
+    data = await request.post()
+    
+    request_id = data.get('request_id')
+    action = data.get('action')
+    notify = data.get('notify') == 'on'
+    message_text = data.get('message_text')
+    
+    req = await requests_db.get_request(request_id)
+    if not req:
+         return web.HTTPFound('/admin/requests?message=Request Not Found')
+    
+    if action == 'delete':
+        await requests_db.delete_request(request_id)
+        return web.HTTPFound('/admin/requests?message=Request Deleted')
+        
+    if action == 'fulfill':
+        await requests_db.update_request_status(request_id, 'fulfilled')
+        msg_result = "Status Updated."
+        if notify:
+            try:
+                txt = f"<b>✅ Your Request has been Fulfilled!</b>\n\n<b>🎬 {req.get('content')}</b>\n\n"
+                if message_text:
+                    txt += f"{message_text}\n\n"
+                txt += "<i>Thank you for your patience!</i>"
+                
+                await TechVJBot.send_message(chat_id=int(req['user_id']), text=txt)
+                msg_result += " User notified."
+            except Exception as e:
+                msg_result += f" Failed to notify: {e}"
+        return web.HTTPFound(f'/admin/requests?message={msg_result}')
+        
+    if action == 'reject':
+        await requests_db.update_request_status(request_id, 'rejected')
+        msg_result = "Request Rejected."
+        if notify:
+            try:
+                txt = f"<b>❌ Request Rejected</b>\n\n<b>🎬 {req.get('content')}</b>\n\n"
+                if message_text:
+                    txt += f"<b>Reason:</b> {message_text}\n\n"
+                txt += "<i>Please check our request rules.</i>"
+                
+                await TechVJBot.send_message(chat_id=int(req['user_id']), text=txt)
+                msg_result += " User notified."
+            except Exception as e:
+                msg_result += f" Failed to notify: {e}"
+        return web.HTTPFound(f'/admin/requests?message={msg_result}')
+
+    return web.HTTPFound('/admin/requests')

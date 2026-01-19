@@ -11,6 +11,7 @@ from plugins.pm_filter import doo
 from database.ia_filterdb import col, sec_col, get_file_details, unpack_new_file_id, get_bad_files
 from database.users_chats_db import db, delete_all_referal_users, get_referal_users_count, get_referal_all_users, referal_add_user
 from database.join_reqs import JoinReqs
+from database.requests_db import requests_db
 from info import STREAM_FILES_CHANNEL,OTHER_DB_URI, CLONE_MODE, OWNER_LNK, REACTIONS, CHANNELS, REQUEST_TO_JOIN_MODE, TRY_AGAIN_BTN, ADMINS, SHORTLINK_MODE, PREMIUM_AND_REFERAL_MODE, STREAM_MODE, AUTH_CHANNEL, REFERAL_PREMEIUM_TIME, REFERAL_COUNT, PAYMENT_TEXT, PAYMENT_QR, LOG_CHANNEL, PICS, BATCH_FILE_CAPTION, CUSTOM_FILE_CAPTION, PROTECT_CONTENT, CHNL_LNK, GRP_LNK, REQST_CHANNEL, SUPPORT_CHAT, MAX_B_TN, VERIFY, SHORTLINK_API, SHORTLINK_URL, TUTORIAL, VERIFY_TUTORIAL, IS_TUTORIAL, URL
 from utils import get_wish, get_settings, pub_is_subscribed, get_size, is_subscribed, save_group_settings, temp, verify_user, check_token, check_verification, get_token, get_shortlink, get_tutorial, get_seconds
 from database.connections_mdb import active_connection
@@ -978,14 +979,15 @@ async def process_request(bot, message, data=None):
     if REQST_CHANNEL is None:
         return  # Must add REQST_CHANNEL to use this feature
 
-    reporter = str(message.from_user.id)
+    reporter_id = message.from_user.id
+    reporter_name = message.from_user.first_name
     mention = message.from_user.mention
-    success = False
+    
     content = data if data else message.text 
     if message.reply_to_message:
         content = message.reply_to_message.text
 
-    # Remove specific keywords like #request, /request, etc.
+    # Remove specific keywords
     keywords = ["#request", "/request", "#Request", "/Request", "Request_"]
     for keyword in keywords:
         content = content.replace(keyword, "")
@@ -994,54 +996,65 @@ async def process_request(bot, message, data=None):
     content = content.replace("_", " ").strip()
 
     if len(content) < 3:
-        await message.reply_text("<b>You must type about your request [Minimum 3 Characters]. Requests can't be empty.</b>")
+        await message.reply_text("<b>⚠️ You must type the movie/series name.\n\nExample: <code>/request Iron Man</code></b>")
         return
 
+    # Check for recent pending requests to prevent spam (Optional, unimplemented for now)
+
+    # 1. Construct Premium Message for Request Channel
+    request_msg = f"""
+<b>📩 New Request Recieved</b>
+
+<b>👤 Requester:</b> {mention}
+<b>🆔 ID:</b> <code>{reporter_id}</code>
+
+<b>🎬 Requested Content:</b>
+<blockquote expandable>{content}</blockquote>
+
+<b>⏳ Status:</b> #Pending
+<b>📅 Date:</b> {datetime.datetime.now().strftime("%d %B %Y")}
+"""
+    
+    # 2. Send to Request Channel
     try:
-        btn = [
-            [InlineKeyboardButton('View Request', url=f"{message.link if not message.reply_to_message else message.reply_to_message.link}"),
-             InlineKeyboardButton('Show Options', callback_data=f'show_option#{reporter}')]
-        ]
-
         if REQST_CHANNEL:
-            reported_post = await bot.send_message(
+            btn = [
+                [InlineKeyboardButton('👀 View Request', url=f"{message.link if not message.reply_to_message else message.reply_to_message.link}"),
+                 InlineKeyboardButton('⚙️ Manage (Admin)', callback_data=f'show_option#{reporter_id}')]
+            ]
+            sent_msg = await bot.send_message(
                 chat_id=REQST_CHANNEL,
-                text=f"""
-<b><u> Request Details :</u></b>
-
-👤 <b>Reporter:</b> <code>{mention} ({reporter})</code>
-📝 <b>Message:</b> <code>{content}</code>
-<b>
-    """,
-                reply_markup=InlineKeyboardMarkup(btn)
+                text=request_msg,
+                reply_markup=InlineKeyboardMarkup(btn),
+                disable_web_page_preview=True
             )
-            success = True
-
+            report_msg_id = sent_msg.id
         else:
+            # Fallback to admins if no channel
+            report_msg_id = None
             for admin in ADMINS:
-                reported_post = await bot.send_message(
-                    chat_id=admin,
-                    text=f"""
-<b><u> Request Details :</u></b>
+                await bot.send_message(chat_id=admin, text=request_msg)
 
-👤 <b>Reporter:</b> <code>{mention} ({reporter})</code>
-📝 <b>Message:</b> <code>{content}</code>
-<b>
-    """,
-                    reply_markup=InlineKeyboardMarkup(btn)
-                )
-                success = True
+        # 3. Save to Database
+        await requests_db.add_request(reporter_id, reporter_name, content, message_id=report_msg_id)
+        
+        # 4. Reply to User
+        link = await bot.create_chat_invite_link(int(REQST_CHANNEL)) if REQST_CHANNEL else None
+        
+        text = f"<b>✅ Request Submitted Successfully!</b>\n\n<b>Requested:</b> {content}\n\n<i>We will upload it as soon as possible. You will be notified!</i>"
+        buttons = []
+        if link:
+            buttons.append([InlineKeyboardButton('📢 Join Request Channel', url=link.invite_link)])
+            
+        await message.reply_text(
+            text, 
+            reply_markup=InlineKeyboardMarkup(buttons) if buttons else None
+        )
 
     except Exception as e:
-        await message.reply_text(f"Error: {e}")
+        logger.error(f"Error processing request: {e}")
+        await message.reply_text("❌ An error occurred while submitting your request.")
 
-    if success:
-        link = await bot.create_chat_invite_link(int(REQST_CHANNEL))
-        btn = [
-            [InlineKeyboardButton('Join Channel', url=link.invite_link),
-             InlineKeyboardButton('View Request', url=f"{reported_post.link}")]
-        ]
-        await message.reply_text("<b>Your request has been added! Please wait for some time.\n\nJoin Channel First & View Request</b>", reply_markup=InlineKeyboardMarkup(btn))
 
 @Client.on_message((filters.command(["request", "Request"]) | filters.regex("#request") | filters.regex("#Request")) & (filters.group | filters.private))
 async def requests(bot, message):

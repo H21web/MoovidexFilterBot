@@ -37,26 +37,42 @@ async def fetch_ottplay_releases(from_date, to_date):
         return data.get('result', [])
     return []
 
-def is_strict_match(title, file_name):
+def is_smart_match(title, year, file_name):
     """
-    Strictly matches title against file_name ignoring:
-    - Case
-    - Punctuation, symbols, brackets (anything non-alphanumeric)
-    Returns True if file_name starts with the cleaned title.
+    Smart Match: 
+    - Normalizes title and filename.
+    - Matches Title with Regex Boundaries (handles 'The' prefix).
+    - Enforces Year check if year is provided.
     """
     if not title or not file_name:
         return False
         
-    def clean(s):
-        # Replace non-alphanumeric with space, then collapse spaces
-        s = re.sub(r'[^a-zA-Z0-9\s]', ' ', str(s))
-        return re.sub(r'\s+', ' ', s).strip().lower()
-        
-    t_clean = clean(title)
-    f_clean = clean(file_name)
+    file_name_norm = re.sub(r'[._\-\[\]\(\)]', ' ', file_name.lower())
+    file_name_norm = re.sub(r'\s+', ' ', file_name_norm).strip()
     
-    # Must start with title (e.g. "IronMan" matches "IronMan2024...")
-    return f_clean.startswith(t_clean)
+    title_norm = re.sub(r'[._\-\[\]\(\)]', ' ', title.lower())
+    title_norm = re.sub(r'\s+', ' ', title_norm).strip()
+    
+    # Check Year First (Crucial)
+    if year:
+        year_str = str(year)
+        if year_str not in file_name:
+            return False
+            
+    # Title Logic
+    # 1. Exact contain
+    if title_norm in file_name_norm:
+        return True
+        
+    # 2. Remove leading "the " or "a " from title
+    core_title = re.sub(r'^(the|a)\s+', '', title_norm)
+    if core_title and core_title != title_norm:
+        # Require word boundaries for core title
+        pattern = r'\b' + re.escape(core_title) + r'\b'
+        if re.search(pattern, file_name_norm):
+            return True
+            
+    return False
 
 async def process_and_post_movie(movie, check_db=True):
     """
@@ -89,7 +105,7 @@ async def process_and_post_movie(movie, check_db=True):
             for file in files:
                 # Use file_name if available, else name
                 fname = getattr(file, "file_name", None) or getattr(file, "name", "")
-                if is_strict_match(title, fname):
+                if is_smart_match(title, year, fname):
                     found_file = True
                     break
         
@@ -391,7 +407,8 @@ async def check_new_files_available(client, message):
             title = clean_text(movie.get("name", ""))
             
             # Strict match check
-            if is_strict_match(title, file_name):
+            year = movie.get("release_year")
+            if is_smart_match(title, year, file_name):
                 # Double check if already posted (duplicate prevention)
                 if await db.is_movie_posted(movie_id):
                     # Cleanup

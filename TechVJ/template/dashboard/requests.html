@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold; }
+    .status-pending { background-color: #ffc107; color: #333; }
+    .status-fulfilled { background-color: #4CAF50; color: white; }
+    .status-rejected { background-color: #f44336; color: white; }
+    
+    .action-btn { padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; margin-right: 5px; color: white; text-align: center; text-decoration: none; display: inline-block;}
+    .btn-fulfill { background-color: #4CAF50; }
+    .btn-reject { background-color: #f44336; }
+    .btn-delete { background-color: #666; }
+
+    /* Modal */
+    .modal { display: none; position: fixed; z-index: 1001; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.7); }
+    .modal-content { background-color: #2c2c2c; margin: 10% auto; padding: 20px; border: 1px solid #444; width: 90%; max-width: 500px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+    .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+    .close:hover { color: #fff; }
+    
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; margin-bottom: 5px; }
+    .form-group input, .form-group textarea { width: 100%; padding: 8px; box-sizing: border-box; background: #333; border: 1px solid #555; color: white; border-radius: 4px; }
+    
+    .filter-bar { margin-bottom: 20px; }
+    .filter-bar a { margin-right: 15px; color: #aaa; text-decoration: none; padding-bottom: 5px; border-bottom: 2px solid transparent; }
+    .filter-bar a.active { color: #4CAF50; border-bottom: 2px solid #4CAF50; }
+    .filter-bar a:hover { color: white; }
+</style>
+
+<h2>📩 Request Management</h2>
+
+{% if message %}
+<div style="background: #4CAF50; color: white; padding: 10px; margin-bottom: 15px; border-radius: 4px;">
+    {{ message }}
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="filter-bar">
+        <a href="/admin/requests?status=all" class="{% if status_filter == 'all' %}active{% endif %}">All</a>
+        <a href="/admin/requests?status=pending" class="{% if status_filter == 'pending' %}active{% endif %}">Pending</a>
+        <a href="/admin/requests?status=fulfilled" class="{% if status_filter == 'fulfilled' %}active{% endif %}">Fulfilled</a>
+        <a href="/admin/requests?status=rejected" class="{% if status_filter == 'rejected' %}active{% endif %}">Rejected</a>
+    </div>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>User</th>
+                    <th>Request</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for req in requests %}
+                <tr>
+                    <td>{{ req.request_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>
+                        {{ req.user_name }} <br>
+                        <small style="color: #888;">ID: {{ req.user_id }}</small>
+                    </td>
+                    <td style="max-width: 300px; white-space: normal;">{{ req.content }}</td>
+                    <td>
+                        <span class="status-badge status-{{ req.status }}">
+                            {{ req.status|title }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if req.status == 'pending' %}
+                        <button class="action-btn btn-fulfill" onclick="openModal('fulfill', '{{ req._id }}', '{{ req.content|replace("'", "\\'") }}')">✅ Fulfill</button>
+                        <button class="action-btn btn-reject" onclick="openModal('reject', '{{ req._id }}', '{{ req.content|replace("'", "\\'") }}')">❌ Reject</button>
+                        {% else %}
+                        <form action="/admin/requests/action" method="POST" style="display:inline;" onsubmit="return confirm('Delete this record?');">
+                            <input type="hidden" name="request_id" value="{{ req._id }}">
+                            <input type="hidden" name="action" value="delete">
+                            <button type="submit" class="action-btn btn-delete">🗑 Delete</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div style="margin-top: 15px; display: flex; justify-content: center; gap: 10px;">
+        {% if page > 1 %}
+        <a href="/admin/requests?page={{ page - 1 }}&status={{ status_filter }}" class="action-btn" style="background: #444;">&laquo; Prev</a>
+        {% endif %}
+        <span style="padding: 5px 10px;">Page {{ page }} of {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a href="/admin/requests?page={{ page + 1 }}&status={{ status_filter }}" class="action-btn" style="background: #444;">Next &raquo;</a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal -->
+<div id="actionModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <h3 id="modalTitle">Process Request</h3>
+        <p id="modalMovie" style="color: #aaa; margin-top: 0;"></p>
+        
+        <form action="/admin/requests/action" method="POST">
+            <input type="hidden" id="modalReqId" name="request_id">
+            <input type="hidden" id="modalAction" name="action">
+            
+            <div class="form-group">
+                <label for="message_text">Message to User (Optional):</label>
+                <textarea id="message_text" name="message_text" rows="4" placeholder="Enter download link or rejection reason..."></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="notify" checked> Notify User in PM
+                </label>
+            </div>
+            
+            <div style="text-align: right;">
+                <button type="button" class="action-btn" style="background: #666;" onclick="closeModal()">Cancel</button>
+                <button type="submit" class="action-btn" id="modalSubmitBtn" style="background: #4CAF50;">Confirm</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openModal(action, reqId, content) {
+        document.getElementById('actionModal').style.display = 'block';
+        document.getElementById('modalReqId').value = reqId;
+        document.getElementById('modalAction').value = action;
+        document.getElementById('modalMovie').innerText = 'Requesting: ' + content;
+        
+        const title = document.getElementById('modalTitle');
+        const submitBtn = document.getElementById('modalSubmitBtn');
+        const textarea = document.getElementById('message_text');
+        
+        if (action === 'fulfill') {
+            title.innerText = '✅ Fulfill Request';
+            submitBtn.innerText = 'Send Link';
+            submitBtn.style.backgroundColor = '#4CAF50';
+            textarea.placeholder = 'Paste the download link here (e.g., https://t.me/...)';
+        } else {
+            title.innerText = '❌ Reject Request';
+            submitBtn.innerText = 'Reject Request';
+            submitBtn.style.backgroundColor = '#f44336';
+            textarea.placeholder = 'Reason for rejection (e.g., Not yet released, Unavailable...)';
+        }
+    }
+    
+    function closeModal() {
+        document.getElementById('actionModal').style.display = 'none';
+    }
+    
+    // Close modal if clicked outside
+    window.onclick = function(event) {
+        if (event.target == document.getElementById('actionModal')) {
+            closeModal();
+        }
+    }
+</script>
+
+{% endblock %}
