@@ -139,39 +139,14 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
                 plot = str(plot).replace(k, v)
                 title = str(title).replace(k, v)
 
-        # Helper for dynamic font sizing
-        def fit_text(draw, text, font_path, max_width, initial_size, min_size=20):
-            size = initial_size
-            while size >= min_size:
-                try:
-                    font = ImageFont.truetype(font_path, size)
-                except:
-                    font = ImageFont.load_default()
-                    return font # Default font is fixed size usually
-                
-                try:
-                    bbox = draw.textbbox((0, 0), str(text), font=font)
-                    w = bbox[2] - bbox[0]
-                except:
-                    w = draw.textlength(str(text), font=font)
-                
-                if w <= max_width:
-                    return font
-                size -= 2
-            return ImageFont.truetype(font_path, min_size)
-
         # Helper for wrapping text based on pixel width
         def wrap_text_pixel(draw, text, font, max_width):
             import textwrap
-            # Rough estimate first
             avg_char_w = draw.textlength("a", font=font)
             if avg_char_w <= 0: avg_char_w = 10
             
             approx_chars = int(max_width / avg_char_w)
             lines = textwrap.wrap(str(text), width=approx_chars)
-            
-            # Refine check (if using non-monospaced, approximate might be off)
-            # This is a simple improvement over hardcoded 50.
             return lines
 
         # Available width for text
@@ -182,21 +157,38 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
         current_y = 100
         title_str = str(title)
         
-        # Fit Title
-        title_font_final = fit_text(draw, title_str, font_path, max_text_width, 60, min_size=30)
-        draw.text((text_start_x, current_y), title_str, font=title_font_final, fill="white")
-        current_y += 80 # Adjust spacing based on real height? kept simple for now
+        # Use fixed size 60 for title
+        try:
+            title_font_final = ImageFont.truetype(font_path, 60)
+        except:
+            title_font_final = ImageFont.load_default()
+            
+        # Wrap title if it's too long
+        title_lines = wrap_text_pixel(draw, title_str, title_font_final, max_text_width)
+        for line in title_lines[:2]: # Limit title to 2 lines max
+            draw.text((text_start_x, current_y), line, font=title_font_final, fill="white")
+            current_y += 70
+
+        current_y += 10 # Spacer
         
         # Draw Meta
         meta_text = f"{year}   |   {rating}"
-        meta_font_final = fit_text(draw, meta_text, font_path, max_text_width, 35, min_size=20)
+        try:
+            meta_font_final = ImageFont.truetype(font_path, 35)
+        except:
+             meta_font_final = ImageFont.load_default()
+             
         draw.text((text_start_x, current_y), meta_text, font=meta_font_final, fill="#FFD700")
         current_y += 60
         
         # Draw Genres
         if genres:
              genre_str = str(genres)
-             genre_font_final = fit_text(draw, genre_str, font_path, max_text_width, 30, min_size=20)
+             try:
+                 genre_font_final = ImageFont.truetype(font_path, 30)
+             except:
+                 genre_font_final = ImageFont.load_default()
+                 
              draw.text((text_start_x, current_y), genre_str, font=genre_font_final, fill="#A0A0A0")
              current_y += 60
 
@@ -207,7 +199,7 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
         # Draw Plot
         plot = str(plot) if plot else "No description available."
         
-        # Use a fixed reasonable size for plot, but wrap it correcty
+        # Use fixed size 30 for plot
         try:
              plot_font_final = ImageFont.truetype(font_path, 30)
         except:

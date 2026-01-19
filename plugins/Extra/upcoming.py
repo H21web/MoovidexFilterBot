@@ -7,7 +7,36 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
 from info import *
 from plugins.Extra.binged import HEADERS, clean_text, get_tmdb_details, search_tmdb_advanced, format_search_title
-from plugins.Extra.image_gen import generate_status_image
+from database.users_chats_db import db
+
+# ... imports ...
+
+# Callback for Notify
+@Client.on_callback_query(filters.regex(r"^notify_(.+)_(.+)$"))
+async def notify_callback(client, cq):
+    data = cq.data.split("_")
+    # data format: notify_{safe_title}_{r_date}
+    # safe_title could contain underscores, so we join standard parts
+    # But wait, split("_") will split the title too if it has underscores.
+    # We should split by `notify_` prefix first or use regex groups.
+    # The regex r"^notify_(.+)_(.+)$" groups are lazy or greedy?
+    # standard regex greedy: group 1 will eat up to the last underscore.
+    
+    match = re.match(r"^notify_(.+)_(.+)$", cq.data)
+    if not match:
+         return await cq.answer("Invalid data", show_alert=True)
+         
+    safe_title = match.group(1)
+    date_str = match.group(2)
+    user_id = cq.from_user.id
+    
+    # Check if already subscribed
+    current_alerts = await db.get_movie_alerts(safe_title)
+    if user_id in current_alerts:
+        return await cq.answer("You are already subscribed to this movie! 🔔", show_alert=True)
+        
+    await db.add_movie_alert(user_id, safe_title)
+    await cq.answer(f"✅ Notification Set! You'll be notified when {safe_title.replace('_', ' ')} releases.", show_alert=True)
 
 # Reusing fetch logic
 async def fetch_url(url):
@@ -21,13 +50,25 @@ async def fetch_url(url):
     return None
 
 async def fetch_ottplay_upcoming():
-    # New API endpoint provided by user
-    url = "https://api2.ottplay.com/api/v4.5/web/ranking?module_name=hot_new&platform=web&section=widget_coming_soon_to_you&page=1&pin_it=true&template_name=upcoming_content"
-    data = await fetch_url(url)
-    if data and 'rank' in data:
-        # The structure is data['rank'] -> list of items -> item['movie'] contains the details
-        return [item.get('movie') for item in data['rank'] if item.get('movie')]
-    return []
+    base_url = "https://api2.ottplay.com/api/v4.5/web/ranking?module_name=hot_new&platform=web&section=widget_coming_soon_to_you&page={}&pin_it=true&template_name=upcoming_content"
+    
+    all_movies = []
+    # Fetch first 3 pages to get around 30 movies (as per 10 per page typical)
+    for page in range(1, 4):
+        try:
+            url = base_url.format(page)
+            data = await fetch_url(url)
+            if data and 'rank' in data:
+               movies = [item.get('movie') for item in data['rank'] if item.get('movie')]
+               if not movies:
+                   break # Stop if no results on this page
+               all_movies.extend(movies)
+            else:
+                break
+        except:
+            break
+            
+    return all_movies
 
 # /upcoming command
 @Client.on_message(filters.command("upcoming"))

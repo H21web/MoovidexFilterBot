@@ -248,27 +248,59 @@ async def process_and_post_movie(movie, check_db=True):
             buttons.append(row)
 
         try:
+            posted_msg = None
             if final_image_io:
-                await TechVJBot.send_photo(
+                # Reset stream position just in case, though send_photo usually handles it if it's not closed
+                final_image_io.seek(0)
+                posted_msg = await TechVJBot.send_photo(
                     chat_id=UPDATE_CHANNEL_ID,
                     photo=final_image_io,
                     caption=msg,
                     reply_markup=InlineKeyboardMarkup(buttons)
                 )
             elif backdrop_url:
-                await TechVJBot.send_photo(
+                posted_msg = await TechVJBot.send_photo(
                     chat_id=UPDATE_CHANNEL_ID,
                     photo=backdrop_url,
                     caption=msg,
                     reply_markup=InlineKeyboardMarkup(buttons)
                 )
             else:
-                await TechVJBot.send_message(
+                posted_msg = await TechVJBot.send_message(
                     chat_id=UPDATE_CHANNEL_ID,
                     text=msg,
                     reply_markup=InlineKeyboardMarkup(buttons),
                     disable_web_page_preview=True
                 )
+            
+            # --- NOTIFICATION SYSTEM ---
+            # Check if any users are waiting for this movie
+            alert_users = await db.get_movie_alerts(safe_title)
+            if alert_users:
+                print(f"🔔 Notifying {len(alert_users)} users about {title}")
+                for uid in alert_users:
+                    try:
+                        # Send the same poster and message to the user
+                        if posted_msg.photo:
+                             await TechVJBot.send_photo(
+                                 chat_id=uid, 
+                                 photo=posted_msg.photo.file_id, 
+                                 caption=msg, 
+                                 reply_markup=InlineKeyboardMarkup(buttons)
+                             )
+                        else:
+                             await TechVJBot.send_message(
+                                 chat_id=uid, 
+                                 text=msg, 
+                                 reply_markup=InlineKeyboardMarkup(buttons),
+                                 disable_web_page_preview=True
+                             )
+                    except Exception as e:
+                        print(f"Failed to notify user {uid}: {e}")
+                
+                # Clear alerts for this movie
+                await db.delete_movie_alerts(safe_title)
+             # ---------------------------
                 
             # Mark as posted
             await db.add_posted_movie(movie_id)
