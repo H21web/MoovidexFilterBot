@@ -143,9 +143,7 @@ async def index_files_to_db(lst_msg_id, chat, msg, bot):
     no_media = 0
     unsupported = 0
     
-    # Batch size for concurrent processing
-    BATCH_SIZE = 20
-    batch = []
+
     
     async with lock:
         try:
@@ -205,8 +203,11 @@ async def index_files_to_db(lst_msg_id, chat, msg, bot):
 
         except Exception as e:
             logger.exception(e)
-            k = await msg.edit(f'Error: {e}')
-            await k.reply_text(f'Succesfully saved <code>{total_files}</code> to dataBase!\nDuplicate Files Skipped: <code>{duplicate}</code>\nDeleted Messages Skipped: <code>{deleted}</code>\nNon-Media messages skipped: <code>{no_media + unsupported}</code>(Unsupported Media - `{unsupported}` )\nErrors Occurred: <code>{errors}</code>')
-            await k.reply_text("**If You Get Message Not Modified Error Then Skip Your Saved File Then Index Again**")
+            try:
+                k = await msg.edit(f'Error: {e}')
+                await k.reply_text(f'Succesfully saved <code>{total_files}</code> to dataBase!\nDuplicate Files Skipped: <code>{duplicate}</code>\nDeleted Messages Skipped: <code>{deleted}</code>\nNon-Media messages skipped: <code>{no_media + unsupported}</code>(Unsupported Media - `{unsupported}` )\nErrors Occurred: <code>{errors}</code>')
+                await k.reply_text("**If You Get Message Not Modified Error Then Skip Your Saved File Then Index Again**")
+            except Exception as e2:
+                logger.error(f"Failed to report error to user: {e2}")
         else:
             await msg.edit(f'Succesfully saved <code>{total_files}</code> to dataBase!\nDuplicate Files Skipped: <code>{duplicate}</code>\nDeleted Messages Skipped: <code>{deleted}</code>\nNon-Media messages skipped: <code>{no_media + unsupported}</code>(Unsupported Media - `{unsupported}` )\nErrors Occurred: <code>{errors}</code>')
