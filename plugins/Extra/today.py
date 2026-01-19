@@ -48,8 +48,9 @@ def is_strict_match(title, file_name):
         return False
         
     def clean(s):
-        # Keep only alphanumeric characters, remove everything else
-        return re.sub(r'[^a-zA-Z0-9]', '', str(s)).lower()
+        # Replace non-alphanumeric with space, then collapse spaces
+        s = re.sub(r'[^a-zA-Z0-9\s]', ' ', str(s))
+        return re.sub(r'\s+', ' ', s).strip().lower()
         
     t_clean = clean(title)
     f_clean = clean(file_name)
