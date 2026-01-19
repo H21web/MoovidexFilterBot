@@ -1188,7 +1188,10 @@ async def receive_custom_search(client, message):
     # Special Handling for Ottplay
     if source == "ottplay":
         data = movie_data
-        msg = f"✅ **{data['title']}** · {data['year']} · `{data['type_str']}`\n\n"
+        is_upcoming = data.get('is_upcoming', False)
+        emoji = "🔜" if is_upcoming else "✅"
+        
+        msg = f"{emoji} **{data['title']}** · {data['year']} · `{data['type_str']}`\n\n"
         msg += f"**>🉑 {data['lang_tag']}\n"
         msg += f">🎭 {data['genre_str']} · 📺 {data['provider_str']}\n"
         msg += f">®️ {data['cert_str']} · ⭐ {data['rating']}\n"
@@ -1213,6 +1216,13 @@ async def receive_custom_search(client, message):
             final_image = data['backdrop_url']
 
         buttons = []
+        
+        # Notify Me for Upcoming (Priority)
+        if is_upcoming:
+             buttons.append([
+                InlineKeyboardButton(f"🔔 Notify Me", callback_data=f"notify_{data['safe_title']}_{data['r_date']}")
+            ])
+
         # Custom Button
         if custom_input.startswith("http://") or custom_input.startswith("https://"):
             button_url = custom_input
