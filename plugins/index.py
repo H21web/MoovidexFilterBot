@@ -187,45 +187,17 @@ async def index_files_to_db(lst_msg_id, chat, msg, bot):
                 
                 media.caption = message.caption
                 
-                # Add to batch
-                batch.append(media)
-                
-                # Process batch if full
-                if len(batch) >= BATCH_SIZE:
-                    results = await asyncio.gather(*[save_file(m) for m in batch], return_exceptions=True)
-                    
-                    for res in results:
-                        if isinstance(res, Exception):
-                            errors += 1
-                            logger.error(f"Error saving file: {res}")
-                            continue
-                            
-                        aynav, vnay = res
-                        if aynav:
-                            total_files += 1
-                        elif vnay == 0:
-                            duplicate += 1
-                        elif vnay == 2:
-                            errors += 1
-                    
-                    batch = [] # Reset batch
-
-            # Process remaining items in batch
-            if batch:
-                results = await asyncio.gather(*[save_file(m) for m in batch], return_exceptions=True)
-                for res in results:
-                    if isinstance(res, Exception):
-                        errors += 1
-                        logger.error(f"Error saving file: {res}")
-                        continue
-                        
-                    aynav, vnay = res
+                try:
+                    aynav, vnay = await save_file(media)
                     if aynav:
                         total_files += 1
                     elif vnay == 0:
                         duplicate += 1
                     elif vnay == 2:
                         errors += 1
+                except Exception as e:
+                    errors += 1
+                    logger.error(f"Error saving file: {e}")
             
             if temp.CANCEL:
                 await msg.edit(f"Successfully Cancelled!!\n\nSaved <code>{total_files}</code> files to dataBase!\nDuplicate Files Skipped: <code>{duplicate}</code>\nDeleted Messages Skipped: <code>{deleted}</code>\nNon-Media messages skipped: <code>{no_media + unsupported}</code>(Unsupported Media - `{unsupported}` )\nErrors Occurred: <code>{errors}</code>")
