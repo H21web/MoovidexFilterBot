@@ -20,25 +20,20 @@ async def fetch_url(url):
         print(f"Request Error: {e}")
     return None
 
-async def fetch_ottplay_upcoming(from_date, to_date):
-    # Same endpoint, different dates
-    url = f"https://api2.ottplay.com/api/v4.7/web/new-release?limit=50&from_date={from_date}&to_date={to_date}&content_type=all&language=&provider="
+async def fetch_ottplay_upcoming():
+    # New API endpoint provided by user
+    url = "https://api2.ottplay.com/api/v4.5/web/ranking?module_name=hot_new&platform=web&section=widget_coming_soon_to_you&page=1&pin_it=true&template_name=upcoming_content"
     data = await fetch_url(url)
     if data:
-        return data.get('result', [])
+        return data.get('data', []) # The structure might be different for ranking API
     return []
 
 # /upcoming command
 @Client.on_message(filters.command("upcoming"))
 async def upcoming_movies_command(client, message):
-    today = datetime.now()
-    tomorrow = (today + timedelta(days=1)).strftime("%Y-%m-%d")
-    # Fetch next 7 days
-    future = (today + timedelta(days=7)).strftime("%Y-%m-%d")
-    
     msg = await message.reply_text("⏳ Fetching upcoming releases...")
     
-    movies_data = await fetch_ottplay_upcoming(tomorrow, future)
+    movies_data = await fetch_ottplay_upcoming()
 
     if not movies_data:
         await msg.edit("🚫 No upcoming releases found for the next 7 days.")
@@ -77,7 +72,7 @@ async def upcoming_movies_command(client, message):
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
     reply_markup = InlineKeyboardMarkup(buttons)
 
-    await msg.edit(f"🗓 **Upcoming Releases ({tomorrow} to {future}):**", reply_markup=reply_markup)
+    await msg.edit(f"🗓 **Upcoming Releases:**", reply_markup=reply_markup)
 
 
 # Callback for Upcoming details
@@ -86,11 +81,7 @@ async def upcoming_detail(client, cq):
     movie_id = cq.data.split("_")[-1]
     
     # Re-fetch to find the object
-    today = datetime.now()
-    tomorrow = (today + timedelta(days=1)).strftime("%Y-%m-%d")
-    future = (today + timedelta(days=14)).strftime("%Y-%m-%d") # Wide range to be safe
-    
-    movies = await fetch_ottplay_upcoming(tomorrow, future)
+    movies = await fetch_ottplay_upcoming()
     movie = next((m for m in movies if str(m.get("_id")) == movie_id), None)
     
     if not movie:
