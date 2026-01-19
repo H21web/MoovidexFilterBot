@@ -67,6 +67,7 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
             
             overlay = Image.new("RGBA", (width, height), (0, 0, 0, 160)) 
             canvas = Image.alpha_composite(canvas, overlay)
+            draw = ImageDraw.Draw(canvas)
         else:
              canvas = Image.new("RGBA", (width, height), (20, 20, 20))
              draw = ImageDraw.Draw(canvas)

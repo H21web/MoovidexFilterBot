@@ -3,7 +3,7 @@ import html
 import asyncio
 import aiohttp
 from datetime import datetime, timedelta
-from pyrogram import Client, filters
+from pyrogram import Client, filters, enums
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
 from info import *
@@ -11,11 +11,14 @@ from plugins.Extra.binged import HEADERS, ADMIN_IDS, clean_text, find_tmdb_id, g
 from database.users_chats_db import db
 from TechVJ.bot import TechVJBot
 from plugins.Extra.image_gen import generate_status_image
+from database.ia_filterdb import get_search_results
 
 # Configuration
 UPDATE_CHANNEL_ID = -1001680629032  # Update Channel ID
 
-from database.ia_filterdb import get_search_results
+# Global Cache for Wanted Movies (Movies released but not yet posted)
+# Format: {movie_id: movie_data}
+WANTED_MOVIES = {}
 
 async def fetch_url(url):
     try:
@@ -34,241 +37,315 @@ async def fetch_ottplay_releases(from_date, to_date):
         return data.get('result', [])
     return []
 
+def is_strict_match(title, file_name):
+    """
+    Checks if the file_name strictly starts with the title.
+    Ignores strict punctuation and casing.
+    Example: 
+      Title: "Him", File: "Him.2026..." -> MATCH
+      Title: "Him", File: "Call Him Og..." -> NO MATCH
+    """
+    if not title or not file_name:
+        return False
+        
+    # Normalize: Replace non-alphanumeric with spaces, lowercase, strip
+    def normalize(s):
+        return re.sub(r'[\W_]+', ' ', str(s)).lower().strip()
+        
+    t_clean = normalize(title)
+    f_clean = normalize(file_name)
+    
+    # Must start with title followed by boundary (end of string or space)
+    # Pattern: ^title\b
+    pattern = r"^" + re.escape(t_clean) + r"\b"
+    return bool(re.search(pattern, f_clean))
+
+async def process_and_post_movie(movie, check_db=True):
+    """
+    Process a single movie: Check if file exists (strict), generate post, send.
+    Returns True if posted, False otherwise.
+    """
+    try:
+        movie_id = str(movie.get("_id"))
+        title = clean_text(movie.get("name", ""))
+        if not title:
+            return False
+            
+        year = movie.get("release_year")
+        
+        # Double check DB if requested
+        if check_db:
+             if await db.is_movie_posted(movie_id):
+                 # Remove from wanted if already posted
+                 if movie_id in WANTED_MOVIES:
+                     del WANTED_MOVIES[movie_id]
+                 return True
+
+        # Check File Availability with STRICT MATCH
+        search_query = f"{title} {year}"
+        # Search for files
+        files, _, total_files = await get_search_results(UPDATE_CHANNEL_ID, search_query, max_results=20)
+        
+        found_file = False
+        if total_files > 0:
+            for file in files:
+                # Use file_name if available, else name
+                fname = getattr(file, "file_name", None) or getattr(file, "name", "")
+                if is_strict_match(title, fname):
+                    found_file = True
+                    break
+        
+        if not found_file:
+            print(f"Skipping {title} ({year}) - No exact matching file found.")
+            return False
+
+        print(f"✅ Found release with available file into DB: {title} ({year})")
+        
+        # --- Gather Details ---
+        content_type = movie.get("content_type", "movie")
+        media_type = "movie" if content_type == "movie" else "tv"
+        type_str = "Movie" if media_type == "movie" else "Series"
+        lang = movie.get("primary_language", {}).get("logo_text", "Unknown")
+        genres = [g.get("name") for g in movie.get("genres", [])]
+        genre_str = ", ".join(genres) if genres else "N/A"
+        
+        # Providers
+        providers_data = movie.get("where_to_watch", [])
+        provider_logos = []
+        platform_links = []
+        
+        for p in providers_data:
+            prov = p.get("provider", {})
+            p_name = prov.get("name")
+            if p_name: 
+                # dedupe logic could be here but kept simple
+                pass
+            logo = prov.get("logo_url") or prov.get("icon_url")
+            if logo:
+                provider_logos.append(logo)
+            
+            p_link = p.get("movie_url") or p.get("show_url") or prov.get("seourl")
+            if p_link:
+                if not p_link.startswith("http"):
+                    p_link = f"https://www.ottplay.com/{p_link}"
+                platform_links.append(f"[{p_name}]({p_link})")
+            elif p_name:
+                platform_links.append(p_name)
+
+        provider_str = ", ".join(platform_links[:3]) if platform_links else "N/A"
+        
+        api_date = movie.get("release_date")
+        if api_date:
+            try:
+                r_date = datetime.fromisoformat(api_date.replace("Z", "+00:00")).strftime("%d-%m-%Y")
+            except:
+                r_date = api_date
+        else:
+            r_date = "N/A"
+
+        certs = [c.get("certification") for c in movie.get("certifications", [])]
+        cert_str = "/".join(certs) if certs else "N/A"
+
+        posters = movie.get("posters", [])
+        ottplay_poster = posters[0] if posters else None
+        
+        # TMDB Integration
+        tmdb_backdrop = None
+        tmdb_poster = None
+        tmdb_rating = None
+        tmdb_plot = None
+        tmdb_id = None
+        cast_str = "N/A"
+        trailer_url = None
+        
+        tmdb_results = search_tmdb_advanced(title, year=year, media_type=media_type)
+        if tmdb_results:
+            tmdb_id = tmdb_results[0].get("id")
+            tmdb_details = get_tmdb_details(tmdb_id, media_type)
+            if tmdb_details:
+                tmdb_img = tmdb_details.get("image")
+                if tmdb_img: tmdb_backdrop = tmdb_img
+                
+                t_orig = tmdb_details.get("original_data", {})
+                p_path = t_orig.get("poster_path")
+                if p_path: tmdb_poster = f"https://image.tmdb.org/t/p/original{p_path}"
+
+                tmdb_rating = tmdb_details.get("rating")
+                tmdb_plot = tmdb_details.get("plot")
+                cast = tmdb_details.get("cast", [])
+                cast_str = ", ".join(cast[:5]) if cast else "N/A"
+
+                videos = tmdb_details.get("videos", [])
+                if videos:
+                     video_url = videos[0].get("url")
+                     if video_url:
+                         trailer_url = f"https://www.youtube.com/watch?v={video_url}"
+
+        rating = tmdb_rating if tmdb_rating else (str(movie.get("ottplay_rating")) + "/10" if movie.get("ottplay_rating") else "N/A")
+        plot = tmdb_plot if tmdb_plot else "No description available."
+        
+        safe_title = format_search_title(title, year)
+        lang_tag = f"#{lang.replace(' ', '')}"
+        
+        msg = f"✅ **{title}** · {year} · `{type_str}`\n\n"
+        msg += f"**>🉑 {lang_tag}\n"
+        msg += f">🎭 {genre_str} · 📺 {provider_str}\n"
+        msg += f">®️ {cert_str} · ⭐ {rating}\n"
+        msg += f">📅 {r_date}\n"
+        msg += f">👥 {cast_str}\n"
+        msg += f">\n"
+        msg += f">__Plot:__\n"
+        msg += f">{plot}**\n"
+        msg += f" **@MooviDex** "
+
+        backdrop_url = tmdb_backdrop if tmdb_backdrop else ottplay_poster
+        poster_url = ottplay_poster if ottplay_poster else tmdb_poster
+        
+        final_image_io = None
+        if backdrop_url and poster_url:
+            print(f"Generating image for {title}...")
+            final_image_io = await generate_status_image(
+                backdrop_url, poster_url, provider_logos,
+                title, year, rating, genre_str, plot
+            )
+
+        buttons = []
+        if media_type != "tv":
+            buttons.append([
+                InlineKeyboardButton(
+                    f"🔍 Search: {title}", 
+                    url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
+                )
+            ])
+            
+        row = []
+        if trailer_url:
+            row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
+        if tmdb_id:
+            row.append(InlineKeyboardButton("More like this", callback_data=f"more_like_{tmdb_id}_{media_type}"))
+        if row:
+            buttons.append(row)
+
+        try:
+            if final_image_io:
+                await TechVJBot.send_photo(
+                    chat_id=UPDATE_CHANNEL_ID,
+                    photo=final_image_io,
+                    caption=msg,
+                    reply_markup=InlineKeyboardMarkup(buttons)
+                )
+            elif backdrop_url:
+                await TechVJBot.send_photo(
+                    chat_id=UPDATE_CHANNEL_ID,
+                    photo=backdrop_url,
+                    caption=msg,
+                    reply_markup=InlineKeyboardMarkup(buttons)
+                )
+            else:
+                await TechVJBot.send_message(
+                    chat_id=UPDATE_CHANNEL_ID,
+                    text=msg,
+                    reply_markup=InlineKeyboardMarkup(buttons),
+                    disable_web_page_preview=True
+                )
+                
+            # Mark as posted
+            await db.add_posted_movie(movie_id)
+            if movie_id in WANTED_MOVIES:
+                del WANTED_MOVIES[movie_id]
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error sending to channel: {e}")
+            return False
+
+    except Exception as e:
+        print(f"Error processing movie {movie.get('name')}: {e}")
+        return False
+
 # Background Loop for Auto-Updates
 async def check_releases_loop():
-    print("Auto-Update Loop Started (Ottplay)")
-    # Wait for bot to be ready
+    print("Auto-Update Loop Started (Ottplay v2)")
     await asyncio.sleep(10) 
     
     while True:
         try:
-            # Dynamic Dates: Today - 5 to Today + 5
             today = datetime.now()
             from_date = (today - timedelta(days=5)).strftime("%Y-%m-%d")
             to_date = (today + timedelta(days=5)).strftime("%Y-%m-%d")
             
             print(f"Fetching Ottplay releases from {from_date} to {to_date}")
-            
             movies = await fetch_ottplay_releases(from_date, to_date)
             
             if movies:
                 for movie in movies:
-                    try:
-                        movie_id = str(movie.get("_id"))
-                        title = clean_text(movie.get("name", ""))
-                        if not title:
-                            continue
-                            
-                        year = movie.get("release_year")
+                    movie_id = str(movie.get("_id"))
+                    
+                    # If already posted, skip and remove from wanted
+                    if await db.is_movie_posted(movie_id):
+                        if movie_id in WANTED_MOVIES:
+                            del WANTED_MOVIES[movie_id]
+                        continue
                         
-                        # Check if movie exists in our database (using _id as unique key to prevent re-posting)
-                        is_posted = await db.is_movie_posted(movie_id)
-                        if is_posted:
-                            continue
-
-                        # --- NEW: Check if file is available in Channel DB ---
-                        # "only post movies with the exact name and year file available"
-                        search_query = f"{title} {year}"
-                        files, _, total_files = await get_search_results(UPDATE_CHANNEL_ID, search_query, max_results=1)
-                        if total_files == 0:
-                            # Try just title if year fails? No, user said "exact name and year".
-                            # Maybe try w/o year just in case? No user said "exact".
-                            print(f"Skipping {title} ({year}) - No compatible file found.")
-                            continue
-
-                        print(f"Found new release with available file: {title} ({year})")
-                        
-                        # --- Gather Details ---
-                        # Type
-                        content_type = movie.get("content_type", "movie")
-                        media_type = "movie" if content_type == "movie" else "tv"
-                        type_str = "Movie" if media_type == "movie" else "Series"
-                        
-                        # Language
-                        lang = movie.get("primary_language", {}).get("logo_text", "Unknown")
-                        
-                        # Genres
-                        genres = [g.get("name") for g in movie.get("genres", [])]
-                        genre_str = ", ".join(genres) if genres else "N/A"
-                        
-                        # Providers
-                        providers_data = movie.get("where_to_watch", [])
-                        provider_names = []
-                        provider_logos = []
-                        platform_links = []
-                        
-                        for p in providers_data:
-                            prov = p.get("provider", {})
-                            p_name = prov.get("name")
-                            if p_name:
-                                provider_names.append(p_name)
-                            logo = prov.get("logo_url") or prov.get("icon_url")
-                            if logo:
-                                provider_logos.append(logo)
-                            
-                            # Link
-                            p_link = p.get("movie_url") or p.get("show_url") or prov.get("seourl")
-                            if p_link:
-                                if not p_link.startswith("http"):
-                                    p_link = f"https://www.ottplay.com/{p_link}"
-                                platform_links.append(f"[{p_name}]({p_link})")
-                            elif p_name:
-                                platform_links.append(p_name)
-
-                        provider_str = ", ".join(platform_links[:3]) if platform_links else "N/A"
-                        
-                        # Release Date
-                        api_date = movie.get("release_date")
-                        if api_date:
-                            try:
-                                r_date = datetime.fromisoformat(api_date.replace("Z", "+00:00")).strftime("%d-%m-%Y")
-                            except:
-                                r_date = api_date
-                        else:
-                            r_date = "N/A"
-
-                        # Certifications
-                        certs = [c.get("certification") for c in movie.get("certifications", [])]
-                        cert_str = "/".join(certs) if certs else "N/A"
-
-                        # Images from Ottplay
-                        posters = movie.get("posters", [])
-                        ottplay_poster = posters[0] if posters else None
-                        
-                        # --- TMDB Integration for Backdrop & Extras ---
-                        tmdb_backdrop = None
-                        tmdb_poster = None
-                        tmdb_rating = None
-                        tmdb_plot = None
-                        tmdb_id = None
-                        cast_str = "N/A"
-                        trailer_url = None
-                        
-                        tmdb_results = search_tmdb_advanced(title, year=year, media_type=media_type)
-                        if tmdb_results:
-                            tmdb_id = tmdb_results[0].get("id")
-                            tmdb_details = get_tmdb_details(tmdb_id, media_type)
-                            if tmdb_details:
-                                # Get better images
-                                tmdb_img = tmdb_details.get("image") # usually backdrop
-                                if tmdb_img:
-                                    tmdb_backdrop = tmdb_img
-                                
-                                # Poster from TMDB if available (often better quality)
-                                t_orig = tmdb_details.get("original_data", {})
-                                p_path = t_orig.get("poster_path")
-                                if p_path:
-                                    tmdb_poster = f"https://image.tmdb.org/t/p/original{p_path}"
-
-                                tmdb_rating = tmdb_details.get("rating")
-                                tmdb_plot = tmdb_details.get("plot")
-                                cast = tmdb_details.get("cast", [])
-                                cast_str = ", ".join(cast[:5]) if cast else "N/A"
-
-                                videos = tmdb_details.get("videos", [])
-                                if videos:
-                                     video_url = videos[0].get("url")
-                                     if video_url:
-                                         trailer_url = f"https://www.youtube.com/watch?v={video_url}"
-
-                        # Use Ottplay rating/plot if TMDB failed
-                        rating = tmdb_rating if tmdb_rating else (str(movie.get("ottplay_rating")) + "/10" if movie.get("ottplay_rating") else "N/A")
-                        
-                        # Plot: Ottplay doesn't easily give plot in list.
-                        plot = tmdb_plot if tmdb_plot else "No description available."
-                        
-                        # --- Build Message ---
-                        safe_title = format_search_title(title, year)
-                        lang_tag = f"#{lang.replace(' ', '')}"
-                        
-                        msg = f"✅ **{title}** · {year} · `{type_str}`\n\n"
-                        msg += f"**>🉑 {lang_tag}\n"
-                        msg += f">🎭 {genre_str} · 📺 {provider_str}\n"
-                        msg += f">®️ {cert_str} · ⭐ {rating}\n"
-                        msg += f">📅 {r_date}\n"
-                        msg += f">👥 {cast_str}\n"
-                        msg += f">\n"
-                        msg += f">__Plot:__\n"
-                        msg += f">{plot}**\n"
-                        msg += f" **@MooviDex** "
-
-                        # --- Generate Image ---
-                        backdrop_url = tmdb_backdrop if tmdb_backdrop else ottplay_poster
-                        poster_url = ottplay_poster if ottplay_poster else tmdb_poster
-                        
-                        final_image_io = None
-                        if backdrop_url and poster_url:
-                            print(f"Generating image for {title}...")
-                            # Pass details to image generator
-                            final_image_io = await generate_status_image(
-                                backdrop_url, poster_url, provider_logos,
-                                title, year, rating, genre_str, plot
-                            )
-
-                        # --- Buttons ---
-                        buttons = []
-                        
-                        # Search Button: Only for movies as per request (not series)
-                        if media_type != "tv":
-                            buttons.append([
-                                InlineKeyboardButton(
-                                    f"🔍 Search: {title}", 
-                                    url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
-                                )
-                            ])
-                            
-                        # Trailer & More Like This
-                        row = []
-                        if trailer_url:
-                            row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
-                        
-                        if tmdb_id:
-                            row.append(InlineKeyboardButton("More like this", callback_data=f"more_like_{tmdb_id}_{media_type}")) # Handles "nore like this button"
-                            
-                        if row:
-                            buttons.append(row)
-
-                        # Send to Channel
-                        try:
-                            if final_image_io:
-                                await TechVJBot.send_photo(
-                                    chat_id=UPDATE_CHANNEL_ID,
-                                    photo=final_image_io,
-                                    caption=msg,
-                                    reply_markup=InlineKeyboardMarkup(buttons)
-                                )
-                            elif backdrop_url: # Fallback to single image
-                                await TechVJBot.send_photo(
-                                    chat_id=UPDATE_CHANNEL_ID,
-                                    photo=backdrop_url,
-                                    caption=msg,
-                                    reply_markup=InlineKeyboardMarkup(buttons)
-                                )
-                            else:
-                                await TechVJBot.send_message(
-                                    chat_id=UPDATE_CHANNEL_ID,
-                                    text=msg,
-                                    reply_markup=InlineKeyboardMarkup(buttons),
-                                    disable_web_page_preview=True
-                                )
-                                
-                            # Mark as posted
-                            await db.add_posted_movie(movie_id)
-                            
-                            # Floodwait
-                            await asyncio.sleep(5)
-                            
-                        except Exception as e:
-                            print(f"Error sending to channel: {e}")
-
-                    except Exception as e:
-                        print(f"Error processing movie {movie.get('name')}: {e}")
+                    # Add to Wanted List
+                    WANTED_MOVIES[movie_id] = movie
+                    
+                    # Try to process (Check if file already exists)
+                    await process_and_post_movie(movie, check_db=False)
+                    
+                    # Floodwait prevention
+                    await asyncio.sleep(2)
             
         except Exception as e:
             print(f"Error in check_releases_loop: {e}")
             
-        # Check every 4 hours (daily update but checking more often is safer for uptime)
-        await asyncio.sleep(14400) 
+        await asyncio.sleep(3600) # Check every hour
+
+# Immediate Update Handler
+@Client.on_message(filters.video | filters.document)
+async def check_new_files_available(client, message):
+    """
+    Listens for new file uploads and checks if they match any Wanted Movies.
+    """
+    try:
+        if not WANTED_MOVIES:
+            return
+
+        file_name = None
+        if message.video:
+            file_name = message.video.file_name
+        elif message.document:
+            file_name = message.document.file_name
+            
+        if not file_name:
+            return
+
+        # Check against Wanted Movies
+        # Use a copy of values to avoid Runtime Error if dictionary changes
+        wanted_list = list(WANTED_MOVIES.values())
+        
+        for movie in wanted_list:
+            movie_id = str(movie.get("_id"))
+            title = clean_text(movie.get("name", ""))
+            
+            # Strict match check on the new file name
+            if is_strict_match(title, file_name):
+                print(f"⚡ Instant Match Found: {file_name} for {title}")
+                # Wait a moment for indexing
+                await asyncio.sleep(5) 
+                
+                # Use a lock or check needed? process_and_post_movie handles DB check.
+                # Force process
+                success = await process_and_post_movie(movie)
+                if success:
+                    # Notify logic done
+                    pass
+                break # Matched this file to a movie, move on
+                
+    except Exception as e:
+        print(f"Error in check_new_files_available: {e}")
+
 
 # More Like This Callback
 @Client.on_callback_query(filters.regex(r"^more_like_(\d+)_(.+)$"))
@@ -295,11 +372,10 @@ async def more_like_callback(client, cq):
     await cq.message.reply_text(f"**More like: {details['title']}**", reply_markup=InlineKeyboardMarkup(buttons))
     await cq.answer()
 
-# /today command - mapped to new logic? 
+# /today command
 @Client.on_message(filters.command("today"))
 async def send_movie_buttons(client, message):
     today = datetime.now().strftime("%Y-%m-%d")
-    # Fetch just for today
     movies_data = await fetch_ottplay_releases(today, today)
 
     if not movies_data:
@@ -307,15 +383,9 @@ async def send_movie_buttons(client, message):
         return
 
     buttons = []
-    for movie in movies_data[:10]: # Limit to 10
+    for movie in movies_data[:10]: 
         title = clean_text(movie.get('name', 'No title'))
         movie_id = str(movie.get("_id"))
-        
-        # We can use a callback to show details (reuse logic?)
-        # Since I changed the ID system (Ottplay IDs vs Binged/TMDB IDs), 
-        # I need a callback that processes Ottplay IDs.
-        # I'll create a new callback `ottplay_detail_`
-        
         callback_data = f"ottplay_detail_{movie_id}"
         buttons.append([InlineKeyboardButton(title, callback_data=callback_data)])
 
@@ -324,25 +394,18 @@ async def send_movie_buttons(client, message):
 
     await message.reply_text(f"🎬 **Releases for {today}:**", reply_markup=reply_markup)
 
-
 # Callback for Ottplay details
 @Client.on_callback_query(filters.regex(r"^ottplay_detail_(.+)$"))
 async def ottplay_detail(client, cq):
     movie_id = cq.data.split("_")[-1]
     
-    # We need to fetch details for this specific ID. 
-    # Because there isn't a direct "get by ID" readily available in previously assumed contexts,
-    # and /today fetched "today", we fetch today's list again to find it.
     today = datetime.now().strftime("%Y-%m-%d")
     movies = await fetch_ottplay_releases(today, today)
     
     movie = next((m for m in movies if str(m.get("_id")) == movie_id), None)
-    
     if not movie:
          return await cq.answer("Movie details not found.", show_alert=True)
 
-    # Now build the message and image (Reuse logic from loop essentially)
-    
     title = clean_text(movie.get("name", ""))
     year = movie.get("release_year")
     content_type = movie.get("content_type", "movie")
@@ -352,7 +415,6 @@ async def ottplay_detail(client, cq):
     genres = [g.get("name") for g in movie.get("genres", [])]
     genre_str = ", ".join(genres) if genres else "N/A"
     
-    # Providers
     providers_data = movie.get("where_to_watch", [])
     provider_logos = []
     platform_links = []
@@ -361,37 +423,26 @@ async def ottplay_detail(client, cq):
         prov = p.get("provider", {})
         p_name = prov.get("name")
         logo = prov.get("logo_url") or prov.get("icon_url")
-        if logo:
-            provider_logos.append(logo)
-        
+        if logo: provider_logos.append(logo)
         p_link = p.get("movie_url") or p.get("show_url") or prov.get("seourl")
         if p_link:
-             if not p_link.startswith("http"):
-                 p_link = f"https://www.ottplay.com/{p_link}"
+             if not p_link.startswith("http"): p_link = f"https://www.ottplay.com/{p_link}"
              platform_links.append(f"[{p_name}]({p_link})")
-        elif p_name:
-             platform_links.append(p_name)
+        elif p_name: platform_links.append(p_name)
     provider_str = ", ".join(platform_links[:3]) if platform_links else "N/A"
     
     api_date = movie.get("release_date")
     if api_date:
-        try:
-            r_date = datetime.fromisoformat(api_date.replace("Z", "+00:00")).strftime("%d-%m-%Y")
-        except:
-            r_date = api_date
-    else:
-        r_date = "N/A"
+        try: r_date = datetime.fromisoformat(api_date.replace("Z", "+00:00")).strftime("%d-%m-%Y")
+        except: r_date = api_date
+    else: r_date = "N/A"
 
     certs = [c.get("certification") for c in movie.get("certifications", [])]
     cert_str = "/".join(certs) if certs else "N/A"
     posters = movie.get("posters", [])
     ottplay_poster = posters[0] if posters else None
     
-    # TMDB Helper
-    tmdb_backdrop = None
-    tmdb_poster = None
-    tmdb_rating = None
-    tmdb_plot = None
+    tmdb_backdrop, tmdb_poster, tmdb_rating, tmdb_plot, tmdb_id = None, None, None, None, None
     cast_str = "N/A"
     
     tmdb_results = search_tmdb_advanced(title, year=year, media_type=media_type)
@@ -442,16 +493,11 @@ async def ottplay_detail(client, cq):
         await cq.message.reply_photo(photo=backdrop_url, caption=msg, reply_markup=InlineKeyboardMarkup(buttons))
     else:
         await cq.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(buttons), disable_web_page_preview=True)
-    
     await cq.answer()
 
-# Close button handler
 @Client.on_callback_query(filters.regex(r"close_message"))
 async def close_message_callback(client, callback_query):
-    try:
-        await callback_query.message.delete()
-    except Exception:
-        await callback_query.answer("⚠️ Unable to delete the message.")
+    try: await callback_query.message.delete()
+    except Exception: await callback_query.answer("⚠️ Unable to delete the message.")
 
-# Start the background task
 asyncio.create_task(check_releases_loop())
