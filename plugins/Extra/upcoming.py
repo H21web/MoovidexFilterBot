@@ -131,9 +131,14 @@ async def upcoming_movies_command(client, message):
     await msg.edit(f"🗓 **Upcoming Releases:**", reply_markup=reply_markup)
 
 
+from plugins.Extra.binged import ADMIN_IDS
+
+# ... existing imports ...
+
 # Callback for Upcoming details
 @Client.on_callback_query(filters.regex(r"^upcoming_detail_(.+)$"))
 async def upcoming_detail(client, cq):
+    user_id = cq.from_user.id
     movie_id = cq.data.split("_")[-1]
     
     # Re-fetch to find the object
@@ -173,7 +178,7 @@ async def upcoming_detail(client, cq):
                 p_link = f"https://www.zee5.com/global/content/{ptid}"
             elif "sonyliv" in p_name.lower():
                 p_link = f"https://www.sonyliv.com/shows/{ptid}"
-
+ 
         if p_link:
              if p_link.startswith("http"): pass
              elif p_link.startswith("www."): p_link = f"https://{p_link}"
@@ -185,7 +190,6 @@ async def upcoming_detail(client, cq):
     provider_str = ", ".join(platform_links[:3]) if platform_links else "N/A"
     
     api_date = movie.get("release_date")
-    # If API release_date is missing or invalid, check where_to_watch for available_from
     if not api_date and movie.get("where_to_watch"):
         wht = movie.get("where_to_watch")[0]
         api_date = wht.get("available_from")
@@ -195,9 +199,6 @@ async def upcoming_detail(client, cq):
         try: r_date = datetime.fromisoformat(api_date.replace("Z", "+00:00")).strftime("%d-%m-%Y")
         except: r_date = api_date
     
-    # Try to find 'name' from provider if missing or just generic
-    # (Existing provider logic remains below, this block was just date)
-
     certs = [c.get("certification") for c in movie.get("certifications", [])]
     cert_str = "/".join(certs) if certs else "N/A"
     posters = movie.get("posters", [])
@@ -248,7 +249,7 @@ async def upcoming_detail(client, cq):
     buttons = [[InlineKeyboardButton(f"🔔 Notify Me", callback_data=f"notify_{safe_title}_{r_date}")]] 
     
     # Admin Buttons
-    if user_id in ADMINS:
+    if user_id in ADMIN_IDS:
          buttons.append([
              InlineKeyboardButton("✏️ Edit & Post", callback_data=f"upcoming_edit_post_{movie_id}"),
              InlineKeyboardButton("📣 Post Default", callback_data=f"upcoming_post_{movie_id}")

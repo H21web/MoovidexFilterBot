@@ -494,9 +494,9 @@ async def send_movie_buttons(client, message):
 
     await message.reply_text(f"🎬 **Releases for {today}:**", reply_markup=reply_markup)
 
-# Callback for Ottplay details
 @Client.on_callback_query(filters.regex(r"^ottplay_detail_(.+)$"))
 async def ottplay_detail(client, cq):
+    user_id = cq.from_user.id
     movie_id = cq.data.split("_")[-1]
     
     today = datetime.now().strftime("%Y-%m-%d")
@@ -605,7 +605,7 @@ async def ottplay_detail(client, cq):
     buttons = [[InlineKeyboardButton(f"🔍 Search: {title}", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]]
     
     # Admin Buttons
-    if user_id in ADMINS:
+    if user_id in ADMIN_IDS:
          buttons.append([
              InlineKeyboardButton("✏️ Edit & Post", callback_data=f"ottplay_edit_post_{movie_id}"),
              InlineKeyboardButton("📣 Post Default", callback_data=f"ottplay_post_{movie_id}")
