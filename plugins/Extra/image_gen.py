@@ -106,17 +106,18 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
         # Font Loading Logic
         using_default = False
         try:
-            title_font = ImageFont.truetype("arial.ttf", 60)
-            meta_font = ImageFont.truetype("arial.ttf", 35)
-            plot_font = ImageFont.truetype("arial.ttf", 30)
-            genre_font = ImageFont.truetype("arial.ttf", 30)
+            # Reduced font sizes as requested
+            title_font = ImageFont.truetype("arial.ttf", 43)
+            meta_font = ImageFont.truetype("arial.ttf", 28)
+            plot_font = ImageFont.truetype("arial.ttf", 24)
+            genre_font = ImageFont.truetype("arial.ttf", 24)
         except IOError:
             try:
                 # Try common Linux font
-                title_font = ImageFont.truetype("DejaVuSans.ttf", 60)
-                meta_font = ImageFont.truetype("DejaVuSans.ttf", 35)
-                plot_font = ImageFont.truetype("DejaVuSans.ttf", 30)
-                genre_font = ImageFont.truetype("DejaVuSans.ttf", 30)
+                title_font = ImageFont.truetype("DejaVuSans.ttf", 43)
+                meta_font = ImageFont.truetype("DejaVuSans.ttf", 28)
+                plot_font = ImageFont.truetype("DejaVuSans.ttf", 24)
+                genre_font = ImageFont.truetype("DejaVuSans.ttf", 24)
             except IOError:
                 title_font = ImageFont.load_default()
                 meta_font = ImageFont.load_default()
@@ -125,7 +126,6 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
                 using_default = True
 
         # Clean text if using default font or just generally to be safe from smart quotes
-        # We always apply basic replacement, and aggressive strip if default font
         if using_default:
             title = clean_text_safe(title)
             year = clean_text_safe(year)
@@ -133,35 +133,62 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
             genres = clean_text_safe(genres)
             plot = clean_text_safe(plot)
         else:
-            # Just do simple replacements for smart quotes even with good fonts to be tidy
             replacements = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "…": "..."}
             for k, v in replacements.items():
                 plot = str(plot).replace(k, v)
                 title = str(title).replace(k, v)
 
+        # Helper for wrapping text based on pixel width
+        def wrap_text_pixel(draw, text, font, max_width):
+            import textwrap
+            try:
+                avg_char_w = draw.textlength("a", font=font)
+            except:
+                try: 
+                    bbox = draw.textbbox((0, 0), "a", font=font)
+                    avg_char_w = bbox[2] - bbox[0]
+                except: avg_char_w = 10
+            
+            if avg_char_w <= 0: avg_char_w = 10
+            
+            approx_chars = int(max_width / avg_char_w)
+            lines = textwrap.wrap(str(text), width=approx_chars)
+            # Make sure no line exceeds max_width strictly if possible (simple wrap might overshoot slightly with wide chars)
+            return lines
+
+        # Available width for text
+        max_text_width = width - text_start_x - 40 # 40px right padding
+
         # Draw Title
         current_y = 100
-        draw.text((text_start_x, current_y), str(title), font=title_font, fill="white")
-        current_y += 80
+        title_lines = wrap_text_pixel(draw, str(title), title_font, max_text_width)
         
+        for line in title_lines[:2]: # Max 2 lines for title
+            draw.text((text_start_x, current_y), line, font=title_font, fill="white")
+            current_y += 60 # Reduced spacing
+
+        current_y += 10 # Spacer
+        
+        # Draw Meta
         meta_text = f"{year}   |   Rat: {rating}"
         draw.text((text_start_x, current_y), meta_text, font=meta_font, fill="#FFD700")
-        current_y += 60
+        current_y += 50 # Reduced spacing
         
         if genres:
              draw.text((text_start_x, current_y), str(genres), font=genre_font, fill="#A0A0A0")
-             current_y += 60
+             current_y += 50 # Reduced spacing
 
         # Divider
-        draw.line([(text_start_x, current_y), (text_start_x + 300, current_y)], fill="white", width=2)
-        current_y += 40
+        draw.line([(text_start_x, current_y), (text_start_x + min(300, max_text_width), current_y)], fill="white", width=2)
+        current_y += 35 # Reduced spacing
 
-        import textwrap
+        # Draw Plot
         plot = str(plot) if plot else "No description available."
-        plot_lines = textwrap.wrap(plot, width=50)
-        for line in plot_lines[:6]:
+        plot_lines = wrap_text_pixel(draw, plot, plot_font, max_text_width)
+        
+        for line in plot_lines[:7]: # Max 7 lines for plot
             draw.text((text_start_x, current_y), line, font=plot_font, fill="white")
-            current_y += 40
+            current_y += 35 # Reduced spacing
 
         # 4. Provider Logos
         if providers:

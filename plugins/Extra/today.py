@@ -243,7 +243,7 @@ async def process_and_post_movie(movie, check_db=True):
         if trailer_url:
             row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
         if tmdb_id:
-            row.append(InlineKeyboardButton("More like this", callback_data=f"more_like_{tmdb_id}_{media_type}"))
+            row.append(InlineKeyboardButton("More like this", url=f"https://t.me/{temp.U_NAME}?start=more_like_{tmdb_id}_{media_type}"))
         if row:
             buttons.append(row)
 
@@ -400,19 +400,30 @@ async def check_new_files_available(client, message):
         print(f"Error in check_new_files_available: {e}")
 
 
-# More Like This Callback
-@Client.on_callback_query(filters.regex(r"^more_like_(\d+)_(.+)$"))
-async def more_like_callback(client, cq):
-    tmdb_id = cq.matches[0].group(1)
-    media_type = cq.matches[0].group(2)
+# Start Handler for More Like This (Deep Link)
+@Client.on_message(filters.command("start") & filters.regex(r"more_like_(\d+)_(.+)"))
+async def start_more_like(client, message):
+    if len(message.command) > 1:
+        data = message.command[1] # e.g. more_like_123_movie
+        parts = data.split("_")
+        # parts: ['more', 'like', 'id', 'type']? Start param is one string "more_like_id_type"
+        # regex will match the whole line properly if we are careful.
+        # Actually easiest is to just parse the parameter manually.
+        pass
+    else: return
     
+    try:
+        _, _, tmdb_id, media_type =  message.command[1].split("_")
+    except:
+        return
+
     details = get_tmdb_details(tmdb_id, media_type)
     if not details:
-        return await cq.answer("Error fetching details", show_alert=True)
+        return await message.reply_text("Error fetching details")
         
     similar = details.get("similar", [])
     if not similar:
-        return await cq.answer("No similar content found.", show_alert=True)
+        return await message.reply_text("No similar content found.")
         
     buttons = []
     for sim in similar[:6]:
@@ -420,10 +431,30 @@ async def more_like_callback(client, cq):
         safe_title = format_search_title(title, None)
         buttons.append([InlineKeyboardButton(f"🔍 {title}", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")])
         
-    buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
+    # No close button needed in PM really, but sure.
     
-    await cq.message.reply_text(f"**More like: {details['title']}**", reply_markup=InlineKeyboardMarkup(buttons))
-    await cq.answer()
+    await message.reply_text(f"**More like: {details['title']}**", reply_markup=InlineKeyboardMarkup(buttons))
+
+
+# Original Callback (Optional, keeping for legacy or direct PM clicks if any)
+@Client.on_callback_query(filters.regex(r"^more_like_(\d+)_(.+)$"))
+async def more_like_callback(client, cq):
+    # Just redirect to the URL behavior if possible, or execute same logic
+    # But user wants "open in bot pm". 
+    # If this callback is clicked in a channel (rare if we change button), we can't redirect easily without answer(url=...) which is not supported by all clients identically for deep linking to self.
+    # It's better to just change the logic to rely on the URL button.
+    
+    # If we keep this, and user clicks in PM, it just works.
+    # If in channel, we try to send PM.
+    try:
+        await client.send_message(
+            chat_id=cq.from_user.id,
+            text=f"Click here to see similar movies:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("View Similar", url=f"https://t.me/{temp.U_NAME}?start={cq.data}")]])
+        )
+        await cq.answer("Check your PM!", show_alert=True)
+    except:
+        await cq.answer("Please start the bot in PM first!", show_alert=True)
 
 # /today command
 @Client.on_message(filters.command("today"))

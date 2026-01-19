@@ -530,7 +530,7 @@ def build_upcoming_message(movie_data, bot_username, source='binged'):
         
         return msg, image
 
-# /binged command (Ottplay)
+# /binged command (JustWatch API)
 @Client.on_message(filters.command("binged"))
 async def binged_search(client, message):
     if message.from_user.id not in ADMIN_IDS:
@@ -540,30 +540,17 @@ async def binged_search(client, message):
 
     query = " ".join(message.command[1:]).strip()
     
-    # Updated API URL with proper params dict to avoid encoding errors and 422
-    params = {
-        "query": query,
-        "limit": 20,
-        "type": "all",
-        "listing": "true",
-        "source": "web",
-        "page": 1,
-        "request_type": "DIRECT",
-        "module": "search",
-        "section": "all"
-    }
+    # New JustWatch API Endpoint
+    url = f"https://imdb.iamidiotareyoutoo.com/justwatch?q={query}"
 
     try:
-        resp = requests.get(SEARCH_URL, headers=HEADERS, params=params, timeout=10)
+        resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
         resp.raise_for_status()
         data = resp.json()
     except requests.RequestException as e:
         return await message.reply_text(f"API error: {e}")
 
-    # Ottplay Universal Search parsing
-    results = data.get("results", [])
-    if not results:
-        results = data.get("data", [])
+    results = data.get("description", [])
         
     if not results:
         return await message.reply_text("No results found.")
@@ -571,28 +558,24 @@ async def binged_search(client, message):
     temp.BINGED_RESULTS[message.from_user.id] = {}
     buttons = []
     for item in results:
-        # Check title
-        title = clean_text(item.get("name") or item.get("title"))
+        title = clean_text(item.get("title"))
         if not title: continue
         
-        # ID - check for _id or id
-        movie_id = str(item.get("_id") or item.get("id"))
+        # Use valid ID, prefer tmdbId if available for later lookup
+        item_id = str(item.get("id")) # internal id like tm1599399
         
-        # Year
-        year = item.get("release_year") or str(item.get("release_date", "")).split("-")[0] or "N/A"
-        
-        # Type
-        ctype = item.get("content_type", "movie")
+        year = item.get("year", "N/A")
+        ctype = item.get("type", "MOVIE")
         
         btn_text = f"{title} ({year}) - {ctype}"
         
         # Store item for details
-        temp.BINGED_RESULTS[message.from_user.id][movie_id] = item
-        buttons.append([InlineKeyboardButton(btn_text, callback_data=f"binged_detail_{movie_id}")])
+        temp.BINGED_RESULTS[message.from_user.id][item_id] = item
+        buttons.append([InlineKeyboardButton(btn_text, callback_data=f"binged_detail_{item_id}")])
 
     buttons.append([InlineKeyboardButton("Close ❌", callback_data="close_message")])
     await message.reply_text(
-        f"Ottplay Search results for: <b>{query}</b>",
+        f"JustWatch Search results for: <b>{query}</b>",
         reply_markup=InlineKeyboardMarkup(buttons),
         disable_web_page_preview=True
     )
@@ -764,7 +747,7 @@ async def imdb_status_select(client, cq):
         )
     await cq.answer()
 
-# Show Ottplay movie detail (replaces binged_detail)
+# Show JustWatch movie detail
 @Client.on_callback_query(filters.regex(r"^binged_detail_(.+)$"))
 async def binged_detail(client, cq):
     movie_id = cq.data.split("_")[-1]
@@ -778,108 +761,94 @@ async def binged_detail(client, cq):
 
     await cq.answer("Fetching details...")
 
-    # Now build the message and image (Same logic as today.py)
-    
-    title = clean_text(movie.get("name", ""))
-    year = movie.get("release_year")
-    content_type = movie.get("content_type", "movie")
-    media_type = "movie" if content_type == "movie" else "tv"
+    # Data from JustWatch
+    title = clean_text(movie.get("title", ""))
+    year = movie.get("year", "N/A")
+    jw_type = movie.get("type", "MOVIE") 
+    media_type = "movie" if jw_type == "MOVIE" else "tv"
     type_str = "Movie" if media_type == "movie" else "Series"
-    lang = movie.get("primary_language", {}).get("logo_text", "Unknown")
-    genres = [g.get("name") for g in movie.get("genres", [])]
-    genre_str = ", ".join(genres) if genres else "N/A"
     
-    # Providers
-    providers_data = movie.get("where_to_watch", [])
-    provider_logos = []
+    # Providers from JustWatch
+    offers = movie.get("offers", [])
+    provider_logos = [] 
+    
     platform_links = []
+    seen_platforms = set()
     
-    for p in providers_data:
-        prov = p.get("provider", {})
-        p_name = prov.get("name")
-        logo = prov.get("logo_url") or prov.get("icon_url")
-        if logo:
-            provider_logos.append(logo)
-        
-        p_link = p.get("movie_url") or p.get("show_url") or prov.get("seourl")
-        if p_link:
-             if not p_link.startswith("http"):
-                 p_link = f"https://www.ottplay.com/{p_link}"
-             platform_links.append(f"[{p_name}]({p_link})")
-        elif p_name:
-             platform_links.append(p_name)
+    for offer in offers:
+        p_name = offer.get("name")
+        p_url = offer.get("url")
+        if p_name and p_name not in seen_platforms:
+             seen_platforms.add(p_name)
+             platform_links.append(f"[{p_name}]({p_url})")
+
     provider_str = ", ".join(platform_links[:3]) if platform_links else "N/A"
     
-    api_date = movie.get("release_date")
-    if api_date:
-        try:
-            r_date = datetime.fromisoformat(api_date.replace("Z", "+00:00")).strftime("%d-%m-%Y")
-        except:
-            r_date = api_date
-    else:
-        r_date = "N/A"
+    # Images from JustWatch
+    posters = movie.get("photo_url", [])
+    jw_poster = posters[0] if posters else None
 
-    certs = [c.get("certification") for c in movie.get("certifications", [])]
-    cert_str = "/".join(certs) if certs else "N/A"
-    posters = movie.get("posters", [])
-    ottplay_poster = posters[0] if posters else None
+    backdrops = movie.get("backdrops", [])
+    jw_backdrop = backdrops[0] if backdrops else None
     
-    # TMDB Helper
-    tmdb_backdrop = None
-    tmdb_poster = None
-    tmdb_rating = None
-    tmdb_plot = None
-    cast_str = "N/A"
+    # Fetch Data from TMDB for missing fields (Plot, Cast, Rating, Genres)
+    tmdb_id = movie.get("tmdbId")
     
-    tmdb_results = search_tmdb_advanced(title, year=year, media_type=media_type)
-    if tmdb_results:
-        tmdb_id = tmdb_results[0].get("id")
-        tmdb_details = get_tmdb_details(tmdb_id, media_type)
-        if tmdb_details:
-            tmdb_img = tmdb_details.get("image")
-            if tmdb_img: tmdb_backdrop = tmdb_img
-            t_orig = tmdb_details.get("original_data", {})
-            p_path = t_orig.get("poster_path")
-            if p_path: tmdb_poster = f"https://image.tmdb.org/t/p/original{p_path}"
-            tmdb_rating = tmdb_details.get("rating")
-            tmdb_plot = tmdb_details.get("plot")
-            cast = tmdb_details.get("cast", [])
-            cast_str = ", ".join(cast[:5]) if cast else "N/A"
-            
-    rating = tmdb_rating if tmdb_rating else (str(movie.get("ottplay_rating")) + "/10" if movie.get("ottplay_rating") else "N/A")
-    plot = tmdb_plot if tmdb_plot else "No description available."
-    safe_title = format_search_title(title, year)
-    lang_tag = f"#{lang.replace(' ', '')}"
+    tmdb_plot, tmdb_rating, genres, cast_str = "No description available.", "N/A", [], "N/A"
+    tmdb_backdrop, tmdb_poster = None, None
+    lang_tag = "#English" # Default
+
+    if tmdb_id:
+         tmdb_details = get_tmdb_details(tmdb_id, media_type)
+         if tmdb_details:
+             tmdb_plot = tmdb_details.get("plot", tmdb_plot)
+             tmdb_rating = tmdb_details.get("rating", tmdb_rating)
+             genres = tmdb_details.get("genres", [])
+             cast = tmdb_details.get("cast", [])
+             cast_str = ", ".join(cast[:5]) if cast else "N/A"
+             
+             # Fallback images if JW missing
+             if not jw_backdrop: jw_backdrop = tmdb_details.get("image")
+             
+    genre_str = ", ".join(genres) if genres else "N/A"
     
     msg = f"✅ **{title}** · {year} · `{type_str}`\n\n"
     msg += f"**>🉑 {lang_tag}\n"
     msg += f">🎭 {genre_str} · 📺 {provider_str}\n"
-    msg += f">®️ {cert_str} · ⭐ {rating}\n"
-    msg += f">📅 {r_date}\n"
+    msg += f">®️ N/A · ⭐ {tmdb_rating}\n" 
+    msg += f">📅 {year}\n"
     msg += f">👥 {cast_str}\n"
     msg += f">\n"
     msg += f">__Plot:__\n"
-    msg += f">{plot}**\n"
+    msg += f">{tmdb_plot}**\n"
     msg += f" **@MooviDex** "
     
-    backdrop_url = tmdb_backdrop if tmdb_backdrop else ottplay_poster
-    poster_url = ottplay_poster if ottplay_poster else tmdb_poster
-    
+    # Image Generation
     final_image_io = None
-    if backdrop_url and poster_url:
-        await cq.answer("Generating image...", cache_time=0)
-        final_image_io = await generate_status_image(backdrop_url, poster_url, provider_logos, title, year, rating, genre_str, plot)
-    
+    if jw_backdrop and jw_poster:
+         # Try/Except for image generation to be safe
+         try:
+            await cq.answer("Generating image...", cache_time=0)
+            final_image_io = await generate_status_image(jw_backdrop, jw_poster, [], title, year, tmdb_rating, genre_str, tmdb_plot)
+         except Exception as e:
+            print(f"Image Gen Error: {e}")
+
+    safe_title = format_search_title(title, year)
     buttons = [[InlineKeyboardButton(f"🔍 Search: {title}", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]]
+    
+    # Admin buttons
+    buttons.append([
+        InlineKeyboardButton("✏️ Edit & Post", callback_data=f"binged_edit_post_{movie_id}"),
+        InlineKeyboardButton("📣 Post Default", callback_data=f"binged_post_{movie_id}")
+    ])
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
     
     if final_image_io:
         await cq.message.reply_photo(photo=final_image_io, caption=msg, reply_markup=InlineKeyboardMarkup(buttons))
-    elif backdrop_url:
-        await cq.message.reply_photo(photo=backdrop_url, caption=msg, reply_markup=InlineKeyboardMarkup(buttons))
+    elif jw_backdrop:
+        await cq.message.reply_photo(photo=jw_backdrop, caption=msg, reply_markup=InlineKeyboardMarkup(buttons))
     else:
         await cq.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(buttons), disable_web_page_preview=True)
-    
     await cq.answer()
             
 
