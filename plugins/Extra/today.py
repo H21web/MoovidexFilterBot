@@ -124,10 +124,31 @@ async def process_and_post_movie(movie, check_db=True):
             if logo:
                 provider_logos.append(logo)
             
-            p_link = p.get("movie_url") or p.get("show_url") or prov.get("seourl")
+            p_link = p.get("movie_url") or p.get("show_url")
+            
+            # Try to construct direct link if missing
+            if not p_link and p_name and p.get("partner_title_id"):
+                ptid = p.get("partner_title_id")
+                if "netflix" in p_name.lower():
+                    p_link = f"https://www.netflix.com/title/{ptid}"
+                elif "zee5" in p_name.lower():
+                    # Zee5 structure varies (movies vs tvshows), default to generic or check type
+                    # Using clean ID logic might be needed, but simple append often works for deep links
+                    p_link = f"https://www.zee5.com/global/content/{ptid}"
+                elif "sonyliv" in p_name.lower():
+                    p_link = f"https://www.sonyliv.com/shows/{ptid}"
+            
             if p_link:
-                if not p_link.startswith("http"):
-                    p_link = f"https://www.ottplay.com/{p_link}"
+                if p_link.startswith("http"):
+                    pass
+                elif p_link.startswith("www."):
+                    p_link = f"https://{p_link}"
+                else:
+                    # If it's still a relative path without http, it's likely an Ottplay internal path.
+                    # User requested direct links ONLY. So we skip Ottplay links entirely.
+                    p_link = None
+            
+            if p_link:
                 platform_links.append(f"[{p_name}]({p_link})")
             elif p_name:
                 platform_links.append(p_name)
@@ -424,9 +445,27 @@ async def ottplay_detail(client, cq):
         p_name = prov.get("name")
         logo = prov.get("logo_url") or prov.get("icon_url")
         if logo: provider_logos.append(logo)
-        p_link = p.get("movie_url") or p.get("show_url") or prov.get("seourl")
+        p_link = p.get("movie_url") or p.get("show_url")
+        
+        # Try to construct direct link if missing
+        if not p_link and p_name and p.get("partner_title_id"):
+            ptid = p.get("partner_title_id")
+            if "netflix" in p_name.lower():
+                p_link = f"https://www.netflix.com/title/{ptid}"
+            elif "zee5" in p_name.lower():
+                p_link = f"https://www.zee5.com/global/content/{ptid}"
+            elif "sonyliv" in p_name.lower():
+                p_link = f"https://www.sonyliv.com/shows/{ptid}"
+
         if p_link:
-             if not p_link.startswith("http"): p_link = f"https://www.ottplay.com/{p_link}"
+             if p_link.startswith("http"):
+                 pass
+             elif p_link.startswith("www."):
+                 p_link = f"https://{p_link}"
+             else:
+                 p_link = None # Skip Ottplay relative paths
+        
+        if p_link:
              platform_links.append(f"[{p_name}]({p_link})")
         elif p_name: platform_links.append(p_name)
     provider_str = ", ".join(platform_links[:3]) if platform_links else "N/A"

@@ -82,6 +82,11 @@ QUALITY_REGEX = re.compile(rf'(?i)\b({"|".join(map(re.escape, QUALITY_MAP))})\b'
 @Client.on_message(filters.group & filters.text & filters.incoming)
 async def give_filter(client, message):
     user_id = message.from_user.id if message.from_user else 0
+    if MAINTENANCE_MODE["is_on"] and user_id not in ADMINS:
+        return await message.reply(
+            f"🛠️ <b>Maintenance Mode is ON</b>\n\nReason: {MAINTENANCE_MODE['reason']}\n\nPlease try again later."
+        )
+
     try:
         await mdb.update_top_messages(user_id, message.text)
     except Exception as e:
@@ -139,6 +144,10 @@ async def boovo(bot, title, message):
 
 @Client.on_message(filters.private & filters.text & filters.incoming)
 async def pm_text(bot, message):
+    if MAINTENANCE_MODE["is_on"] and message.from_user.id not in ADMINS:
+        return await message.reply(
+            f"🛠️ <b>Maintenance Mode is ON</b>\n\nReason: {MAINTENANCE_MODE['reason']}\n\nPlease try again later."
+        )
     await mdb.update_top_messages(message.from_user.id, message.text)
     content = message.text
     user = message.from_user.first_name

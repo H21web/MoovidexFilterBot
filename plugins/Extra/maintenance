@@ -1,16 +1,11 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from info import MAINTENANCE_MODE, ADMINS
 
-# Global Maintenance State
-MAINTENANCE_MODE = {
-    "is_on": False,
-    "reason": "No reason provided."
-}
-ADMIN_USERS = [1011394081, 7191327005]
 AWAITING_REASON = {}  # Dict to track which admin is setting reason
 
 # /maintenance command (admin only)
-@Client.on_message(filters.command("maintenance") & filters.user(ADMIN_USERS))
+@Client.on_message(filters.command("maintenance") & filters.user(ADMINS))
 async def maintenance_cmd(client, message: Message):
     btns = [
         [InlineKeyboardButton("🟢 Turn ON", callback_data="maint_on"),
@@ -26,7 +21,7 @@ async def maintenance_cmd(client, message: Message):
 @Client.on_callback_query(filters.regex("maint_"))
 async def maintenance_callback(client, query: CallbackQuery):
     user_id = query.from_user.id
-    if user_id not in ADMIN_USERS:
+    if user_id not in ADMINS:
         return await query.answer("You're not allowed.", show_alert=True)
 
     data = query.data
@@ -46,7 +41,7 @@ async def maintenance_callback(client, query: CallbackQuery):
         await query.message.reply("📝 Send me the maintenance reason (in one message).")
 
 
-@Client.on_message(filters.user(ADMIN_USERS) & filters.text & filters.private)
+@Client.on_message(filters.user(ADMINS) & filters.text & filters.private)
 async def handle_reason(client, message: Message):
     user_id = message.from_user.id
 

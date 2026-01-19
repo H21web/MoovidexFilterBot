@@ -1,4 +1,5 @@
 import aiohttp
+import os
 from PIL import Image, ImageFilter, ImageOps, ImageDraw, ImageFont
 from io import BytesIO
 import asyncio
@@ -143,7 +144,7 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
         draw.text((text_start_x, current_y), str(title), font=title_font, fill="white")
         current_y += 80
         
-        meta_text = f"{year}   |   Rat: {rating}"
+        meta_text = f"{year}   |   {rating}"
         draw.text((text_start_x, current_y), meta_text, font=meta_font, fill="#FFD700")
         current_y += 60
         
@@ -184,6 +185,49 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
                     current_x -= p.width
                     canvas.paste(p, (current_x, bottom_y), p if p.mode == 'RGBA' else None)
                     current_x -= padding
+
+        # 5. Watermark (Logo + Text)
+        try:
+            # Assume file is at plugins/Extra/logo.jpg relative to cwd
+            logo_path = "plugins/Extra/logo.jpg"
+            if os.path.exists(logo_path):
+                logo_img = Image.open(logo_path).convert("RGBA")
+                
+                # Resize logo (Height approx 80px)
+                target_logo_h = 80
+                l_w, l_h = logo_img.size
+                ratio = target_logo_h / l_h
+                new_l_w = int(l_w * ratio)
+                logo_img = logo_img.resize((new_l_w, target_logo_h), Image.Resampling.LANCZOS)
+                
+                # Position: Top Right
+                w_x = width - new_l_w - 40
+                w_y = 40
+                
+                # Mask for rounded corners on logo? Or just paste.
+                # The user image is red background text. Just paste it.
+                canvas.paste(logo_img, (w_x, w_y), logo_img if "A" in logo_img.mode else None)
+                
+                # Text
+                wm_text = "t.me/moovidex"
+                
+                # Calculate text size to center below logo
+                # using meta_font (approx 35px)
+                try:
+                    bbox = draw.textbbox((0, 0), wm_text, font=meta_font)
+                    text_w = bbox[2] - bbox[0]
+                except:
+                    text_w = draw.textlength(wm_text, font=meta_font)
+
+                text_x = w_x + (new_l_w - text_w) // 2
+                text_y = w_y + target_logo_h + 10
+                
+                # Add shadow/stroke for visibility
+                draw.text((text_x+2, text_y+2), wm_text, font=meta_font, fill="black")
+                draw.text((text_x, text_y), wm_text, font=meta_font, fill="white")
+        except Exception as e:
+            print(f"Error adding watermark: {e}")
+
                     
         out_io = BytesIO()
         canvas = canvas.convert("RGB")
