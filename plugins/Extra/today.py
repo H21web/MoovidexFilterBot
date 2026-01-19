@@ -578,6 +578,13 @@ async def ottplay_detail(client, cq):
             cast = tmdb_details.get("cast", [])
             cast_str = ", ".join(cast[:5]) if cast else "N/A"
             
+            videos = tmdb_details.get("videos", [])
+            if videos:
+                 video_url = videos[0].get("url")
+                 if video_url:
+                     trailer_url = f"https://www.youtube.com/watch?v={video_url}"
+
+            
     rating = tmdb_rating if tmdb_rating else (str(movie.get("ottplay_rating")) + "/10" if movie.get("ottplay_rating") else "N/A")
     plot = tmdb_plot if tmdb_plot else "No description available."
     safe_title = format_search_title(title, year)
@@ -596,6 +603,21 @@ async def ottplay_detail(client, cq):
     
     backdrop_url = tmdb_backdrop if tmdb_backdrop else ottplay_poster
     poster_url = ottplay_poster if ottplay_poster else tmdb_poster
+
+    # Save Data for Post/Edit
+    if not hasattr(temp, "OTTPLAY_RESULTS"): temp.OTTPLAY_RESULTS = {}
+    if user_id not in temp.OTTPLAY_RESULTS: temp.OTTPLAY_RESULTS[user_id] = {}
+    
+    current_data = {
+        "title": title, "year": year, "type_str": type_str, "lang_tag": lang_tag,
+        "genre_str": genre_str, "provider_str": provider_str, "cert_str": cert_str,
+        "rating": rating, "r_date": r_date, "cast_str": cast_str, "plot": plot,
+        "backdrop_url": backdrop_url, "poster_url": poster_url, "provider_logos": provider_logos,
+        "safe_title": safe_title, "movie_id": movie_id,
+        "trailer_url": locals().get('trailer_url'), "tmdb_id": tmdb_id
+    }
+    temp.OTTPLAY_RESULTS[user_id][movie_id] = current_data
+
     
     final_image_io = None
     if backdrop_url and poster_url:
@@ -619,6 +641,102 @@ async def ottplay_detail(client, cq):
         await cq.message.reply_photo(photo=backdrop_url, caption=msg, reply_markup=InlineKeyboardMarkup(buttons))
     else:
         await cq.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(buttons), disable_web_page_preview=True)
+    await cq.answer()
+
+@Client.on_callback_query(filters.regex(r"^ottplay_post_(.+)$"))
+async def ottplay_post(client, cq):
+    movie_id = cq.data.split("_")[-1]
+    user_id = cq.from_user.id
+    
+    if user_id not in ADMIN_IDS:
+        return await cq.answer("🚫 Authorized for Admins only!", show_alert=True)
+        
+    data = temp.OTTPLAY_RESULTS.get(user_id, {}).get(movie_id)
+    if not data:
+        return await cq.answer("Movie data expired. Please search again.", show_alert=True)
+    
+    await cq.answer("Posting...", cache_time=0)
+    
+    # Reconstruct message
+    msg = f"✅ **{data['title']}** · {data['year']} · `{data['type_str']}`\n\n"
+    msg += f"**>🉑 {data['lang_tag']}\n"
+    msg += f">🎭 {data['genre_str']} · 📺 {data['provider_str']}\n"
+    msg += f">®️ {data['cert_str']} · ⭐ {data['rating']}\n"
+    msg += f">📅 {data['r_date']}\n"
+    msg += f">👥 {data['cast_str']}\n"
+    msg += f">\n"
+    msg += f">__Plot:__\n"
+    msg += f">{data['plot']}**\n"
+    msg += f" **@MooviDex** "
+    
+    backdrop_url = data['backdrop_url']
+    poster_url = data['poster_url']
+    
+    final_image_io = None
+    if backdrop_url and poster_url:
+        try:
+             final_image_io = await generate_status_image(
+                backdrop_url, poster_url, data['provider_logos'],
+                data['title'], data['year'], data['rating'], data['genre_str'], data['plot']
+             )
+        except Exception as e:
+            print(f"Post Image Gen Error: {e}")
+
+    buttons = []
+    # Search Button
+    buttons.append([
+        InlineKeyboardButton(
+            f"🔍 Search: {data['title']}", 
+            url=f"https://t.me/{temp.U_NAME}?start=Search_{data['safe_title']}"
+        )
+    ])
+    
+    row = []
+    if data['trailer_url']:
+        row.append(InlineKeyboardButton("🎬 Trailer", url=data['trailer_url']))
+    if data['tmdb_id']:
+        media_type = "movie" if data['type_str'] == "Movie" else "tv"
+        row.append(InlineKeyboardButton("More like this", url=f"https://t.me/{temp.U_NAME}?start=more_like_{data['tmdb_id']}_{media_type}"))
+    if row:
+        buttons.append(row)
+        
+    try:
+        if final_image_io:
+            final_image_io.seek(0)
+            await client.send_photo(
+                chat_id=UPDATE_CHANNEL_ID,
+                photo=final_image_io,
+                caption=msg,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        elif backdrop_url:
+            await client.send_photo(
+                chat_id=UPDATE_CHANNEL_ID,
+                photo=backdrop_url,
+                caption=msg,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        else:
+             await client.send_message(
+                chat_id=UPDATE_CHANNEL_ID,
+                text=msg,
+                reply_markup=InlineKeyboardMarkup(buttons),
+                disable_web_page_preview=True
+            )
+        await cq.answer("✅ Posted successfully!", show_alert=True)
+    except Exception as e:
+        await cq.answer(f"Error: {e}", show_alert=True)
+
+@Client.on_callback_query(filters.regex(r"^ottplay_edit_post_(.+)$"))
+async def ottplay_edit_post(client, cq):
+    movie_id = cq.data.split("_")[-1]
+    user_id = cq.from_user.id
+    
+    if user_id not in ADMIN_IDS:
+        return await cq.answer("🚫 Authorized for Admins only!", show_alert=True)
+        
+    temp.EDITING_POST[user_id] = {"movie_id": movie_id, "source": "ottplay"}
+    await cq.message.reply_text("✏️ Send the **new search keyword** or **full URL** to use in the search button.", quote=True)
     await cq.answer()
 
 @Client.on_callback_query(filters.regex(r"close_message"))

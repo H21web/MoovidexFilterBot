@@ -1177,11 +1177,72 @@ async def receive_custom_search(client, message):
     # Get movie data based on source
     if source == "binged":
         movie_data = temp.BINGED_RESULTS.get(user_id, {}).get(movie_id)
+    elif source == "ottplay":
+        movie_data = getattr(temp, "OTTPLAY_RESULTS", {}).get(user_id, {}).get(movie_id)
     else:  # imdb
         movie_data = temp.TMDB_RESULTS.get(user_id, {}).get(movie_id)
     
     if not movie_data:
         return await message.reply("❌ Movie session expired. Please search again.")
+
+    # Special Handling for Ottplay
+    if source == "ottplay":
+        data = movie_data
+        msg = f"✅ **{data['title']}** · {data['year']} · `{data['type_str']}`\n\n"
+        msg += f"**>🉑 {data['lang_tag']}\n"
+        msg += f">🎭 {data['genre_str']} · 📺 {data['provider_str']}\n"
+        msg += f">®️ {data['cert_str']} · ⭐ {data['rating']}\n"
+        msg += f">📅 {data['r_date']}\n"
+        msg += f">👥 {data['cast_str']}\n"
+        msg += f">\n"
+        msg += f">__Plot:__\n"
+        msg += f">{data['plot']}**\n"
+        msg += f" **@MooviDex** "
+        
+        final_image = None
+        if data['backdrop_url'] and data['poster_url']:
+            try:
+                 final_image = await generate_status_image(
+                    data['backdrop_url'], data['poster_url'], data['provider_logos'],
+                    data['title'], data['year'], data['rating'], data['genre_str'], data['plot']
+                 )
+            except Exception as e:
+                print(f"Edit Post Image Gen Error: {e}")
+        
+        if not final_image and data['backdrop_url']:
+            final_image = data['backdrop_url']
+
+        buttons = []
+        # Custom Button
+        if custom_input.startswith("http://") or custom_input.startswith("https://"):
+            button_url = custom_input
+            buttons.append([InlineKeyboardButton(f"🔍 Search: {data['title']}", url=button_url)])
+        else:
+            safe_keyword = regex_module.sub(r'[^a-zA-Z0-9]', '_', custom_input)
+            buttons.append([InlineKeyboardButton(
+                f"🔍 Search: {data['title']}", 
+                url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_keyword}"
+            )])
+            
+        row = []
+        if data.get('trailer_url'):
+            row.append(InlineKeyboardButton("🎬 Trailer", url=data['trailer_url']))
+        if data.get('tmdb_id'):
+            media_type = "movie" if data['type_str'] == "Movie" else "tv"
+            row.append(InlineKeyboardButton("More like this", url=f"https://t.me/{temp.U_NAME}?start=more_like_{data['tmdb_id']}_{media_type}"))
+        if row:
+            buttons.append(row)
+
+        try:
+             if hasattr(final_image, 'seek'): final_image.seek(0)
+             if final_image:
+                 await client.send_photo(chat_id=UPDATE_CHANNEL_ID, photo=final_image, caption=msg, reply_markup=InlineKeyboardMarkup(buttons))
+             else:
+                 await client.send_message(chat_id=UPDATE_CHANNEL_ID, text=msg, reply_markup=InlineKeyboardMarkup(buttons), disable_web_page_preview=True)
+             await message.reply("✅ Posted to channel with custom button.")
+        except Exception as e:
+             await message.reply(f"❌ Error posting: {e}")
+        return
 
     # Get title based on source
     if source == "binged":
