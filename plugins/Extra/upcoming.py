@@ -8,6 +8,7 @@ from utils import temp
 from info import *
 from plugins.Extra.binged import HEADERS, clean_text, get_tmdb_details, search_tmdb_advanced, format_search_title
 from database.users_chats_db import db
+from plugins.Extra.image_gen import generate_status_image
 
 # ... imports ...
 
