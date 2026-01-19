@@ -24,8 +24,9 @@ async def fetch_ottplay_upcoming():
     # New API endpoint provided by user
     url = "https://api2.ottplay.com/api/v4.5/web/ranking?module_name=hot_new&platform=web&section=widget_coming_soon_to_you&page=1&pin_it=true&template_name=upcoming_content"
     data = await fetch_url(url)
-    if data:
-        return data.get('data', []) # The structure might be different for ranking API
+    if data and 'rank' in data:
+        # The structure is data['rank'] -> list of items -> item['movie'] contains the details
+        return [item.get('movie') for item in data['rank'] if item.get('movie')]
     return []
 
 # /upcoming command
@@ -36,7 +37,7 @@ async def upcoming_movies_command(client, message):
     movies_data = await fetch_ottplay_upcoming()
 
     if not movies_data:
-        await msg.edit("🚫 No upcoming releases found for the next 7 days.")
+        await msg.edit("🚫 No upcoming releases found.")
         return
 
     # Group by date for better UX? Or just list.
@@ -44,7 +45,14 @@ async def upcoming_movies_command(client, message):
     
     buttons = []
     # Sort by date
-    movies_data.sort(key=lambda x: x.get('release_date', '9999'))
+    # Sort by date (use a helper to extract date safely)
+    def get_sort_date(m):
+        d = m.get('release_date')
+        if not d and m.get('where_to_watch'):
+            d = m.get('where_to_watch')[0].get('available_from')
+        return d or '9999'
+
+    movies_data.sort(key=get_sort_date)
     
     count = 0
     for movie in movies_data:
@@ -56,6 +64,9 @@ async def upcoming_movies_command(client, message):
         
         # Add date to button text
         r_date = movie.get('release_date')
+        if not r_date and movie.get("where_to_watch"):
+             r_date = movie.get("where_to_watch")[0].get("available_from")
+             
         date_str = ""
         if r_date:
             try:
@@ -129,10 +140,18 @@ async def upcoming_detail(client, cq):
     provider_str = ", ".join(platform_links[:3]) if platform_links else "N/A"
     
     api_date = movie.get("release_date")
+    # If API release_date is missing or invalid, check where_to_watch for available_from
+    if not api_date and movie.get("where_to_watch"):
+        wht = movie.get("where_to_watch")[0]
+        api_date = wht.get("available_from")
+        
     r_date = "N/A"
     if api_date:
         try: r_date = datetime.fromisoformat(api_date.replace("Z", "+00:00")).strftime("%d-%m-%Y")
         except: r_date = api_date
+    
+    # Try to find 'name' from provider if missing or just generic
+    # (Existing provider logic remains below, this block was just date)
 
     certs = [c.get("certification") for c in movie.get("certifications", [])]
     cert_str = "/".join(certs) if certs else "N/A"

@@ -139,28 +139,84 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
                 plot = str(plot).replace(k, v)
                 title = str(title).replace(k, v)
 
+        # Helper for dynamic font sizing
+        def fit_text(draw, text, font_path, max_width, initial_size, min_size=20):
+            size = initial_size
+            while size >= min_size:
+                try:
+                    font = ImageFont.truetype(font_path, size)
+                except:
+                    font = ImageFont.load_default()
+                    return font # Default font is fixed size usually
+                
+                try:
+                    bbox = draw.textbbox((0, 0), str(text), font=font)
+                    w = bbox[2] - bbox[0]
+                except:
+                    w = draw.textlength(str(text), font=font)
+                
+                if w <= max_width:
+                    return font
+                size -= 2
+            return ImageFont.truetype(font_path, min_size)
+
+        # Helper for wrapping text based on pixel width
+        def wrap_text_pixel(draw, text, font, max_width):
+            import textwrap
+            # Rough estimate first
+            avg_char_w = draw.textlength("a", font=font)
+            if avg_char_w <= 0: avg_char_w = 10
+            
+            approx_chars = int(max_width / avg_char_w)
+            lines = textwrap.wrap(str(text), width=approx_chars)
+            
+            # Refine check (if using non-monospaced, approximate might be off)
+            # This is a simple improvement over hardcoded 50.
+            return lines
+
+        # Available width for text
+        max_text_width = width - text_start_x - 40 # 40px right padding
+        font_path = "arial.ttf" # Default we try to use
+
         # Draw Title
         current_y = 100
-        draw.text((text_start_x, current_y), str(title), font=title_font, fill="white")
-        current_y += 80
+        title_str = str(title)
         
+        # Fit Title
+        title_font_final = fit_text(draw, title_str, font_path, max_text_width, 60, min_size=30)
+        draw.text((text_start_x, current_y), title_str, font=title_font_final, fill="white")
+        current_y += 80 # Adjust spacing based on real height? kept simple for now
+        
+        # Draw Meta
         meta_text = f"{year}   |   {rating}"
-        draw.text((text_start_x, current_y), meta_text, font=meta_font, fill="#FFD700")
+        meta_font_final = fit_text(draw, meta_text, font_path, max_text_width, 35, min_size=20)
+        draw.text((text_start_x, current_y), meta_text, font=meta_font_final, fill="#FFD700")
         current_y += 60
         
+        # Draw Genres
         if genres:
-             draw.text((text_start_x, current_y), str(genres), font=genre_font, fill="#A0A0A0")
+             genre_str = str(genres)
+             genre_font_final = fit_text(draw, genre_str, font_path, max_text_width, 30, min_size=20)
+             draw.text((text_start_x, current_y), genre_str, font=genre_font_final, fill="#A0A0A0")
              current_y += 60
 
         # Divider
-        draw.line([(text_start_x, current_y), (text_start_x + 300, current_y)], fill="white", width=2)
+        draw.line([(text_start_x, current_y), (text_start_x + min(300, max_text_width), current_y)], fill="white", width=2)
         current_y += 40
 
-        import textwrap
+        # Draw Plot
         plot = str(plot) if plot else "No description available."
-        plot_lines = textwrap.wrap(plot, width=50)
+        
+        # Use a fixed reasonable size for plot, but wrap it correcty
+        try:
+             plot_font_final = ImageFont.truetype(font_path, 30)
+        except:
+             plot_font_final = ImageFont.load_default()
+             
+        plot_lines = wrap_text_pixel(draw, plot, plot_font_final, max_text_width)
+        
         for line in plot_lines[:6]:
-            draw.text((text_start_x, current_y), line, font=plot_font, fill="white")
+            draw.text((text_start_x, current_y), line, font=plot_font_final, fill="white")
             current_y += 40
 
         # 4. Provider Logos
@@ -193,38 +249,59 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
             if os.path.exists(logo_path):
                 logo_img = Image.open(logo_path).convert("RGBA")
                 
-                # Resize logo (Height approx 80px)
-                target_logo_h = 80
+                # Resize logo (Height reduced to 50px)
+                target_logo_h = 50
                 l_w, l_h = logo_img.size
                 ratio = target_logo_h / l_h
                 new_l_w = int(l_w * ratio)
                 logo_img = logo_img.resize((new_l_w, target_logo_h), Image.Resampling.LANCZOS)
                 
+                # Apply Rounded Corners Mask
+                mask = Image.new("L", (new_l_w, target_logo_h), 0)
+                mask_draw = ImageDraw.Draw(mask)
+                mask_draw.rounded_rectangle([(0, 0), (new_l_w, target_logo_h)], radius=15, fill=255)
+                # Apply mask to alpha channel ensuring existing alpha is respected if any (start new or composite)
+                # Since input is jpg converted to rgba, it's fully opaque. We can just set alpha.
+                logo_img.putalpha(mask)
+
                 # Position: Top Right
                 w_x = width - new_l_w - 40
                 w_y = 40
                 
-                # Mask for rounded corners on logo? Or just paste.
-                # The user image is red background text. Just paste it.
-                canvas.paste(logo_img, (w_x, w_y), logo_img if "A" in logo_img.mode else None)
+                canvas.paste(logo_img, (w_x, w_y), logo_img)
                 
                 # Text
                 wm_text = "t.me/moovidex"
                 
-                # Calculate text size to center below logo
-                # using meta_font (approx 35px)
+                # Create smaller font for watermark
                 try:
-                    bbox = draw.textbbox((0, 0), wm_text, font=meta_font)
+                    wm_font = ImageFont.truetype("arial.ttf", 20)
+                except IOError:
+                    try:
+                        wm_font = ImageFont.truetype("DejaVuSans.ttf", 20)
+                    except:
+                        wm_font = ImageFont.load_default()
+
+                # Calculate text size to center below logo
+                try:
+                    bbox = draw.textbbox((0, 0), wm_text, font=wm_font)
                     text_w = bbox[2] - bbox[0]
+                    text_h = bbox[3] - bbox[1]
                 except:
-                    text_w = draw.textlength(wm_text, font=meta_font)
+                    text_w = draw.textlength(wm_text, font=wm_font)
+                    text_h = 20 # approx
 
                 text_x = w_x + (new_l_w - text_w) // 2
-                text_y = w_y + target_logo_h + 10
+                
+                # Boundary check - ensure text doesn't go off screen right
+                if text_x + text_w > width - 10:
+                     text_x = width - text_w - 10
+                     
+                text_y = w_y + target_logo_h + 5
                 
                 # Add shadow/stroke for visibility
-                draw.text((text_x+2, text_y+2), wm_text, font=meta_font, fill="black")
-                draw.text((text_x, text_y), wm_text, font=meta_font, fill="white")
+                draw.text((text_x+1, text_y+1), wm_text, font=wm_font, fill="black")
+                draw.text((text_x, text_y), wm_text, font=wm_font, fill="white")
         except Exception as e:
             print(f"Error adding watermark: {e}")
 
