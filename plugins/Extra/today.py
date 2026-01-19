@@ -39,26 +39,23 @@ async def fetch_ottplay_releases(from_date, to_date):
 
 def is_strict_match(title, file_name):
     """
-    Checks if the file_name strictly starts with the title.
-    Ignores strict punctuation and casing.
-    Example: 
-      Title: "Him", File: "Him.2026..." -> MATCH
-      Title: "Him", File: "Call Him Og..." -> NO MATCH
+    Strictly matches title against file_name ignoring:
+    - Case
+    - Punctuation, symbols, brackets (anything non-alphanumeric)
+    Returns True if file_name starts with the cleaned title.
     """
     if not title or not file_name:
         return False
         
-    # Normalize: Replace non-alphanumeric with spaces, lowercase, strip
-    def normalize(s):
-        return re.sub(r'[\W_]+', ' ', str(s)).lower().strip()
+    def clean(s):
+        # Keep only alphanumeric characters, remove everything else
+        return re.sub(r'[^a-zA-Z0-9]', '', str(s)).lower()
         
-    t_clean = normalize(title)
-    f_clean = normalize(file_name)
+    t_clean = clean(title)
+    f_clean = clean(file_name)
     
-    # Must start with title followed by boundary (end of string or space)
-    # Pattern: ^title\b
-    pattern = r"^" + re.escape(t_clean) + r"\b"
-    return bool(re.search(pattern, f_clean))
+    # Must start with title (e.g. "IronMan" matches "IronMan2024...")
+    return f_clean.startswith(t_clean)
 
 async def process_and_post_movie(movie, check_db=True):
     """
@@ -359,12 +356,9 @@ async def check_releases_loop():
 @Client.on_message(filters.video | filters.document)
 async def check_new_files_available(client, message):
     """
-    Listens for new file uploads and checks if they match any Wanted Movies.
+    Listens for new file uploads and checks if they match any Latest Unposted Releases.
     """
     try:
-        if not WANTED_MOVIES:
-            return
-
         file_name = None
         if message.video:
             file_name = message.video.file_name
@@ -374,27 +368,48 @@ async def check_new_files_available(client, message):
         if not file_name:
             return
 
+        # Ensure we have a fresh list if empty
+        if not WANTED_MOVIES:
+            today = datetime.now()
+            from_date = (today - timedelta(days=3)).strftime("%Y-%m-%d")
+            to_date = (today + timedelta(days=3)).strftime("%Y-%m-%d")
+            movies = await fetch_ottplay_releases(from_date, to_date)
+            if movies:
+                 for movie in movies:
+                     mid = str(movie.get("_id"))
+                     # Populate only if not posted
+                     if not await db.is_movie_posted(mid):
+                         WANTED_MOVIES[mid] = movie
+
         # Check against Wanted Movies
-        # Use a copy of values to avoid Runtime Error if dictionary changes
+        # Use a copy of values safely
         wanted_list = list(WANTED_MOVIES.values())
         
         for movie in wanted_list:
             movie_id = str(movie.get("_id"))
             title = clean_text(movie.get("name", ""))
             
-            # Strict match check on the new file name
+            # Strict match check
             if is_strict_match(title, file_name):
+                # Double check if already posted (duplicate prevention)
+                if await db.is_movie_posted(movie_id):
+                    # Cleanup
+                    if movie_id in WANTED_MOVIES:
+                        del WANTED_MOVIES[movie_id]
+                    continue
+                
                 print(f"⚡ Instant Match Found: {file_name} for {title}")
-                # Wait a moment for indexing
+                # Wait a moment for file indexing if needed
                 await asyncio.sleep(5) 
                 
-                # Use a lock or check needed? process_and_post_movie handles DB check.
+                # Check DB inside process_and_post_movie as well, but we did it above.
                 # Force process
                 success = await process_and_post_movie(movie)
                 if success:
-                    # Notify logic done
-                    pass
-                break # Matched this file to a movie, move on
+                    # Remove from wanted list to prevent future matching
+                    if movie_id in WANTED_MOVIES:
+                        del WANTED_MOVIES[movie_id]
+                break 
                 
     except Exception as e:
         print(f"Error in check_new_files_available: {e}")
