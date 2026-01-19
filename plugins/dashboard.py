@@ -14,6 +14,8 @@ from database.ia_filterdb import get_search_results, col, sec_col
 from database.requests_db import requests_db
 from TechVJ.bot import TechVJBot
 from utils import get_size
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from info import REQST_CHANNEL
 import asyncio
 import re
 
@@ -431,6 +433,7 @@ async def requests_action_handler(request):
     action = data.get('action')
     notify = data.get('notify') == 'on'
     message_text = data.get('message_text')
+    search_link = data.get('search_link')
     
     req = await requests_db.get_request(request_id)
     if not req:
@@ -440,36 +443,115 @@ async def requests_action_handler(request):
         await requests_db.delete_request(request_id)
         return web.HTTPFound('/admin/requests?message=Request Deleted')
         
-    if action == 'fulfill':
-        await requests_db.update_request_status(request_id, 'fulfilled')
-        msg_result = "Status Updated."
-        if notify:
-            try:
-                txt = f"<b>✅ Your Request has been Fulfilled!</b>\n\n<b>🎬 {req.get('content')}</b>\n\n"
+    status_map = {
+        'uploaded': 'fulfilled',
+        'available': 'fulfilled',
+        'unavailable': 'unavailable'
+    }
+    
+    new_status = status_map.get(action)
+    if new_status:
+        await requests_db.update_request_status(request_id, new_status)
+
+    msg_result = f"Request Marked as {action.capitalize()}."
+
+    # --- 1. Sync Channel Message ---
+    # Attempt to edit the original message in the Request Channel to reflect new status
+    if req.get('message_id') and REQST_CHANNEL:
+        try:
+            # Reconstruct message with new status
+            original_content = req.get('content')
+            user_mention = f"<a href='tg://user?id={req['user_id']}'>{req['user_name']}</a>"
+            
+            updated_text = f"""
+<b>📩 Request Update</b>
+
+<b>👤 Requester:</b> {user_mention}
+<b>🆔 ID:</b> <code>{req['user_id']}</code>
+
+<b>🎬 Requested Content:</b>
+<blockquote expandable>{original_content}</blockquote>
+
+<b>⏳ Status:</b> #{action.capitalize()}
+<b>📅 Date:</b> {req['request_date'].strftime("%d %B %Y")}
+"""
+            await TechVJBot.edit_message_text(
+                chat_id=REQST_CHANNEL,
+                message_id=req['message_id'],
+                text=updated_text,
+                disable_web_page_preview=True
+            )
+        except Exception as e:
+            msg_result += f" (Channel Sync Failed: {e})"
+
+    # --- 2. Notify User ---
+    if notify:
+        try:
+            view_btn_url = "https://t.me/moovidexrobot" # Fallback
+            if req.get('message_id') and REQST_CHANNEL:
+                 try:
+                     # Attempt to construct deep link to the message
+                     # Assumes REQST_CHANNEL is a private channel ID (starting with -100)
+                     # Format: https://t.me/c/{id_without_100}/{msg_id}
+                     chat_id_str = str(REQST_CHANNEL)
+                     if chat_id_str.startswith("-100"):
+                         chat_id_clean = chat_id_str[4:]
+                         view_url = f"https://t.me/c/{chat_id_clean}/{req['message_id']}"
+                         btn.append([InlineKeyboardButton("👀 View Status", url=view_url)])
+                     elif not chat_id_str.startswith("-"):
+                         # Probably public username or non-100 ID (unlikely for channel)
+                         pass 
+                 except:
+                     pass
+
+            btn = []
+            txt = ""
+            
+            if action in ['uploaded', 'available']:
+                emoji = "✅" if action == 'uploaded' else "📂"
+                title = "Request Uploaded!" if action == 'uploaded' else "Request Already Available!"
+                
+                txt = f"<b>{emoji} {title}</b>\n\n<b>🎬 {req.get('content')}</b>\n\n"
                 if message_text:
                     txt += f"{message_text}\n\n"
-                txt += "<i>Thank you for your patience!</i>"
+                txt += "<i>Click below to get it!</i>"
+
+                if search_link:
+                    btn.append([InlineKeyboardButton("🔍 Search Here", url=search_link)])
                 
-                await TechVJBot.send_message(chat_id=int(req['user_id']), text=txt)
-                msg_result += " User notified."
-            except Exception as e:
-                msg_result += f" Failed to notify: {e}"
-        return web.HTTPFound(f'/admin/requests?message={msg_result}')
-        
-    if action == 'reject':
-        await requests_db.update_request_status(request_id, 'rejected')
-        msg_result = "Request Rejected."
-        if notify:
-            try:
-                txt = f"<b>❌ Request Rejected</b>\n\n<b>🎬 {req.get('content')}</b>\n\n"
+                if req.get('message_id') and REQST_CHANNEL:
+                     try:
+                         chat_id_str = str(REQST_CHANNEL)
+                         if chat_id_str.startswith("-100"):
+                             chat_id_clean = chat_id_str[4:]
+                             view_url = f"https://t.me/c/{chat_id_clean}/{req['message_id']}"
+                             btn.append([InlineKeyboardButton("👀 View Status", url=view_url)])
+                     except:
+                         pass
+                
+            elif action == 'unavailable':
+                txt = f"<b>❌ Request Unavailable</b>\n\n<b>🎬 {req.get('content')}</b>\n\n"
                 if message_text:
                     txt += f"<b>Reason:</b> {message_text}\n\n"
-                txt += "<i>Please check our request rules.</i>"
                 
-                await TechVJBot.send_message(chat_id=int(req['user_id']), text=txt)
-                msg_result += " User notified."
-            except Exception as e:
-                msg_result += f" Failed to notify: {e}"
-        return web.HTTPFound(f'/admin/requests?message={msg_result}')
+                if req.get('message_id') and REQST_CHANNEL:
+                     try:
+                         chat_id_str = str(REQST_CHANNEL)
+                         if chat_id_str.startswith("-100"):
+                             chat_id_clean = chat_id_str[4:]
+                             view_url = f"https://t.me/c/{chat_id_clean}/{req['message_id']}"
+                             btn.append([InlineKeyboardButton("👀 View Request", url=view_url)])
+                     except:
+                         pass
+            
+            if btn:
+                markup = InlineKeyboardMarkup(btn)
+                await TechVJBot.send_message(chat_id=int(req['user_id']), text=txt, reply_markup=markup)
+            else:
+                 await TechVJBot.send_message(chat_id=int(req['user_id']), text=txt)
 
-    return web.HTTPFound('/admin/requests')
+            msg_result += " User notified."
+        except Exception as e:
+            msg_result += f" Failed to notify: {e}"
+
+    return web.HTTPFound(f'/admin/requests?message={msg_result}')

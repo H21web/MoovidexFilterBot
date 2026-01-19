@@ -8,8 +8,9 @@
     .status-rejected { background-color: #f44336; color: white; }
     
     .action-btn { padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; margin-right: 5px; color: white; text-align: center; text-decoration: none; display: inline-block;}
-    .btn-fulfill { background-color: #4CAF50; }
-    .btn-reject { background-color: #f44336; }
+    .btn-uploaded { background-color: #2196F3; } /* Blue */
+    .btn-available { background-color: #4CAF50; } /* Green */
+    .btn-unavailable { background-color: #f44336; } /* Red */
     .btn-delete { background-color: #666; }
 
     /* Modal */
@@ -71,9 +72,35 @@
                     </td>
                     <td>
                         {% if req.status == 'pending' %}
-                        <button class="action-btn btn-fulfill" onclick="openModal('fulfill', '{{ req._id }}', '{{ req.content|replace("'", "\\'") }}')">✅ Fulfill</button>
-                        <button class="action-btn btn-reject" onclick="openModal('reject', '{{ req._id }}', '{{ req.content|replace("'", "\\'") }}')">❌ Reject</button>
+                    <td>
+                        {% if req.status == 'pending' %}
+                        <!-- New Action Buttons with data-attributes for safety -->
+                        <button class="action-btn btn-uploaded" 
+                            data-id="{{ req._id }}" 
+                            data-content="{{ req.content|e }}" 
+                            onclick="openModal('uploaded', this.dataset.id, this.dataset.content)">
+                            ✅ Uploaded
+                        </button>
+                        <button class="action-btn btn-available" 
+                            data-id="{{ req._id }}" 
+                            data-content="{{ req.content|e }}" 
+                            onclick="openModal('available', this.dataset.id, this.dataset.content)">
+                            📂 Available
+                        </button>
+                        <button class="action-btn btn-unavailable" 
+                            data-id="{{ req._id }}" 
+                            data-content="{{ req.content|e }}" 
+                            onclick="openModal('unavailable', this.dataset.id, this.dataset.content)">
+                            ❌ Unavailable
+                        </button>
                         {% else %}
+                        <form action="/admin/requests/action" method="POST" style="display:inline;" onsubmit="return confirm('Delete this record?');">
+                            <input type="hidden" name="request_id" value="{{ req._id }}">
+                            <input type="hidden" name="action" value="delete">
+                            <button type="submit" class="action-btn btn-delete">🗑 Delete</button>
+                        </form>
+                        {% endif %}
+                    </td>
                         <form action="/admin/requests/action" method="POST" style="display:inline;" onsubmit="return confirm('Delete this record?');">
                             <input type="hidden" name="request_id" value="{{ req._id }}">
                             <input type="hidden" name="action" value="delete">
@@ -109,9 +136,14 @@
             <input type="hidden" id="modalReqId" name="request_id">
             <input type="hidden" id="modalAction" name="action">
             
-            <div class="form-group">
+            <div class="form-group" id="linkGroup" style="display:none;">
+                <label for="search_link">Search Link (Editable):</label>
+                <input type="text" id="search_link" name="search_link">
+            </div>
+
+            <div class="form-group" id="messageGroup">
                 <label for="message_text">Message to User (Optional):</label>
-                <textarea id="message_text" name="message_text" rows="4" placeholder="Enter download link or rejection reason..."></textarea>
+                <textarea id="message_text" name="message_text" rows="4"></textarea>
             </div>
             
             <div class="form-group">
@@ -122,7 +154,7 @@
             
             <div style="text-align: right;">
                 <button type="button" class="action-btn" style="background: #666;" onclick="closeModal()">Cancel</button>
-                <button type="submit" class="action-btn" id="modalSubmitBtn" style="background: #4CAF50;">Confirm</button>
+                <button type="submit" class="action-btn" id="modalSubmitBtn">Confirm</button>
             </div>
         </form>
     </div>
@@ -138,17 +170,43 @@
         const title = document.getElementById('modalTitle');
         const submitBtn = document.getElementById('modalSubmitBtn');
         const textarea = document.getElementById('message_text');
+        const linkInput = document.getElementById('search_link');
+        const linkGroup = document.getElementById('linkGroup');
+        const msgGroup = document.getElementById('messageGroup');
         
-        if (action === 'fulfill') {
-            title.innerText = '✅ Fulfill Request';
-            submitBtn.innerText = 'Send Link';
+        // Reset defaults
+        linkGroup.style.display = 'none';
+        msgGroup.style.display = 'block';
+        submitBtn.className = 'action-btn'; // reset class
+        
+        // Sanitize content for URL
+        const safeContent = content.replace(/[^a-zA-Z0-9]/g, '_');
+        const defaultLink = `https://t.me/moovidexrobot?start=Search_${safeContent}`;
+
+        if (action === 'uploaded') {
+            title.innerText = '✅ Mark as Uploaded';
+            submitBtn.innerText = 'Notify & Update';
+            submitBtn.style.backgroundColor = '#2196F3';
+            textarea.placeholder = 'Optional custom message...';
+            
+            linkGroup.style.display = 'block';
+            linkInput.value = defaultLink;
+            
+        } else if (action === 'available') {
+            title.innerText = '📂 Mark as Available';
+            submitBtn.innerText = 'Notify & Update';
             submitBtn.style.backgroundColor = '#4CAF50';
-            textarea.placeholder = 'Paste the download link here (e.g., https://t.me/...)';
-        } else {
-            title.innerText = '❌ Reject Request';
+            textarea.placeholder = 'Optional custom message...';
+            
+            linkGroup.style.display = 'block';
+            linkInput.value = defaultLink;
+
+        } else if (action === 'unavailable') {
+            title.innerText = '❌ Mark as Unavailable';
             submitBtn.innerText = 'Reject Request';
             submitBtn.style.backgroundColor = '#f44336';
-            textarea.placeholder = 'Reason for rejection (e.g., Not yet released, Unavailable...)';
+            textarea.placeholder = 'Reason (e.g., Not released yet)...';
+            linkGroup.style.display = 'none';
         }
     }
     
