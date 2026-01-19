@@ -86,7 +86,13 @@
                         </div>
                     </td>
                     <td style="white-space: normal;">
-                        <div style="font-weight: 500; color: #fff;">{{ req.content }}</div>
+                        <div style="font-weight: 500; color: #fff; margin-bottom: 5px;">{{ req.content }}</div>
+                        <a href="https://t.me/moovidexrobot?start=Search_{{ req.content | replace(' ', '_') }}" 
+                           target="_blank" 
+                           class="action-btn" 
+                           style="background-color: #17a2b8; font-size: 0.75rem; padding: 4px 8px; display: inline-flex;">
+                           🔍 Search
+                        </a>
                     </td>
                     <td>
                         <span class="status-badge status-{{ req.status }}">

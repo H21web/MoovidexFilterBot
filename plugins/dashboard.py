@@ -446,7 +446,7 @@ async def requests_action_handler(request):
     status_map = {
         'uploaded': 'fulfilled',
         'available': 'fulfilled',
-        'unavailable': 'unavailable'
+        'unavailable': 'rejected'
     }
     
     new_status = status_map.get(action)

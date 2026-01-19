@@ -1193,9 +1193,17 @@ async def receive_custom_search(client, message):
         
         msg = f"{emoji} **{data['title']}** · {data['year']} · `{data['type_str']}`\n\n"
         msg += f"**>🉑 {data['lang_tag']}\n"
-        msg += f">🎭 {data['genre_str']} · 📺 {data['provider_str']}\n"
-        msg += f">®️ {data['cert_str']} · ⭐ {data['rating']}\n"
-        msg += f">📅 {data['r_date']}\n"
+        
+        if is_upcoming:
+            msg += f">🎭 {data['genre_str']}\n"
+            msg += f">🚀 **Releasing On:** {data['provider_str']}\n"
+            msg += f">📅 **Date:** {data['r_date']}\n"
+            msg += f">®️ {data['cert_str']} · ⭐ {data['rating']}\n"
+        else:
+            msg += f">🎭 {data['genre_str']} · 📺 {data['provider_str']}\n"
+            msg += f">®️ {data['cert_str']} · ⭐ {data['rating']}\n"
+            msg += f">📅 {data['r_date']}\n"
+
         msg += f">👥 {data['cast_str']}\n"
         msg += f">\n"
         msg += f">__Plot:__\n"

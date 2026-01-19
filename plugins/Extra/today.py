@@ -658,7 +658,7 @@ async def process_movie_data(movie, user_id):
         "title": title, "year": year, "type_str": type_str, "lang_tag": lang_tag,
         "genre_str": genre_str, "provider_str": provider_str, "cert_str": cert_str,
         "rating": rating, "r_date": r_date, "cast_str": cast_str, "plot": plot,
-        "backdrop_url": backdrop_url if backdrop_url else ottplay_poster,
+        "backdrop_url": tmdb_backdrop if tmdb_backdrop else ottplay_poster,
         "poster_url": ottplay_poster if ottplay_poster else tmdb_poster,
         "provider_logos": provider_logos,
         "safe_title": safe_title, "movie_id": movie_id,
