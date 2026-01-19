@@ -845,6 +845,20 @@ async def binged_detail(client, cq):
              
     genre_str = ", ".join(genres) if genres else "N/A"
     
+    movie['rating'] = tmdb_rating
+    movie['post_content'] = tmdb_plot
+    movie['genre'] = genres
+    movie['genre_str'] = genre_str
+    movie['cast'] = cast
+    movie['cast_str'] = cast_str
+    movie['backdrop_url'] = jw_backdrop
+    movie['poster_url'] = jw_poster
+    movie['provider_logos'] = provider_logos if 'provider_logos' in locals() else []
+    movie['image'] = tmdb_backdrop or jw_backdrop # Persist best image URL
+    
+    # Save back to temp
+    temp.BINGED_RESULTS[user_id][movie_id] = movie
+
     msg = f"✅ **{title}** · {year} · `{type_str}`\n\n"
     msg += f"**>🉑 {lang_tag}\n"
     msg += f">🎭 {genre_str} · 📺 {provider_str}\n"
@@ -1007,6 +1021,24 @@ async def binged_post(client, cq):
     
     # Use Binged poster
     final_image = image
+    
+    # Try to generate Image if components exist
+    if movie_data.get('backdrop_url') and movie_data.get('poster_url'):
+         try:
+            await cq.answer("Generating image...", cache_time=0)
+            final_image = await generate_status_image(
+                movie_data['backdrop_url'], 
+                movie_data['poster_url'], 
+                movie_data.get('provider_logos', []), 
+                title, 
+                year, 
+                movie_data.get('rating', 'N/A'), 
+                movie_data.get('genre_str', 'N/A'), 
+                movie_data.get('post_content', 'No plot')
+            )
+         except Exception as e:
+            print(f"Post Image Gen Error: {e}")
+
     
     # Build buttons based on status
     buttons = []
