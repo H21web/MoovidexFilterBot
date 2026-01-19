@@ -587,6 +587,14 @@ async def ottplay_detail(client, cq):
         final_image_io = await generate_status_image(backdrop_url, poster_url, provider_logos, title, year, rating, genre_str, plot)
     
     buttons = [[InlineKeyboardButton(f"🔍 Search: {title}", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]]
+    
+    # Admin Buttons
+    if user_id in ADMINS:
+         buttons.append([
+             InlineKeyboardButton("✏️ Edit & Post", callback_data=f"ottplay_edit_post_{movie_id}"),
+             InlineKeyboardButton("📣 Post Default", callback_data=f"ottplay_post_{movie_id}")
+         ])
+         
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
     
     if final_image_io:

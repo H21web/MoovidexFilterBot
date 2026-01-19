@@ -51,25 +51,28 @@ async def fetch_url(url):
     return None
 
 async def fetch_ottplay_upcoming():
-    base_url = "https://api2.ottplay.com/api/v4.5/web/ranking?module_name=hot_new&platform=web&section=widget_coming_soon_to_you&page={}&pin_it=true&template_name=upcoming_content"
     
-    all_movies = []
-    # Fetch first 3 pages to get around 30 movies (as per 10 per page typical)
-    for page in range(1, 4):
-        try:
-            url = base_url.format(page)
-            data = await fetch_url(url)
-            if data and 'rank' in data:
-               movies = [item.get('movie') for item in data['rank'] if item.get('movie')]
-               if not movies:
-                   break # Stop if no results on this page
-               all_movies.extend(movies)
-            else:
-                break
-        except:
-            break
+    # Date Range: Tomorrow to +40 days
+    tomorrow = datetime.now() + timedelta(days=1)
+    future = tomorrow + timedelta(days=40)
+    
+    from_date = tomorrow.strftime("%Y-%m-%d")
+    to_date = future.strftime("%Y-%m-%d")
+    
+    # user specified limit=10, but we probably want more coverage for 40 days.
+    # Let's request 50 items to be safe.
+    base_url = f"https://api2.ottplay.com/api/v4.7/web/new-release?limit=50&from_date={from_date}&to_date={to_date}&content_type=all&language=&provider="
+    
+    try:
+        data = await fetch_url(base_url)
+        if data and 'data' in data:
+            return data['data']
+        # Fallback if structure is different?
+        if data and 'results' in data: return data['results']
+    except Exception as e:
+        print(f"Upcoming Fetch Error: {e}")
             
-    return all_movies
+    return []
 
 # /upcoming command
 @Client.on_message(filters.command("upcoming"))
@@ -242,9 +245,15 @@ async def upcoming_detail(client, cq):
         await cq.answer("Generating image...", cache_time=0)
         final_image_io = await generate_status_image(backdrop_url, poster_url, provider_logos, title, year, rating, genre_str, plot)
     
-    buttons = [[InlineKeyboardButton(f"🔔 Notify Me", callback_data=f"notify_{safe_title}_{r_date}")]] # Placeholder for notify
-    # Search probably useless for upcoming, but maybe valid? 
-    # buttons.append([InlineKeyboardButton(f"🔍 Search: {title}", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")])
+    buttons = [[InlineKeyboardButton(f"🔔 Notify Me", callback_data=f"notify_{safe_title}_{r_date}")]] 
+    
+    # Admin Buttons
+    if user_id in ADMINS:
+         buttons.append([
+             InlineKeyboardButton("✏️ Edit & Post", callback_data=f"upcoming_edit_post_{movie_id}"),
+             InlineKeyboardButton("📣 Post Default", callback_data=f"upcoming_post_{movie_id}")
+         ])
+         
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
     
     if final_image_io:
