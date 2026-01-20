@@ -43,22 +43,17 @@ async def save_file(media):
     except DuplicateKeyError:
         print(f"{file_name} is already saved.")
         return False, 0
-    except Exception as e:
-        print(f"Primary DB Write Error: {e}")
+    except:
         if MULTIPLE_DATABASE:
             try:
                 sec_col.insert_one(file)
-                print(f"[Secondary] {file_name} saved successfully.")
+                print(f"{file_name} is successfully saved.")
                 return True, 1
             except DuplicateKeyError:
-                print(f"[Secondary] {file_name} already exists.")
+                print(f"{file_name} is already saved.")
                 return False, 0
-            except Exception as e2:
-                print(f"Secondary DB Write Error: {e2}")
-                return False, 2
         else:
-            print("Multiple Database is OFF. Cannot failover.")
-            return False, 2
+            print("Your Current File Database Is Full, Turn On Multiple Database Feature And Add Second File Mongodb To Save File.")
 
 def clean_file_name(file_name):
     """Clean and format the file name."""
@@ -72,10 +67,11 @@ def clean_file_name(file_name):
 
 def is_file_already_saved(file_id, file_name):
     """Check if the file is already saved in either collection."""
+    found1 = {'file_name': file_name}
     found = {'file_id': file_id}
 
     for collection in [col, sec_col]:
-        if collection.find_one(found):
+        if collection.find_one(found1) or collection.find_one(found):
             print(f"{file_name} is already saved.")
             return True
             
