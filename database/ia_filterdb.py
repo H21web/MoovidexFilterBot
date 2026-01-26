@@ -1,3 +1,4 @@
+
 # Don't Remove Credit @VJ_Botz
 # Subscribe YouTube Channel For Amazing Bot @Tech_VJ
 # Ask Doubt on telegram @KingVJ01
@@ -67,10 +68,11 @@ def clean_file_name(file_name):
 
 def is_file_already_saved(file_id, file_name):
     """Check if the file is already saved in either collection."""
+    found1 = {'file_name': file_name}
     found = {'file_id': file_id}
 
     for collection in [col, sec_col]:
-        if collection.find_one(found):
+        if collection.find_one(found1) or collection.find_one(found):
             print(f"{file_name} is already saved.")
             return True
             
