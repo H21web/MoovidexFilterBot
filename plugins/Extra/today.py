@@ -39,39 +39,56 @@ async def fetch_ottplay_releases(from_date, to_date):
 
 def is_smart_match(title, year, file_name):
     """
-    Smart Match: 
-    - Normalizes title and filename.
-    - Matches Title with Regex Boundaries (handles 'The' prefix).
-    - Enforces Year check if year is provided.
+    Enhanced Smart Match for Movie/Series Updates
     """
     if not title or not file_name:
         return False
         
-    file_name_norm = re.sub(r'[._\-\[\]\(\)]', ' ', file_name.lower())
-    file_name_norm = re.sub(r'\s+', ' ', file_name_norm).strip()
+    # 1. Normalize Names (Lower, remove specific noise)
+    def clean(s):
+        s = str(s).lower()
+        # Replace delimiters with space
+        s = re.sub(r'[._\-\[\]\(\)\{\}]', ' ', s) 
+        # Collapse spaces
+        s = re.sub(r'\s+', ' ', s) 
+        return s.strip()
+
+    title_clean = clean(title)
+    file_clean = clean(file_name)
     
-    title_norm = re.sub(r'[._\-\[\]\(\)]', ' ', title.lower())
-    title_norm = re.sub(r'\s+', ' ', title_norm).strip()
+    # 2. Year Validation Logic
+    # Extract all 4-digit years from filename (1900-2099)
+    file_years = re.findall(r'\b(19\d{2}|20\d{2})\b', file_clean)
     
-    # Check Year First (Crucial)
     if year:
         year_str = str(year)
-        if year_str not in file_name:
-            return False
-            
-    # Title Logic
-    # 1. Exact contain
-    if title_norm in file_name_norm:
+        if file_years:
+            # If filename has years, one of them MUST match the API year
+            if year_str not in file_years:
+                return False
+        else:
+            # If filename has NO years, we allow match ONLY if:
+            # It looks like a Series (S01E01, etc)
+            # Regex covers: s01e01, s01, e01, season 1, episode 1
+            is_series_file = re.search(r'(s\d+e\d+|s\d+|e\d+|season\s*\d+|episode\s*\d+)', file_clean)
+            if not is_series_file:
+                 # If valid movie year is known but missing from file -> Strict Reject to avoid false positives
+                 return False
+
+    # 3. Flexible Title Matching (Token Order)
+    stopwords = {'the', 'a', 'an', 'of', 'and', 'in', 'on', 'at', 'to', 'is', 'are', 'am'}
+    title_words = [w for w in title_clean.split() if w not in stopwords]
+    
+    if not title_words: 
+        title_words = title_clean.split()
+        
+    # Construct Regex: word1 + anything + word2 + anything ...
+    # This allows "Mission Impossible" to match "Mission.Impossible"
+    pattern = r'.*'.join([re.escape(w) for w in title_words])
+    
+    if re.search(pattern, file_clean):
         return True
         
-    # 2. Remove leading "the " or "a " from title
-    core_title = re.sub(r'^(the|a)\s+', '', title_norm)
-    if core_title and core_title != title_norm:
-        # Require word boundaries for core title
-        pattern = r'\b' + re.escape(core_title) + r'\b'
-        if re.search(pattern, file_name_norm):
-            return True
-            
     return False
 
 async def process_and_post_movie(movie, check_db=True):
@@ -370,7 +387,7 @@ async def check_releases_loop():
         await asyncio.sleep(3600) # Check every hour
 
 # Immediate Update Handler
-@Client.on_message(filters.video | filters.document)
+@Client.on_message(filters.video | filters.document, group=10)
 async def check_new_files_available(client, message):
     """
     Listens for new file uploads and checks if they match any Latest Unposted Releases.
@@ -386,17 +403,18 @@ async def check_new_files_available(client, message):
             return
 
         # Ensure we have a fresh list if empty
-        if not WANTED_MOVIES:
-            today = datetime.now()
-            from_date = (today - timedelta(days=3)).strftime("%Y-%m-%d")
-            to_date = (today + timedelta(days=3)).strftime("%Y-%m-%d")
-            movies = await fetch_ottplay_releases(from_date, to_date)
-            if movies:
-                 for movie in movies:
-                     mid = str(movie.get("_id"))
-                     # Populate only if not posted
-                     if not await db.is_movie_posted(mid):
-                         WANTED_MOVIES[mid] = movie
+        # REMOVED blocking fetch in message handler to prevent lag
+        # if not WANTED_MOVIES:
+        #    today = datetime.now()
+        #    from_date = (today - timedelta(days=3)).strftime("%Y-%m-%d")
+        #    to_date = (today + timedelta(days=3)).strftime("%Y-%m-%d")
+        #    movies = await fetch_ottplay_releases(from_date, to_date)
+        #    if movies:
+        #         for movie in movies:
+        #             mid = str(movie.get("_id"))
+        #             # Populate only if not posted
+        #             if not await db.is_movie_posted(mid):
+        #                 WANTED_MOVIES[mid] = movie
 
         # Check against Wanted Movies
         # Use a copy of values safely
