@@ -797,6 +797,33 @@ async def binged_detail(client, cq):
     tmdb_plot, tmdb_rating, genres, cast_str = "No description available.", "N/A", [], "N/A"
     tmdb_backdrop, tmdb_poster = None, None
     lang_tag = "#Unknown"
+    
+    # Ask Admin to choose status (Released / Upcoming)
+    buttons = [
+        [
+            InlineKeyboardButton("✅ Released", callback_data=f"binged_status_released_{movie_id}"),
+            InlineKeyboardButton("🔔 Upcoming", callback_data=f"binged_status_upcoming_{movie_id}")
+        ],
+        [InlineKeyboardButton("❌ Close", callback_data="close_message")]
+    ]
+    
+    # Preview message
+    preview_caption = f"🎬 **{title}** ({year})\n\nSelect the movie status:"
+    
+    if jw_backdrop or jw_poster:
+         await cq.message.reply_photo(
+             photo=jw_backdrop or jw_poster,
+             caption=preview_caption,
+             reply_markup=InlineKeyboardMarkup(buttons)
+         )
+    else:
+         await cq.message.reply_text(
+             preview_caption,
+             reply_markup=InlineKeyboardMarkup(buttons),
+             disable_web_page_preview=True
+         )
+    await cq.answer()
+    return
 
     if tmdb_id:
         tmdb_details = get_tmdb_details(tmdb_id, media_type)

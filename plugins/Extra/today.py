@@ -113,9 +113,15 @@ async def process_and_post_movie(movie, check_db=True):
                  return True
 
         # Check File Availability with STRICT MATCH
+        # Strategy 1: Search with Year (Precision)
         search_query = f"{title} {year}"
-        # Search for files
         files, _, total_files = await get_search_results(UPDATE_CHANNEL_ID, search_query, max_results=20)
+        
+        # Strategy 2: Fallback to Title Only if not found (Recall)
+        # Many series files might just be "Series Name S01" without year
+        if total_files == 0:
+            print(f"DEBUG: No files found for '{search_query}', retrying with '{title}'")
+            files, _, total_files = await get_search_results(UPDATE_CHANNEL_ID, title, max_results=20)
         
         found_file = False
         if total_files > 0:
