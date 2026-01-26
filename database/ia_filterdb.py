@@ -40,6 +40,14 @@ async def save_file(media):
     try:
         col.insert_one(file)
         print(f"{file_name} is successfully saved.")
+        # Hook for Instant Update
+        try:
+            from plugins.Extra.today import check_and_post_if_needed
+            import asyncio
+            asyncio.create_task(check_and_post_if_needed(file_name))
+        except Exception as e:
+            print(f"Hook Error: {e}")
+            
         return True, 1
     except DuplicateKeyError:
         print(f"{file_name} is already saved.")
@@ -49,6 +57,14 @@ async def save_file(media):
             try:
                 sec_col.insert_one(file)
                 print(f"{file_name} is successfully saved.")
+                # Hook for Instant Update (Secondary DB)
+                try:
+                    from plugins.Extra.today import check_and_post_if_needed
+                    import asyncio
+                    asyncio.create_task(check_and_post_if_needed(file_name))
+                except Exception as e:
+                    print(f"Hook Error: {e}")
+                    
                 return True, 1
             except DuplicateKeyError:
                 print(f"{file_name} is already saved.")

@@ -24,16 +24,8 @@ async def media(bot, message):
         
         if aynav:
             # File Saved Successfully
-            if LOG_CHANNEL:
-                print(f"DEBUG: Sending log to {LOG_CHANNEL}")
-                await bot.send_message(
-                    LOG_CHANNEL,
-                    f"<b>File Saved Automatically!</b>\n\n"
-                    f"<b>🎬 Title:</b> {media.file_name}\n"
-                    f"<b>📦 Size:</b> {get_size(media.file_size)}\n"
-                    f"<b>📂 Channel:</b> {message.chat.title} (`{message.chat.id}`)\n"
-                    f"<b>💾 Database:</b> {'Secondary' if vnay == 1 else 'Primary'}"
-                )
+            # Logging Removed as per User Request
+            pass
         elif vnay == 0:
             # Duplicate
             print(f"DEBUG: Duplicate file skipped: {media.file_name}")

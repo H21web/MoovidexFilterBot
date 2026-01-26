@@ -348,6 +348,51 @@ async def process_and_post_movie(movie, check_db=True):
         print(f"Error processing movie {movie.get('name')}: {e}")
         return False
 
+# Hook for Database Insert (Instant Update)
+async def check_and_post_if_needed(file_name):
+    """
+    Called by database/ia_filterdb.py immediately after a file is saved.
+    Checks if the saved file matches any 'Wanted Movie' and triggers a post.
+    """
+    if not WANTED_MOVIES:
+        return
+
+    try:
+        # Use a copy of values safely
+        wanted_list = list(WANTED_MOVIES.values())
+        
+        for movie in wanted_list:
+            movie_id = str(movie.get("_id"))
+            title = clean_text(movie.get("name", ""))
+            
+            # Strict match check
+            year = movie.get("release_year")
+            if is_smart_match(title, year, file_name):
+                # Double check to prevent race conditions
+                if await db.is_movie_posted(movie_id):
+                    if movie_id in WANTED_MOVIES:
+                        del WANTED_MOVIES[movie_id]
+                    continue
+                
+                print(f"⚡ Instant Hook Match: {file_name} for {title}")
+                
+                # Check DB for file presence (since it was JUST saved, it should be there)
+                # But we pass check_db=True to process_and_post_movie safely or custom logic
+                # Actually process_and_post_movie does: 
+                # 1. db.is_movie_posted? (We checked above)
+                # 2. get_search_results (searches DB). 
+                # Since we just saved it, search should find it.
+                
+                success = await process_and_post_movie(movie)
+                if success:
+                    # Remove from wanted list to prevent future matching
+                    if movie_id in WANTED_MOVIES:
+                        del WANTED_MOVIES[movie_id]
+                break 
+                
+    except Exception as e:
+        print(f"Error in check_and_post_if_needed: {e}")
+
 # Background Loop for Auto-Updates
 async def check_releases_loop():
     print("Auto-Update Loop Started (Ottplay v2)")
@@ -372,10 +417,13 @@ async def check_releases_loop():
                             del WANTED_MOVIES[movie_id]
                         continue
                         
-                    # Add to Wanted List
+                    # Add to Wanted List (optional now, since we don't have a listener)
                     WANTED_MOVIES[movie_id] = movie
                     
-                    # Try to process (Check if file already exists)
+                    # Use existing Logic: Search DB ("check channels") for this movie
+                    # process_and_post_movie searches via get_search_results (db search)
+                    # If found in DB (which reflects channel state), it posts.
+                    # If not found, it returns False (do nothing).
                     await process_and_post_movie(movie, check_db=False)
                     
                     # Floodwait prevention
@@ -385,70 +433,6 @@ async def check_releases_loop():
             print(f"Error in check_releases_loop: {e}")
             
         await asyncio.sleep(3600) # Check every hour
-
-# Immediate Update Handler
-@Client.on_message(filters.video | filters.document, group=10)
-async def check_new_files_available(client, message):
-    """
-    Listens for new file uploads and checks if they match any Latest Unposted Releases.
-    """
-    try:
-        file_name = None
-        if message.video:
-            file_name = message.video.file_name
-        elif message.document:
-            file_name = message.document.file_name
-            
-        if not file_name:
-            return
-
-        # Ensure we have a fresh list if empty
-        # REMOVED blocking fetch in message handler to prevent lag
-        # if not WANTED_MOVIES:
-        #    today = datetime.now()
-        #    from_date = (today - timedelta(days=3)).strftime("%Y-%m-%d")
-        #    to_date = (today + timedelta(days=3)).strftime("%Y-%m-%d")
-        #    movies = await fetch_ottplay_releases(from_date, to_date)
-        #    if movies:
-        #         for movie in movies:
-        #             mid = str(movie.get("_id"))
-        #             # Populate only if not posted
-        #             if not await db.is_movie_posted(mid):
-        #                 WANTED_MOVIES[mid] = movie
-
-        # Check against Wanted Movies
-        # Use a copy of values safely
-        wanted_list = list(WANTED_MOVIES.values())
-        
-        for movie in wanted_list:
-            movie_id = str(movie.get("_id"))
-            title = clean_text(movie.get("name", ""))
-            
-            # Strict match check
-            year = movie.get("release_year")
-            if is_smart_match(title, year, file_name):
-                # Double check if already posted (duplicate prevention)
-                if await db.is_movie_posted(movie_id):
-                    # Cleanup
-                    if movie_id in WANTED_MOVIES:
-                        del WANTED_MOVIES[movie_id]
-                    continue
-                
-                print(f"⚡ Instant Match Found: {file_name} for {title}")
-                # Wait a moment for file indexing if needed
-                await asyncio.sleep(5) 
-                
-                # Check DB inside process_and_post_movie as well, but we did it above.
-                # Force process
-                success = await process_and_post_movie(movie)
-                if success:
-                    # Remove from wanted list to prevent future matching
-                    if movie_id in WANTED_MOVIES:
-                        del WANTED_MOVIES[movie_id]
-                break 
-                
-    except Exception as e:
-        print(f"Error in check_new_files_available: {e}")
 
 
 # Start Handler for More Like This (Deep Link)
