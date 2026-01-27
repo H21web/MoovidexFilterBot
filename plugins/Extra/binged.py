@@ -920,8 +920,8 @@ async def binged_status_select(client, cq):
     # Store status
     temp.MOVIE_STATUS[movie_id] = status
     
-    title = clean_text(movie_data.get("post_title", "Unknown"))
-    year = movie_data.get("release_year", "N/A")
+    title = clean_text(movie_data.get("title", movie_data.get("post_title", "Unknown")))
+    year = movie_data.get("year", movie_data.get("release_year", "N/A"))
     safe_title = format_search_title(title, year)
     
     # Build message based on status
@@ -1010,8 +1010,8 @@ async def binged_post(client, cq):
     if not movie_data:
         return await cq.answer("Movie data not found.", show_alert=True)
 
-    title = clean_text(movie_data.get("post_title", "Unknown"))
-    year = movie_data.get("release_year", "N/A")
+    title = clean_text(movie_data.get("title", movie_data.get("post_title", "Unknown")))
+    year = movie_data.get("year", movie_data.get("release_year", "N/A"))
     safe_title = format_search_title(title, year)
     
     # Get status from temp storage
@@ -1299,8 +1299,8 @@ async def receive_custom_search(client, message):
 
     # Get title based on source
     if source == "binged":
-        title = clean_text(movie_data.get("post_title", "Unknown"))
-        year = movie_data.get("release_year", "N/A")
+        title = clean_text(movie_data.get("title", movie_data.get("post_title", "Unknown")))
+        year = movie_data.get("year", movie_data.get("release_year", "N/A"))
     else:  # imdb
         title = clean_text(movie_data.get("title", "Unknown"))
         year = movie_data.get("year", "N/A")
@@ -1418,8 +1418,8 @@ async def notify_release_callback(client, cq):
                 pass
         
         if movie_data:
-            title = clean_text(movie_data.get("post_title", "Unknown"))
-            release_date = unix_to_date(movie_data.get("release_date"))
+            title = clean_text(movie_data.get("title", movie_data.get("post_title", "Unknown")))
+            release_date = movie_data.get("release_date_str", unix_to_date(movie_data.get("release_date")))
             subscribed_date = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
             user_link = f"<a href='tg://user?id={user_id}'>{cq.from_user.first_name}</a>"
             
