@@ -417,46 +417,21 @@ def build_released_message(movie_data, bot_username, source='binged'):
         return msg, image
     
     else:  # binged
-        title = clean_text(movie_data.get("post_title", "Unknown"))
-        year = movie_data.get("release_year", "N/A")
-        movie_type = movie_data.get("category", "N/A")
+        title = clean_text(movie_data.get("title", "Unknown"))
+        year = movie_data.get("year", "N/A")
+        movie_type = movie_data.get("type_str", "N/A")
         image = movie_data.get("image", "")
         
-        # Languages with hashtags
-        langs = movie_data.get("lang", [])
-        lang_tags = " ".join([f"#{lang.strip().replace(' ', '')}" for lang in langs]) if langs else "#Unknown"
+        # pre-formatted strings from binged_detail
+        lang_tags = movie_data.get("lang_tag", "#Unknown")
+        genre_str = movie_data.get("genre_str", "N/A")
+        platform_str = movie_data.get("provider_str", "N/A")
         
-        # Genres
-        genres = movie_data.get("genre", [])
-        genre_str = ", ".join(genres) if genres else "N/A"
+        runtime = movie_data.get("runtime", "N/A")
+        release_date = movie_data.get("release_date_str", "N/A")
+        censor = "NR" # Not available in current source
         
-        # Platform - ONLY FIRST streaming platform with None checks
-        platforms = movie_data.get("platform_logos", [])
-        platform_str = "N/A"
-        if platforms:
-            for p in platforms:
-                if p and p.get("rent_and_buy") == "0":  # Only streaming platforms
-                    ref_url = p.get("ref_url") or ""
-                    platform_name = get_platform_name(p)
-                    if ref_url:
-                        platform_str = f"[{platform_name}]({ref_url})"
-                    else:
-                        platform_str = platform_name
-                    break  # Take only the first platform
-        
-        # Runtime, Release Date, Censor
-        runtime = movie_data.get("run_time", movie_data.get("duration", "N/A"))
-        if runtime != "N/A" and not runtime.endswith("m"):
-            runtime = f"{runtime}m"
-        release_date = unix_to_date(movie_data.get("release_date"))
-        censor = movie_data.get("censor", "NR")
-        
-        # Cast
-        actors = movie_data.get("actors", [])
-        cast_names = [actor[1] for actor in actors[:5] if len(actor) > 1]  # Top 5 cast
-        cast_str = ", ".join(cast_names) if cast_names else "N/A"
-        
-        # Plot
+        cast_str = movie_data.get("cast_str", "N/A")
         plot = clean_text(movie_data.get("post_content", "No description available."))
         
         # Message construction with collapsible blockquote
@@ -501,30 +476,21 @@ def build_upcoming_message(movie_data, bot_username, source='binged'):
         return msg, image
     
     else:  # binged
-        title = clean_text(movie_data.get("post_title", "Unknown"))
-        year = movie_data.get("release_year", "N/A")
-        movie_type = movie_data.get("category", "N/A")
+        title = clean_text(movie_data.get("title", "Unknown"))
+        year = movie_data.get("year", "N/A")
+        movie_type = movie_data.get("type_str", "N/A")
         image = movie_data.get("image", "")
         
-        # Languages
-        langs = movie_data.get("lang", [])
-        lang_str = ", ".join(langs) if langs else "Unknown"
-        
-        # Release Date
-        release_date = unix_to_date(movie_data.get("release_date"))
-        
-        # Genres
-        genres = movie_data.get("genre", [])
-        genre_str = ", ".join(genres) if genres else "N/A"
-        
-        # Plot
+        lang_tags = movie_data.get("lang_tag", "#Unknown") # Use lang_tag just like released
+        release_date = movie_data.get("release_date_str", "N/A")
+        genre_str = movie_data.get("genre_str", "N/A")
         plot = clean_text(movie_data.get("post_content", "No description available."))
         
         # Distinct upcoming format with collapsible blockquote
         msg = f"🔔 **{title}** · {year} · `{movie_type}`\n\n"
         msg += f">**🚀 COMING SOON**\n"
         msg += f"🗓️ Releases : {release_date}\n"
-        msg += f"🉑 {lang_str}\n"
+        msg += f"🉑 {lang_tags}\n"
         msg += f"🎭 {genre_str}\n\n"
         msg += f"**@MooviDex**"
         
@@ -797,6 +763,8 @@ async def binged_detail(client, cq):
     tmdb_plot, tmdb_rating, genres, cast_str = "No description available.", "N/A", [], "N/A"
     tmdb_backdrop, tmdb_poster = None, None
     lang_tag = "#Unknown"
+    tmdb_runtime = "N/A"
+    tmdb_release_date = year
     
     # Ask Admin to choose status (Released / Upcoming)
     buttons = [
@@ -869,6 +837,9 @@ async def binged_detail(client, cq):
         
         p_path = t_orig.get("poster_path")
         if p_path: tmdb_poster = f"https://image.tmdb.org/t/p/original{p_path}"
+        
+        tmdb_runtime = tmdb_details.get("runtime", "N/A")
+        tmdb_release_date = tmdb_details.get("release_date", year)
              
     genre_str = ", ".join(genres) if genres else "N/A"
     
@@ -881,6 +852,11 @@ async def binged_detail(client, cq):
     movie['backdrop_url'] = jw_backdrop
     movie['poster_url'] = jw_poster
     movie['provider_logos'] = provider_logos if 'provider_logos' in locals() else []
+    movie['provider_str'] = provider_str
+    movie['lang_tag'] = lang_tag
+    movie['runtime'] = tmdb_runtime
+    movie['release_date_str'] = tmdb_release_date
+    movie['type_str'] = type_str
     movie['image'] = tmdb_backdrop or jw_backdrop # Persist best image URL
     
     # Save back to temp
