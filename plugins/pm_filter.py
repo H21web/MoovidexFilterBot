@@ -3415,7 +3415,8 @@ async def advantage_spell_chok(client, name, msg, reply_msg, ai_search):
             async with session.get(f"https://imdb.iamidiotareyoutoo.com/search?q={query}") as res:
                 data = await res.json()
         if not data.get("ok") or not data.get("description"):
-            raise ValueError("No movie suggestions found.")
+            await handle_no_results(client, reply_msg, mv_rqst, reqstr)
+            return
     except Exception as e:
         logger.exception("Spell suggestion API failed: %s", e)
         await handle_no_results(client, reply_msg, mv_rqst, reqstr)

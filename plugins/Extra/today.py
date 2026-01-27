@@ -60,20 +60,23 @@ def is_smart_match(title, year, file_name):
     # Extract all 4-digit years from filename (1900-2099)
     file_years = re.findall(r'\b(19\d{2}|20\d{2})\b', file_clean)
     
-    if year:
-        year_str = str(year)
+    if year and str(year).isdigit():
+        target_year = int(year)
         if file_years:
-            # If filename has years, one of them MUST match the API year
-            if year_str not in file_years:
+            # If filename has years, check for match with +/- 1 year tolerance
+            found_year_match = False
+            for fy in file_years:
+                if abs(int(fy) - target_year) <= 1:
+                    found_year_match = True
+                    break
+            
+            if not found_year_match:
                 return False
         else:
-            # If filename has NO years, we allow match ONLY if:
-            # It looks like a Series (S01E01, etc)
-            # Regex covers: s01e01, s01, e01, season 1, episode 1
-            is_series_file = re.search(r'(s\d+e\d+|s\d+|e\d+|season\s*\d+|episode\s*\d+)', file_clean)
-            if not is_series_file:
-                 # If valid movie year is known but missing from file -> Strict Reject to avoid false positives
-                 return False
+            # If filename has NO years, we used to reject STRICTLY.
+            # But now we Allow matches to proceed to Title Check.
+            # This fixes cases where user uploads "Movie Name.mkv" without year.
+            pass
 
     # 3. Flexible Title Matching (Token Order)
     stopwords = {'the', 'a', 'an', 'of', 'and', 'in', 'on', 'at', 'to', 'is', 'are', 'am'}
