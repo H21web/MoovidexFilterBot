@@ -1,4 +1,5 @@
-import requests
+import aiohttp
+import asyncio
 import html
 import time
 from datetime import datetime, timedelta
@@ -32,7 +33,7 @@ def clean_text(text):
     text = text.replace('\u2026', '...')
     return text
 
-def fetch_ott_data():
+async def fetch_ott_data():
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Accept": "application/json, text/plain, */*",
@@ -40,12 +41,17 @@ def fetch_ott_data():
         "Origin": "https://www.binged.com"
     }
     try:
-        response = requests.get(OTT_URL, headers=headers, timeout=10)
-        if response.status_code == 520:
-            time.sleep(2)
-            response = requests.get(OTT_URL, headers=headers, timeout=10)
-        response.raise_for_status()
-        return response.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(OTT_URL, headers=headers, timeout=10) as response:
+                if response.status == 520:
+                    await asyncio.sleep(2)
+                    async with session.get(OTT_URL, headers=headers, timeout=10) as response2:
+                         if response2.status != 200:
+                             return {"error": f"Status {response2.status}"}
+                         return await response2.json()
+                if response.status != 200:
+                    return {"error": f"Status {response.status}"}
+                return await response.json()
     except Exception as e:
         return {"error": str(e)}
 
@@ -73,7 +79,7 @@ async def ott_command_handler(client, event):
         user_id = event.from_user.id
         message = event
 
-    data = fetch_ott_data()
+    data = await fetch_ott_data()
     if "error" in data:
         await message.reply_text(f"⚠️ Failed to fetch OTT platforms.\nError: {data['error']}")
         return

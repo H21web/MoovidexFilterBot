@@ -6,7 +6,6 @@ import os
 import re
 import json
 import aiohttp
-import requests
 from pyrogram import Client, filters
 
 #Headers
@@ -20,21 +19,22 @@ async def p_paste(message, extension=None):
     siteurl = "https://pasty.lus.pm/api/v1/pastes"
     data = {"content": message}
     try:
-        response = requests.post(url=siteurl, data=json.dumps(data), headers=headers)
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url=siteurl, data=json.dumps(data), headers=headers) as response:
+                if response.status == 201: # 201 Created typically, or check ok
+                     resp_json = await response.json()
+                     purl = (
+                        f"https://pasty.lus.pm/{resp_json['id']}.{extension}"
+                        if extension
+                        else f"https://pasty.lus.pm/{resp_json['id']}.txt"
+                     )
+                     return {
+                        "url": purl,
+                        "raw": f"https://pasty.lus.pm/{resp_json['id']}/raw",
+                        "bin": "Pasty",
+                     }
     except Exception as e:
         return {"error": str(e)}
-    if response.ok:
-        response = response.json()
-        purl = (
-            f"https://pasty.lus.pm/{response['id']}.{extension}"
-            if extension
-            else f"https://pasty.lus.pm/{response['id']}.txt"
-        )
-        return {
-            "url": purl,
-            "raw": f"https://pasty.lus.pm/{response['id']}/raw",
-            "bin": "Pasty",
-        }
     return {"error": "Unable to reach pasty.lus.pm"}
 
 

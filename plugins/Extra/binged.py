@@ -1,4 +1,4 @@
-import requests
+import aiohttp
 import re
 import html
 from datetime import datetime
@@ -36,6 +36,19 @@ def format_search_title(title, year):
          
     return safe_title
 
+
+
+# Helper for async requests
+async def fetch_json(url, params=None, headers=None, timeout=10):
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params, headers=headers, timeout=timeout) as resp:
+                if resp.status != 200:
+                    return None
+                return await resp.json()
+    except Exception as e:
+        print(f"Fetch Error: {e}")
+        return None
 
 # TMDB API
 TMDB_API_URL = "https://api.themoviedb.org/3"
@@ -138,7 +151,7 @@ def get_platform_name(platform_data):
         return "OTT"
 
 # Search TMDB (Supports Name or IMDB ID)
-def find_tmdb_id(query):
+async def find_tmdb_id(query):
     try:
         # Check if query is IMDB ID
         if re.match(r'^tt\d+$', query):
@@ -147,9 +160,8 @@ def find_tmdb_id(query):
                 "api_key": TMDB_API_KEY,
                 "external_source": "imdb_id"
             }
-            resp = requests.get(url, params=params, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
+            data = await fetch_json(url, params=params)
+            if not data: return []
             
             # Combine results
             results = []
@@ -161,14 +173,14 @@ def find_tmdb_id(query):
             
         else:
             # Regular search
-            return search_tmdb(query)
+            return await search_tmdb(query)
             
     except Exception as e:
         print(f"TMDB Find Error: {e}")
         return []
 
 # Search TMDB (Name only)
-def search_tmdb(query):
+async def search_tmdb(query):
     try:
         url = f"{TMDB_API_URL}/search/multi"
         params = {
@@ -178,9 +190,8 @@ def search_tmdb(query):
             "page": 1,
             "include_adult": "true"
         }
-        resp = requests.get(url, params=params, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
+        data = await fetch_json(url, params=params)
+        if not data: return []
         
         results = []
         for item in data.get("results", []):
@@ -193,7 +204,7 @@ def search_tmdb(query):
         return []
 
 # Advanced Search TMDB (Specific Type & Year)
-def search_tmdb_advanced(query, year=None, media_type="movie"):
+async def search_tmdb_advanced(query, year=None, media_type="movie"):
     try:
         endpoint = "tv" if media_type == "tv" else "movie"
         url = f"{TMDB_API_URL}/search/{endpoint}"
@@ -212,9 +223,8 @@ def search_tmdb_advanced(query, year=None, media_type="movie"):
             else:
                 params["primary_release_year"] = str(year)
                 
-        resp = requests.get(url, params=params, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
+        data = await fetch_json(url, params=params)
+        if not data: return []
         
         results = []
         for item in data.get("results", []):
@@ -225,10 +235,10 @@ def search_tmdb_advanced(query, year=None, media_type="movie"):
     except Exception as e:
         print(f"TMDB Advanced Search Error: {e}")
         # Fallback to general search if specific fails
-        return search_tmdb(f"{query} {year}" if year else query)
+        return await search_tmdb(f"{query} {year}" if year else query)
 
 # Get TMDB Details
-def get_tmdb_details(tmdb_id, media_type="movie"):
+async def get_tmdb_details(tmdb_id, media_type="movie"):
     try:
         url = f"{TMDB_API_URL}/{media_type}/{tmdb_id}"
         params = {
@@ -236,9 +246,8 @@ def get_tmdb_details(tmdb_id, media_type="movie"):
             "language": "en-US",
             "append_to_response": "credits,videos,images,recommendations,similar"
         }
-        resp = requests.get(url, params=params, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
+        data = await fetch_json(url, params=params)
+        if not data: return None
         
         # Process data
         title = data.get("title") or data.get("name") or "Unknown"
@@ -544,10 +553,10 @@ async def binged_search(client, message):
     url = f"https://imdb.iamidiotareyoutoo.com/justwatch?q={query}"
 
     try:
-        resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-    except requests.RequestException as e:
+        data = await fetch_json(url, headers={'User-Agent': 'Mozilla/5.0'})
+        if not data:
+            return await message.reply_text(f"API Error.")
+    except Exception as e:
         return await message.reply_text(f"API error: {e}")
 
     results = data.get("description", [])
@@ -591,7 +600,7 @@ async def imdb_search(client, message):
     query = " ".join(message.command[1:]).strip()
     
     # Use find_tmdb_id to support IMDB ID or Name
-    results = find_tmdb_id(query)
+    results = await find_tmdb_id(query)
     if not results:
         # Log search stats for no results
         try:
@@ -638,7 +647,7 @@ async def imdb_detail(client, cq):
     user_id = cq.from_user.id
     
     # Get details
-    movie_data = get_tmdb_details(tmdb_id, media_type)
+    movie_data = await get_tmdb_details(tmdb_id, media_type)
     
     if not movie_data:
         return await cq.answer("Failed to fetch details from TMDB.", show_alert=True)
@@ -799,13 +808,13 @@ async def binged_detail(client, cq):
     lang_tag = "#Unknown"
 
     if tmdb_id:
-        tmdb_details = get_tmdb_details(tmdb_id, media_type)
+        tmdb_details = await get_tmdb_details(tmdb_id, media_type)
     else:
         # Search match
-        tmdb_results = search_tmdb_advanced(title, year=year, media_type=media_type)
+        tmdb_results = await search_tmdb_advanced(title, year=year, media_type=media_type)
         if tmdb_results:
              tmdb_id = tmdb_results[0].get("id")
-             tmdb_details = get_tmdb_details(tmdb_id, media_type)
+             tmdb_details = await get_tmdb_details(tmdb_id, media_type)
         else:
              tmdb_details = None
 
@@ -1408,9 +1417,9 @@ async def notify_release_callback(client, cq):
         # If not found, fetch it
         if not movie_data:
              try:
-                resp = requests.get(f"{DETAIL_URL}/{movie_id}", headers=HEADERS, timeout=10)
-                if resp.status_code == 200:
-                    movie_data = resp.json()
+                resp = await fetch_json(f"{DETAIL_URL}/{movie_id}", headers=HEADERS)
+                if resp:
+                    movie_data = resp
              except:
                 pass
         
