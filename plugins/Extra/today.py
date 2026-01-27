@@ -216,10 +216,10 @@ async def process_and_post_movie(movie, check_db=True):
         cast_str = "N/A"
         trailer_url = None
         
-        tmdb_results = search_tmdb_advanced(title, year=year, media_type=media_type)
+        tmdb_results = await search_tmdb_advanced(title, year=year, media_type=media_type)
         if tmdb_results:
             tmdb_id = tmdb_results[0].get("id")
-            tmdb_details = get_tmdb_details(tmdb_id, media_type)
+            tmdb_details = await get_tmdb_details(tmdb_id, media_type)
             if tmdb_details:
                 tmdb_img = tmdb_details.get("image")
                 if tmdb_img: tmdb_backdrop = tmdb_img
@@ -634,10 +634,10 @@ async def process_movie_data(movie, user_id):
     cast_str = "N/A"
     trailer_url = None
     
-    tmdb_results = search_tmdb_advanced(title, year=year, media_type=media_type)
+    tmdb_results = await search_tmdb_advanced(title, year=year, media_type=media_type)
     if tmdb_results:
         tmdb_id = tmdb_results[0].get("id")
-        tmdb_details = get_tmdb_details(tmdb_id, media_type)
+        tmdb_details = await get_tmdb_details(tmdb_id, media_type)
         if tmdb_details:
             tmdb_img = tmdb_details.get("image")
             if tmdb_img: tmdb_backdrop = tmdb_img
