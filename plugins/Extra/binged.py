@@ -417,21 +417,46 @@ def build_released_message(movie_data, bot_username, source='binged'):
         return msg, image
     
     else:  # binged
-        title = clean_text(movie_data.get("title", "Unknown"))
-        year = movie_data.get("year", "N/A")
-        movie_type = movie_data.get("type_str", "N/A")
+        title = clean_text(movie_data.get("post_title", "Unknown"))
+        year = movie_data.get("release_year", "N/A")
+        movie_type = movie_data.get("category", "N/A")
         image = movie_data.get("image", "")
         
-        # pre-formatted strings from binged_detail
-        lang_tags = movie_data.get("lang_tag", "#Unknown")
-        genre_str = movie_data.get("genre_str", "N/A")
-        platform_str = movie_data.get("provider_str", "N/A")
+        # Languages with hashtags
+        langs = movie_data.get("lang", [])
+        lang_tags = " ".join([f"#{lang.strip().replace(' ', '')}" for lang in langs]) if langs else "#Unknown"
         
-        runtime = movie_data.get("runtime", "N/A")
-        release_date = movie_data.get("release_date_str", "N/A")
-        censor = "NR" # Not available in current source
+        # Genres
+        genres = movie_data.get("genre", [])
+        genre_str = ", ".join(genres) if genres else "N/A"
         
-        cast_str = movie_data.get("cast_str", "N/A")
+        # Platform - ONLY FIRST streaming platform with None checks
+        platforms = movie_data.get("platform_logos", [])
+        platform_str = "N/A"
+        if platforms:
+            for p in platforms:
+                if p and p.get("rent_and_buy") == "0":  # Only streaming platforms
+                    ref_url = p.get("ref_url") or ""
+                    platform_name = get_platform_name(p)
+                    if ref_url:
+                        platform_str = f"[{platform_name}]({ref_url})"
+                    else:
+                        platform_str = platform_name
+                    break  # Take only the first platform
+        
+        # Runtime, Release Date, Censor
+        runtime = movie_data.get("run_time", movie_data.get("duration", "N/A"))
+        if runtime != "N/A" and not runtime.endswith("m"):
+            runtime = f"{runtime}m"
+        release_date = unix_to_date(movie_data.get("release_date"))
+        censor = movie_data.get("censor", "NR")
+        
+        # Cast
+        actors = movie_data.get("actors", [])
+        cast_names = [actor[1] for actor in actors[:5] if len(actor) > 1]  # Top 5 cast
+        cast_str = ", ".join(cast_names) if cast_names else "N/A"
+        
+        # Plot
         plot = clean_text(movie_data.get("post_content", "No description available."))
         
         # Message construction with collapsible blockquote
@@ -476,21 +501,30 @@ def build_upcoming_message(movie_data, bot_username, source='binged'):
         return msg, image
     
     else:  # binged
-        title = clean_text(movie_data.get("title", "Unknown"))
-        year = movie_data.get("year", "N/A")
-        movie_type = movie_data.get("type_str", "N/A")
+        title = clean_text(movie_data.get("post_title", "Unknown"))
+        year = movie_data.get("release_year", "N/A")
+        movie_type = movie_data.get("category", "N/A")
         image = movie_data.get("image", "")
         
-        lang_tags = movie_data.get("lang_tag", "#Unknown") # Use lang_tag just like released
-        release_date = movie_data.get("release_date_str", "N/A")
-        genre_str = movie_data.get("genre_str", "N/A")
+        # Languages
+        langs = movie_data.get("lang", [])
+        lang_str = ", ".join(langs) if langs else "Unknown"
+        
+        # Release Date
+        release_date = unix_to_date(movie_data.get("release_date"))
+        
+        # Genres
+        genres = movie_data.get("genre", [])
+        genre_str = ", ".join(genres) if genres else "N/A"
+        
+        # Plot
         plot = clean_text(movie_data.get("post_content", "No description available."))
         
         # Distinct upcoming format with collapsible blockquote
         msg = f"🔔 **{title}** · {year} · `{movie_type}`\n\n"
         msg += f">**🚀 COMING SOON**\n"
         msg += f"🗓️ Releases : {release_date}\n"
-        msg += f"🉑 {lang_tags}\n"
+        msg += f"🉑 {lang_str}\n"
         msg += f"🎭 {genre_str}\n\n"
         msg += f"**@MooviDex**"
         
@@ -763,35 +797,6 @@ async def binged_detail(client, cq):
     tmdb_plot, tmdb_rating, genres, cast_str = "No description available.", "N/A", [], "N/A"
     tmdb_backdrop, tmdb_poster = None, None
     lang_tag = "#Unknown"
-    tmdb_runtime = "N/A"
-    tmdb_release_date = year
-    
-    # Ask Admin to choose status (Released / Upcoming)
-    buttons = [
-        [
-            InlineKeyboardButton("✅ Released", callback_data=f"binged_status_released_{movie_id}"),
-            InlineKeyboardButton("🔔 Upcoming", callback_data=f"binged_status_upcoming_{movie_id}")
-        ],
-        [InlineKeyboardButton("❌ Close", callback_data="close_message")]
-    ]
-    
-    # Preview message
-    preview_caption = f"🎬 **{title}** ({year})\n\nSelect the movie status:"
-    
-    if jw_backdrop or jw_poster:
-         await cq.message.reply_photo(
-             photo=jw_backdrop or jw_poster,
-             caption=preview_caption,
-             reply_markup=InlineKeyboardMarkup(buttons)
-         )
-    else:
-         await cq.message.reply_text(
-             preview_caption,
-             reply_markup=InlineKeyboardMarkup(buttons),
-             disable_web_page_preview=True
-         )
-    await cq.answer()
-    return
 
     if tmdb_id:
         tmdb_details = get_tmdb_details(tmdb_id, media_type)
@@ -837,9 +842,6 @@ async def binged_detail(client, cq):
         
         p_path = t_orig.get("poster_path")
         if p_path: tmdb_poster = f"https://image.tmdb.org/t/p/original{p_path}"
-        
-        tmdb_runtime = tmdb_details.get("runtime", "N/A")
-        tmdb_release_date = tmdb_details.get("release_date", year)
              
     genre_str = ", ".join(genres) if genres else "N/A"
     
@@ -852,11 +854,6 @@ async def binged_detail(client, cq):
     movie['backdrop_url'] = jw_backdrop
     movie['poster_url'] = jw_poster
     movie['provider_logos'] = provider_logos if 'provider_logos' in locals() else []
-    movie['provider_str'] = provider_str
-    movie['lang_tag'] = lang_tag
-    movie['runtime'] = tmdb_runtime
-    movie['release_date_str'] = tmdb_release_date
-    movie['type_str'] = type_str
     movie['image'] = tmdb_backdrop or jw_backdrop # Persist best image URL
     
     # Save back to temp
@@ -904,11 +901,11 @@ async def binged_detail(client, cq):
 
 
 # Handle Binged movie status selection
-@Client.on_callback_query(filters.regex(r"^binged_status_(released|upcoming)_(.+)$"))
+@Client.on_callback_query(filters.regex(r"^binged_status_(released|upcoming)_(\d+)$"))
 async def binged_status_select(client, cq):
     import re as regex_module
     
-    match = regex_module.match(r"^binged_status_(released|upcoming)_(.+)$", cq.data)
+    match = regex_module.match(r"^binged_status_(released|upcoming)_(\d+)$", cq.data)
     status = match.group(1)
     movie_id = match.group(2)
     user_id = cq.from_user.id
@@ -999,7 +996,7 @@ async def binged_status_select(client, cq):
     await cq.answer()
 
 # Post Binged movie directly to channel
-@Client.on_callback_query(filters.regex(r"^binged_post_(.+)$"))
+@Client.on_callback_query(filters.regex(r"^binged_post_(\d+)$"))
 async def binged_post(client, cq):
     import re as regex_module
     
@@ -1175,7 +1172,7 @@ async def imdb_post(client, cq):
         await cq.answer(f"❌ Error posting: {e}", show_alert=True)
 
 # Prompt for custom button input (Binged)
-@Client.on_callback_query(filters.regex(r"^binged_edit_post_(.+)$"))
+@Client.on_callback_query(filters.regex(r"^binged_edit_post_(\d+)$"))
 async def binged_edit_post_prompt(client, cq):
     movie_id = cq.data.split("_")[-1]
     user_id = cq.from_user.id
@@ -1394,7 +1391,7 @@ async def close_message_callback(client, cq):
     await cq.answer()
 
 # Handle Notify when Released
-@Client.on_callback_query(filters.regex(r"^notify_release_(.+)$"))
+@Client.on_callback_query(filters.regex(r"^notify_release_(\d+)$"))
 async def notify_release_callback(client, cq):
     movie_id = cq.data.split("_")[-1]
     user_id = cq.from_user.id
