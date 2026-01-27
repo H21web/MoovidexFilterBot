@@ -1328,9 +1328,6 @@ async def receive_custom_search(client, message):
                 if video_url:
                     trailer_url = f"https://www.youtube.com/watch?v={video_url}"
                     buttons.append([InlineKeyboardButton("🎬 Trailer", url=trailer_url)])
-
-        # Add Notify Button
-        buttons.append([InlineKeyboardButton("🔔 Notify when Released", callback_data=f"notify_release_{movie_id}")])
     else:
         # For released: Custom button + trailer + more like this
         # Decide URL for first button
