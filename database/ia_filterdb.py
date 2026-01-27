@@ -3,23 +3,26 @@
 # Subscribe YouTube Channel For Amazing Bot @Tech_VJ
 # Ask Doubt on telegram @KingVJ01
 
-import re, base64, json
+import re, base64, logging
 from struct import pack
 from pyrogram.file_id import FileId
-from pymongo import MongoClient
+from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import DuplicateKeyError
 from info import FILE_DB_URI, SEC_FILE_DB_URI, DATABASE_NAME, COLLECTION_NAME, MULTIPLE_DATABASE, USE_CAPTION_FILTER, MAX_B_TN
 
-# First Database For File Saving 
-client = MongoClient(FILE_DB_URI)
+logger = logging.getLogger(__name__)
+
+# Async DB Client
+client = AsyncIOMotorClient(FILE_DB_URI)
 db = client[DATABASE_NAME]
 col = db[COLLECTION_NAME]
 
-# Second Database For File Saving
-sec_client = MongoClient(SEC_FILE_DB_URI)
-sec_db = sec_client[DATABASE_NAME]
-sec_col = sec_db[COLLECTION_NAME]
-
+if MULTIPLE_DATABASE:
+    sec_client = AsyncIOMotorClient(SEC_FILE_DB_URI)
+    sec_db = sec_client[DATABASE_NAME]
+    sec_col = sec_db[COLLECTION_NAME]
+else:
+    sec_col = None
 
 async def save_file(media):
     """Save file in the database."""
@@ -34,43 +37,40 @@ async def save_file(media):
         'caption': media.caption.html if media.caption else None
     }
 
-    if is_file_already_saved(file_id, file_name):
+    if await is_file_already_saved(file_id, file_name):
         return False, 0
 
     try:
-        col.insert_one(file)
-        print(f"{file_name} is successfully saved.")
+        await col.insert_one(file)
         # Hook for Instant Update
         try:
-            from plugins.Extra.today import check_and_post_if_needed
-            import asyncio
-            asyncio.create_task(check_and_post_if_needed(file_name))
-        except Exception as e:
-            print(f"Hook Error: {e}")
-            
+             from plugins.Extra.today import check_and_post_if_needed
+             import asyncio
+             asyncio.create_task(check_and_post_if_needed(file_name))
+        except Exception: 
+            pass
         return True, 1
     except DuplicateKeyError:
-        print(f"{file_name} is already saved.")
         return False, 0
-    except:
-        if MULTIPLE_DATABASE:
+    except Exception as e:
+        if MULTIPLE_DATABASE and sec_col:
             try:
-                sec_col.insert_one(file)
-                print(f"{file_name} is successfully saved.")
-                # Hook for Instant Update (Secondary DB)
+                await sec_col.insert_one(file)
                 try:
-                    from plugins.Extra.today import check_and_post_if_needed
-                    import asyncio
-                    asyncio.create_task(check_and_post_if_needed(file_name))
-                except Exception as e:
-                    print(f"Hook Error: {e}")
-                    
+                     from plugins.Extra.today import check_and_post_if_needed
+                     import asyncio
+                     asyncio.create_task(check_and_post_if_needed(file_name))
+                except Exception:
+                    pass
                 return True, 1
             except DuplicateKeyError:
-                print(f"{file_name} is already saved.")
+                return False, 0
+            except Exception as e:
+                logger.error(f"Error saving to secondary DB: {e}")
                 return False, 0
         else:
-            print("Your Current File Database Is Full, Turn On Multiple Database Feature And Add Second File Mongodb To Save File.")
+            logger.error(f"Database Full Error: {e}")
+            return False, 0
 
 def clean_file_name(file_name):
     """Clean and format the file name."""
@@ -82,23 +82,19 @@ def clean_file_name(file_name):
         
     return ' '.join(filter(lambda x: not x.startswith('@') and not x.startswith('http') and not x.startswith('www.') and not x.startswith('t.me'), file_name.split()))
 
-def is_file_already_saved(file_id, file_name):
+async def is_file_already_saved(file_id, file_name):
     """Check if the file is already saved in either collection."""
     found1 = {'file_name': file_name}
     found = {'file_id': file_id}
 
-    for collection in [col, sec_col]:
-        if collection.find_one(found1) or collection.find_one(found):
-            print(f"{file_name} is already saved.")
+    if await col.find_one(found1) or await col.find_one(found):
+        return True
+    
+    if MULTIPLE_DATABASE and sec_col:
+        if await sec_col.find_one(found1) or await sec_col.find_one(found):
             return True
             
     return False
-
-# Text Index Creation - REMOVED as per user request for no new indexes
-# col.create_index([("file_name", "text")], background=True)
-# if MULTIPLE_DATABASE:
-#     sec_col.create_index([("file_name", "text")], background=True)
-
 
 async def get_search_results(chat_id, query, file_type=None, max_results=10, offset=0, filter=False):
     """For given query return (results, next_offset)"""
@@ -106,92 +102,90 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
     query = query.strip()
     
     if not query:
-        # Default to everything if no query
         filter_criteria = {}
     elif ' ' not in query:
-        # Single word query - standard regex
-        raw_pattern = r'(\b|[\.\+\-_])' + query + r'(\b|[\.\+\-_])'
-        try:
-            regex = re.compile(raw_pattern, flags=re.IGNORECASE)
-            # Check both file_name and caption
-            filter_criteria = {'$or': [{'file_name': regex}, {'caption': regex}]}
-        except:
-            regex = {'$regex': query, '$options': 'i'}
-            filter_criteria = {'$or': [{'file_name': regex}, {'caption': regex}]}
+        regex = {'$regex': query, '$options': 'i'}
+        filter_criteria = {'$or': [{'file_name': regex}, {'caption': regex}]}
     else:
-        # Multi-word query - Smart Regex Split
-        # Split by space and ensure each word is present
-        # Improve: Replace special chars with space first to match "start-up" with "start up"
-        # and "spider.man" with "spider man"
-        clean_query = re.sub(r'[\.\+\-_]', ' ', query)
-        words = clean_query.split()
-        
+        # Optimized Logic: Use simple space split
+        words = query.split()
         regex_list = []
         for word in words:
-            # Match word with robust boundaries or connected by symbols
-            # Using simple escape is safer for speed, but let's allow partial word matching if user wants
-            # user said "efficient search without errors"
-            word_regex = {'$regex': re.escape(word), '$options': 'i'}
+            # Escape to prevent regex errors
+            pattern = re.escape(word)
+            word_regex = {'$regex': pattern, '$options': 'i'}
             regex_list.append({'$or': [{'file_name': word_regex}, {'caption': word_regex}]})
         
         filter_criteria = {'$and': regex_list}
 
-    # Optimization: Projection
-    # Only fetch necessary fields to reduce IO
     projection = {'file_id': 1, 'file_name': 1, 'file_size': 1, 'caption': 1, '_id': 0}
 
     files = []
-    
-    if MULTIPLE_DATABASE:
-        cursor1 = col.find(filter_criteria, projection).sort('$natural', -1).skip(offset).limit(max_results)
-        cursor2 = sec_col.find(filter_criteria, projection).sort('$natural', -1).skip(offset).limit(max_results)
-        for file in cursor1: files.append(file)
-        for file in cursor2: files.append(file)
-        # Count needs to use the same filter
-        total_results = col.count_documents(filter_criteria) + sec_col.count_documents(filter_criteria)
+    cursor1 = col.find(filter_criteria, projection).sort('$natural', -1).skip(offset).limit(max_results)
+    async for file in cursor1:
+        files.append(file)
+        
+    if MULTIPLE_DATABASE and sec_col:
+        # If we haven't filled max_results, check secondary
+        if len(files) < max_results:
+             # Adjust limit based on what we already have
+             remaining_limit = max_results - len(files)
+             # Note: Offset handling across two DBs is tricky. 
+             # For simplicity/speed in this context, we just query secondary with same simple logic
+             # Proper pagination across 2 DBs requires counting or complex logic.
+             # Current logic: Append secondary results
+             cursor2 = sec_col.find(filter_criteria, projection).sort('$natural', -1).skip(offset).limit(remaining_limit)
+             async for file in cursor2:
+                 files.append(file)
+                 
+    # Optimized Count: Use estimated_document_count if no filter (fast), else count_documents
+    if not filter_criteria:
+        total_results = await col.estimated_document_count()
+        if MULTIPLE_DATABASE and sec_col:
+            total_results += await sec_col.estimated_document_count()
     else:
-        cursor = col.find(filter_criteria, projection).sort('$natural', -1).skip(offset).limit(max_results)
-        for file in cursor: files.append(file)
-        total_results = col.count_documents(filter_criteria)
+        total_results = await col.count_documents(filter_criteria)
+        if MULTIPLE_DATABASE and sec_col:
+            total_results += await sec_col.count_documents(filter_criteria)
 
     next_offset = "" if (offset + max_results) >= total_results else (offset + max_results)
 
     return files, next_offset, total_results
 
 async def get_bad_files(query, file_type=None, use_filter=False):
-    """For given query return (results, next_offset)"""
     query = query.strip()
-    
+    # Logic preserved but made async
     if not query:
         raw_pattern = '.'
     elif ' ' not in query:
         raw_pattern = rf'(\b|[.+-_]){query}(\b|[.+-_])'
     else:
         raw_pattern = query.replace(' ', r'.*[s.+-_]')
-    
-    try:
-        regex = re.compile(raw_pattern, flags=re.IGNORECASE)
-    except re.error:
-        return [], 0
-
+        
+    regex = {'$regex': raw_pattern, '$options': 'i'}
     filter_criteria = {'file_name': regex}
+    
     if USE_CAPTION_FILTER:
         filter_criteria = {'$or': [filter_criteria, {'caption': regex}]}
 
-    def count_documents(collection):
-        return collection.count_documents(filter_criteria)
-
-    total_results = (count_documents(col) + count_documents(sec_col) if MULTIPLE_DATABASE else count_documents(col))
-
-    def find_documents(collection):
-        return list(collection.find(filter_criteria))
-
-    files = (find_documents(col) + find_documents(sec_col) if MULTIPLE_DATABASE else find_documents(col))
+    files = []
+    async for file in col.find(filter_criteria):
+        files.append(file)
+        
+    total_results = len(files)
+    
+    if MULTIPLE_DATABASE and sec_col:
+         async for file in sec_col.find(filter_criteria):
+             files.append(file)
+         total_results = len(files)
 
     return files, total_results
 
 async def get_file_details(query):
-    return col.find_one({'file_id': query}) or sec_col.find_one({'file_id': query})
+    file = await col.find_one({'file_id': query})
+    if not file and MULTIPLE_DATABASE and sec_col:
+        file = await sec_col.find_one({'file_id': query})
+    return file
 
 def encode_file_id(s: bytes) -> str:
     r = b""
@@ -207,7 +201,6 @@ def encode_file_id(s: bytes) -> str:
     return base64.urlsafe_b64encode(r).decode().rstrip("=")
     
 def unpack_new_file_id(new_file_id):
-    """Return file_id"""
     decoded = FileId.decode(new_file_id)
     file_id = encode_file_id(
         pack(

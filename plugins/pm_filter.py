@@ -1956,11 +1956,11 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 for file in files:
                     file_ids = file["file_id"]
                     file_name = file["file_name"]
-                    result = col.delete_one({
+                    result = await col.delete_one({
                         'file_id': file_ids,
                     })
                     if not result.deleted_count:
-                        result = sec_col.delete_one({
+                        result = await sec_col.delete_one({
                             'file_id': file_ids,
                         })
                     if result.deleted_count:
@@ -2780,15 +2780,15 @@ async def cb_handler(client: Client, query: CallbackQuery):
         reply_markup = InlineKeyboardMarkup(buttons)
         total_users = await db.total_users_count()
         totl_chats = await db.total_chat_count()
-        filesp = col.count_documents({})
-        totalsec = sec_col.count_documents({})
-        stats = vjdb.command('dbStats')
+        filesp = await col.count_documents({})
+        totalsec = await sec_col.count_documents({})
+        stats = await vjdb.command('dbStats')
         used_dbSize = (stats['dataSize']/(1024*1024))+(stats['indexSize']/(1024*1024))
         free_dbSize = 512-used_dbSize
-        stats2 = sec_db.command('dbStats')
+        stats2 = await sec_db.command('dbStats')
         used_dbSize2 = (stats2['dataSize']/(1024*1024))+(stats2['indexSize']/(1024*1024))
         free_dbSize2 = 512-used_dbSize2
-        stats3 = mydb.command('dbStats')
+        stats3 = await mydb.command('dbStats')
         used_dbSize3 = (stats3['dataSize']/(1024*1024))+(stats3['indexSize']/(1024*1024))
         free_dbSize3 = 512-used_dbSize3
         await query.message.edit_text(
@@ -2810,15 +2810,15 @@ async def cb_handler(client: Client, query: CallbackQuery):
         reply_markup = InlineKeyboardMarkup(buttons)
         total_users = await db.total_users_count()
         totl_chats = await db.total_chat_count()
-        filesp = col.count_documents({})
-        totalsec = sec_col.count_documents({})
-        stats = vjdb.command('dbStats')
+        filesp = await col.count_documents({})
+        totalsec = await sec_col.count_documents({})
+        stats = await vjdb.command('dbStats')
         used_dbSize = (stats['dataSize']/(1024*1024))+(stats['indexSize']/(1024*1024))
         free_dbSize = 512-used_dbSize
-        stats2 = sec_db.command('dbStats')
+        stats2 = await sec_db.command('dbStats')
         used_dbSize2 = (stats2['dataSize']/(1024*1024))+(stats2['indexSize']/(1024*1024))
         free_dbSize2 = 512-used_dbSize2
-        stats3 = mydb.command('dbStats')
+        stats3 = await mydb.command('dbStats')
         used_dbSize3 = (stats3['dataSize']/(1024*1024))+(stats3['indexSize']/(1024*1024))
         free_dbSize3 = 512-used_dbSize3
         await query.message.edit_text(
@@ -3227,6 +3227,13 @@ async def cb_handler(client: Client, query: CallbackQuery):
 
 
 
+
+# 5. Query Cleaning Regex (Pre-compiled)
+CLEAN_PATTERN_1 = re.compile(r"\b(pl(i|e)*?(s|z+|ease|se|ese|(e+)s(e)?)|((send|snd|giv(e)?|gib)(\sme)?)|movie(s)?|new|latest|bro|bruh|broh|helo|that|find|dubbed|link|venum|iruka|pannunga|pannungga|anuppunga|anupunga|anuppungga|anupungga|film|undo|kitti|kitty|tharu|kittumo|kittum|movie|any(one)|with\ssubtitle(s)?)", flags=re.IGNORECASE)
+CLEAN_PATTERN_2 = re.compile(r"[\[\]\(\)\{\}]")
+CLEAN_PATTERN_3 = re.compile(r"[^\w\s]")
+CLEAN_SPACES = re.compile(r"\s+")
+
 async def search_orchestrator(client, reply_msg, files, key, search, analysis):
     """
     God Function: Intelligently routes search results to the best view.
@@ -3307,39 +3314,34 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         if len(text) < 400:
             search = name.lower()
             # Clean search query
-            search = re.sub(r"\b(pl(i|e)*?(s|z+|ease|se|ese|(e+)s(e)?)|((send|snd|giv(e)?|gib)(\sme)?)|movie(s)?|new|latest|bro|bruh|broh|helo|that|find|dubbed|link|venum|iruka|pannunga|pannungga|anuppunga|anupunga|anuppungga|anupungga|film|undo|kitti|kitty|tharu|kittumo|kittum|movie|any(one)|with\ssubtitle(s)?)", "", search, flags=re.IGNORECASE)
-            search = re.sub(r"\s+", " ", search).strip()
-            search = search.replace("-", " ")
-            search = search.replace(":", "")
-            search = search.replace(":", "")
-            search = search.replace(".", "")
-            # Remove brackets and their content if desired, or just the brackets? User said "unwanted character". 
-            # Usually removing generic special chars is safer.
-            search = re.sub(r"[\[\]\(\)\{\}]", "", search)
-            search = re.sub(r"[^\w\s]", "", search) # Keep only alphanumeric and whitespace
+            search = CLEAN_PATTERN_1.sub("", search)
+            search = CLEAN_SPACES.sub(" ", search).strip()
+            search = search.replace("-", " ").replace(":", "").replace(".", "")
+            search = CLEAN_PATTERN_2.sub("", search)
+            search = CLEAN_PATTERN_3.sub("", search) # Keep only alphanumeric and whitespace
             
             # Limit to first 20 words to prevent excessive regex complexity in DB
             s_words = search.split()
             if len(s_words) > 20:
                 search = ' '.join(s_words[:20])
             
-            # Fetch MORE results for analysis (up to 100)
-            files, offset, total_results = await get_search_results(message.chat.id ,search, offset=0, max_results=100, filter=True)
+            # Parallel Execution: Fetch Settings & Search Results together
+            # This cuts down latency by overlapping I/O
+            settings, (files, offset, total_results) = await asyncio.gather(
+                get_settings(message.chat.id),
+                get_search_results(message.chat.id ,search, offset=0, max_results=100, filter=True)
+            )
             
-            # Relevance Sorting
+            # Relevance Sorting (CPU bound, fast)
             files = sort_by_relevance(files, search)
                 
             try:
                 req_user_id = message.from_user.id if message.from_user else 0
                 asyncio.create_task(stats_db.add_search_log(search, req_user_id, total_results, source='auto_filter'))
             except Exception as e:
-                print(f"Error logging search: {e}")
-                
-            settings = await get_settings(message.chat.id)
+                logger.error(f"Error logging search: {e}")
             
             # Trigger Logic: Only check IMDb/Spell Check if NO files are found
-            # Removed proactive "should_suggest" logic as per user request
-            
             if not files:
                 if settings["spell_check"]:
                     return await advantage_spell_chok(client, name, msg, reply_msg, ai_search)
@@ -3352,7 +3354,8 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
         message = msg.message.reply_to_message  # msg will be callback query
         search, files, offset, total_results = spoll
         settings = await get_settings(message.chat.id)
-        # await msg.message.delete() # Removed to prevent MESSAGE_ID_INVALID as orchestrator edits this message
+        # await msg.message.delete()
+
 
     # --- Smart Filter Logic Start ---
     analysis = analyze_query_results(files)

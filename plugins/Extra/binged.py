@@ -804,6 +804,7 @@ async def binged_detail(client, cq):
     tmdb_id = movie.get("tmdbId")
     
     tmdb_plot, tmdb_rating, genres, cast_str = "No description available.", "N/A", [], "N/A"
+    cast = [] # Initialize cast
     tmdb_backdrop, tmdb_poster = None, None
     lang_tag = "#Unknown"
 
