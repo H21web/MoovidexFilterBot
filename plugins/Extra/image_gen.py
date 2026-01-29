@@ -200,7 +200,7 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
             current_y += 10 # Spacer
             
             # Draw Meta
-            meta_text = f"{year}   |   Rat: {rating}"
+            meta_text = f"{year}   |   {rating}"
             draw.text((text_start_x, current_y), meta_text, font=meta_font, fill="#FFD700")
             current_y += 50 # Reduced spacing
             

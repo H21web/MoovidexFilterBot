@@ -384,4 +384,9 @@ class Database:
         """Delete alert entry after notifying"""
         await self.alerts.delete_one({'movie_id': str(movie_id)})
 
+    async def get_all_alerts(self):
+        """Get all active alerts"""
+        cursor = self.alerts.find({})
+        return await cursor.to_list(length=1000)
+
 db = Database(USER_DB_URI, DATABASE_NAME)
