@@ -46,6 +46,7 @@ def format_search_title(title, year):
 
 def unix_to_date(unix_ts):
     try:
+        if not unix_ts: return "N/A"
         return datetime.fromtimestamp(int(unix_ts)).strftime("%d-%m-%Y")
     except:
         return "N/A"
@@ -302,6 +303,7 @@ def get_similar_movies(movie_data, count=3):
 # --- MESSAGE BUILDERS ---
 
 def build_released_message(movie_data, bot_username, source='binged'):
+    # Logic for released movie formatting
     if source == 'imdb':
         title = clean_text(movie_data.get("title", "Unknown"))
         year = movie_data.get("year", "N/A")
@@ -320,9 +322,9 @@ def build_released_message(movie_data, bot_username, source='binged'):
         return msg, movie_data.get("image", "")
 
     else: # binged
-        title = clean_text(movie_data.get("post_title", "Unknown"))
-        year = movie_data.get("release_year", "N/A")
-        movie_type = movie_data.get("category", "N/A")
+        title = clean_text(movie_data.get("post_title", movie_data.get("title", "Unknown")))
+        year = movie_data.get("release_year", movie_data.get("year", "N/A"))
+        movie_type = movie_data.get("category", movie_data.get("type", "N/A"))
         
         # Langs
         langs = movie_data.get("lang", [])
@@ -370,23 +372,35 @@ def build_released_message(movie_data, bot_username, source='binged'):
         return msg, movie_data.get("image", "")
 
 def build_upcoming_message(movie_data, bot_username, source='binged'):
+    # Simplyfy Upcoming Message Logic
     if source == 'imdb':
         title = clean_text(movie_data.get("title", "Unknown"))
         year = movie_data.get("year", "N/A")
         movie_type = movie_data.get("type", "Movie").capitalize()
-        msg = f"🔔 **{title}** · {year} · `{movie_type}`\n\n>**🚀 COMING SOON**\n🉑 English\n🎭 {', '.join(movie_data.get('genres', [])) or 'N/A'}\n\n**@MooviDex**"
+        # Fallbacks not really needed since we removed detailed fields
+        msg = f"🔜 **{title}** · {year} · `{movie_type}`\n\n**>🉑 English\n>📺 N/A\n>📅 N/A\n\n **@MooviDex** "
         return msg, movie_data.get("image", "")
     else:
-        title = clean_text(movie_data.get("post_title", "Unknown"))
-        year = movie_data.get("release_year", "N/A")
-        movie_type = movie_data.get("category", "N/A")
-        langs = movie_data.get("lang", [])
-        lang_str = ", ".join(langs) if langs else "Unknown"
-        release_date = unix_to_date(movie_data.get("release_date"))
-        genres = movie_data.get("genre", [])
-        genre_str = ", ".join(genres) if genres else "N/A"
+        title = clean_text(movie_data.get("post_title", movie_data.get("title", "Unknown")))
+        year = movie_data.get("release_year", movie_data.get("year", "N/A"))
+        movie_type = movie_data.get("category", movie_data.get("type", "N/A"))
         
-        msg = f"🔔 **{title}** · {year} · `{movie_type}`\n\n>**🚀 COMING SOON**\n🗓️ Releases : {release_date}\n🉑 {lang_str}\n🎭 {genre_str}\n\n**@MooviDex**"
+        langs = movie_data.get("lang", [])
+        lang_str = ", ".join(langs) if langs else "Unknown" # Using comma separation instead of hashtags for simplified look? User used hashtags in upcoming.py... let's stick to user style if possible
+        # User in Step 191 used: msg += f"**>🉑 {data['lang_tag']}\n"
+        
+        lang_tag = f"#{lang_str.split(',')[0].strip()}" if lang_str != "Unknown" else "#Unknown"
+        if isinstance(langs, list):
+             # Just use first lang if multiple, or all tags
+             lang_tag = " ".join([f"#{l.strip().replace(' ', '')}" for l in langs])
+        
+        release_date = unix_to_date(movie_data.get("release_date"))
+        
+        platform_str = "N/A"
+        if movie_data.get("provider_str") and movie_data.get("provider_str") != "N/A":
+             platform_str = movie_data.get("provider_str")
+        
+        msg = f"🔜 **{title}** · {year} · `{movie_type}`\n\n>🉑 {lang_tag}\n>📺 {platform_str}\n>📅 {release_date}\n **@MooviDex** "
         return msg, movie_data.get("image", "")
 
 # --- HANDLERS ---
@@ -442,7 +456,7 @@ async def binged_detail(client, cq):
     offers = movie.get("offers", [])
     seen = set()
     links = []
-    logos = [] # TODO: Extract logos if available in offers logic?
+    logos = [] 
     
     for offer in offers:
         name = offer.get("name")
@@ -502,7 +516,7 @@ async def binged_detail(client, cq):
     movie['image'] = tmdb_backdrop or jw_backdrop
     movie['provider_logos'] = [] # Pass empty usually unless we scrape logos
     
-    # MAPPING FOR POSTING
+    # MAPPING FOR POSTING (ENSURE ALL KEYS EXIST)
     movie['post_title'] = title
     movie['release_year'] = year
     movie['category'] = type_str
@@ -510,6 +524,9 @@ async def binged_detail(client, cq):
     movie['lang'] = final_langs if final_langs else ["Unknown"]
     movie['provider_str'] = provider_str
     movie['actors'] = [[None, c] for c in cast]
+    if 'censor' not in movie: movie['censor'] = "NR"
+    if 'release_date' not in movie: movie['release_date'] = None
+    if 'lang' not in movie: movie['lang'] = []
     
     temp.BINGED_RESULTS[user_id][movie_id] = movie
     
@@ -645,7 +662,9 @@ async def binged_post(client, cq):
     try:
         method = client.send_photo if final_image else client.send_message
         kwargs = {'chat_id': UPDATE_CHANNEL_ID, 'caption' if final_image else 'text': msg, 'reply_markup': InlineKeyboardMarkup(btn)}
-        if final_image: kwargs['photo'] = final_image
+        if final_image: 
+             if hasattr(final_image, 'seek'): final_image.seek(0)
+             kwargs['photo'] = final_image
         else: kwargs['disable_web_page_preview'] = True
         
         await method(**kwargs)
@@ -746,12 +765,7 @@ async def notify_release_callback(client, cq):
     await db.add_movie_alert(user_id, movie_id)
     await cq.answer("✅ Notification set!", show_alert=True)
     
-    # Log logic can be added here if needed, keeping it simple as per request for robustness
-    
 # --- IMDB Handlers preserved for compatibility ---
-# (Basic implementation or redirect if needed, but keeping separate is safer)
-# For brevity in rewrite, assume IMDB commands work similar to binged but using TMDB source direct.
-# The previous code had them, so I will include them to avoid breaking /imdbpost.
 
 @Client.on_callback_query(filters.regex(r"^imdb_post_(.+)$"))
 async def imdb_post(client, cq):
