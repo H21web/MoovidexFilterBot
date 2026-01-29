@@ -911,11 +911,11 @@ async def binged_detail(client, cq):
 
 
 # Handle Binged movie status selection
-@Client.on_callback_query(filters.regex(r"^binged_status_(released|upcoming)_(\d+)$"))
+@Client.on_callback_query(filters.regex(r"^binged_status_(released|upcoming)_(.+)$"))
 async def binged_status_select(client, cq):
     import re as regex_module
     
-    match = regex_module.match(r"^binged_status_(released|upcoming)_(\d+)$", cq.data)
+    match = regex_module.match(r"^binged_status_(released|upcoming)_(.+)$", cq.data)
     status = match.group(1)
     movie_id = match.group(2)
     user_id = cq.from_user.id
@@ -1006,7 +1006,7 @@ async def binged_status_select(client, cq):
     await cq.answer()
 
 # Post Binged movie directly to channel
-@Client.on_callback_query(filters.regex(r"^binged_post_(\d+)$"))
+@Client.on_callback_query(filters.regex(r"^binged_post_(.+)$"))
 async def binged_post(client, cq):
     import re as regex_module
     
@@ -1036,6 +1036,10 @@ async def binged_post(client, cq):
     if movie_data.get('backdrop_url') and movie_data.get('poster_url'):
          try:
             await cq.answer("Generating image...", cache_time=0)
+            
+            is_upcoming_bool = (status == "upcoming")
+            release_d = unix_to_date(movie_data.get('release_date')) if is_upcoming_bool else None
+            
             final_image = await generate_status_image(
                 movie_data['backdrop_url'], 
                 movie_data['poster_url'], 
@@ -1044,7 +1048,9 @@ async def binged_post(client, cq):
                 year, 
                 movie_data.get('rating', 'N/A'), 
                 movie_data.get('genre_str', 'N/A'), 
-                movie_data.get('post_content', 'No plot')
+                movie_data.get('post_content', 'No plot'),
+                is_upcoming=is_upcoming_bool,
+                release_date=release_d
             )
          except Exception as e:
             print(f"Post Image Gen Error: {e}")
@@ -1182,7 +1188,7 @@ async def imdb_post(client, cq):
         await cq.answer(f"❌ Error posting: {e}", show_alert=True)
 
 # Prompt for custom button input (Binged)
-@Client.on_callback_query(filters.regex(r"^binged_edit_post_(\d+)$"))
+@Client.on_callback_query(filters.regex(r"^binged_edit_post_(.+)$"))
 async def binged_edit_post_prompt(client, cq):
     movie_id = cq.data.split("_")[-1]
     user_id = cq.from_user.id
@@ -1255,9 +1261,15 @@ async def receive_custom_search(client, message):
         final_image = None
         if data['backdrop_url'] and data['poster_url']:
             try:
+                 # Ottplay usually sends formatted date string already in 'r_date' or similar?
+                 # data['r_date'] seems to be used above.
+                 # Using is_upcoming from data directly
+                 
                  final_image = await generate_status_image(
                     data['backdrop_url'], data['poster_url'], data['provider_logos'],
-                    data['title'], data['year'], data['rating'], data['genre_str'], data['plot']
+                    data['title'], data['year'], data['rating'], data['genre_str'], data['plot'],
+                    is_upcoming=is_upcoming,
+                    release_date=data.get('r_date')
                  )
             except Exception as e:
                 print(f"Edit Post Image Gen Error: {e}")
@@ -1401,7 +1413,7 @@ async def close_message_callback(client, cq):
     await cq.answer()
 
 # Handle Notify when Released
-@Client.on_callback_query(filters.regex(r"^notify_release_(\d+)$"))
+@Client.on_callback_query(filters.regex(r"^notify_release_(.+)$"))
 async def notify_release_callback(client, cq):
     movie_id = cq.data.split("_")[-1]
     user_id = cq.from_user.id

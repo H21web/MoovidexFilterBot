@@ -16,7 +16,7 @@ async def download_image(session, url):
         print(f"Error downloading image {url}: {e}")
     return None
 
-async def generate_status_image(backdrop_url, poster_url, provider_urls, title, year, rating, genres, plot):
+async def generate_status_image(backdrop_url, poster_url, provider_urls, title, year, rating, genres, plot, is_upcoming=False, release_date=None):
     # Helper to clean text for PIL default font compatibility
     def clean_text_safe(text):
         if not text: return ""
@@ -111,6 +111,7 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
             meta_font = ImageFont.truetype("arial.ttf", 28)
             plot_font = ImageFont.truetype("arial.ttf", 24)
             genre_font = ImageFont.truetype("arial.ttf", 24)
+            cs_font = ImageFont.truetype("arial.ttf", 55) # Larger for COMING SOON
         except IOError:
             try:
                 # Try common Linux font
@@ -118,11 +119,13 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
                 meta_font = ImageFont.truetype("DejaVuSans.ttf", 28)
                 plot_font = ImageFont.truetype("DejaVuSans.ttf", 24)
                 genre_font = ImageFont.truetype("DejaVuSans.ttf", 24)
+                cs_font = ImageFont.truetype("DejaVuSans.ttf", 55)
             except IOError:
                 title_font = ImageFont.load_default()
                 meta_font = ImageFont.load_default()
                 plot_font = ImageFont.load_default()
                 genre_font = ImageFont.load_default()
+                cs_font = ImageFont.load_default()
                 using_default = True
 
         # Clean text if using default font or just generally to be safe from smart quotes
@@ -132,6 +135,7 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
             rating = clean_text_safe(rating)
             genres = clean_text_safe(genres)
             plot = clean_text_safe(plot)
+            if release_date: release_date = clean_text_safe(release_date)
         else:
             replacements = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "…": "..."}
             for k, v in replacements.items():
@@ -159,36 +163,62 @@ async def generate_status_image(backdrop_url, poster_url, provider_urls, title, 
         # Available width for text
         max_text_width = width - text_start_x - 40 # 40px right padding
 
-        # Draw Title
+        # Draw Text Content
         current_y = 100
-        title_lines = wrap_text_pixel(draw, str(title), title_font, max_text_width)
-        
-        for line in title_lines[:2]: # Max 2 lines for title
-            draw.text((text_start_x, current_y), line, font=title_font, fill="white")
-            current_y += 60 # Reduced spacing
 
-        current_y += 10 # Spacer
-        
-        # Draw Meta
-        meta_text = f"{year}   |   Rat: {rating}"
-        draw.text((text_start_x, current_y), meta_text, font=meta_font, fill="#FFD700")
-        current_y += 50 # Reduced spacing
-        
-        if genres:
-             draw.text((text_start_x, current_y), str(genres), font=genre_font, fill="#A0A0A0")
-             current_y += 50 # Reduced spacing
+        if is_upcoming:
+            # Layout: Title (Year) \n\n COMING SOON \n Release Date
+            
+            # Title (Year)
+            full_title = f"{title} ({year})"
+            title_lines = wrap_text_pixel(draw, str(full_title), title_font, max_text_width)
+            
+            for line in title_lines[:3]: # Allow up to 3 lines
+                draw.text((text_start_x, current_y), line, font=title_font, fill="white")
+                current_y += 60
+            
+            current_y += 60 # Gap
+            
+            # COMING SOON
+            draw.text((text_start_x, current_y), "COMING SOON", font=cs_font, fill="#FFD700") # Gold
+            current_y += 80 
+            
+            # Release Date
+            if release_date:
+                draw.text((text_start_x, current_y), str(release_date), font=title_font, fill="white")
 
-        # Divider
-        draw.line([(text_start_x, current_y), (text_start_x + min(300, max_text_width), current_y)], fill="white", width=2)
-        current_y += 35 # Reduced spacing
+        else:
+            # Standard Release Layout
+            
+            # Draw Title
+            title_lines = wrap_text_pixel(draw, str(title), title_font, max_text_width)
+            
+            for line in title_lines[:2]: # Max 2 lines for title
+                draw.text((text_start_x, current_y), line, font=title_font, fill="white")
+                current_y += 60 # Reduced spacing
 
-        # Draw Plot
-        plot = str(plot) if plot else "No description available."
-        plot_lines = wrap_text_pixel(draw, plot, plot_font, max_text_width)
-        
-        for line in plot_lines[:7]: # Max 7 lines for plot
-            draw.text((text_start_x, current_y), line, font=plot_font, fill="white")
+            current_y += 10 # Spacer
+            
+            # Draw Meta
+            meta_text = f"{year}   |   Rat: {rating}"
+            draw.text((text_start_x, current_y), meta_text, font=meta_font, fill="#FFD700")
+            current_y += 50 # Reduced spacing
+            
+            if genres:
+                 draw.text((text_start_x, current_y), str(genres), font=genre_font, fill="#A0A0A0")
+                 current_y += 50 # Reduced spacing
+
+            # Divider
+            draw.line([(text_start_x, current_y), (text_start_x + min(300, max_text_width), current_y)], fill="white", width=2)
             current_y += 35 # Reduced spacing
+
+            # Draw Plot
+            plot = str(plot) if plot else "No description available."
+            plot_lines = wrap_text_pixel(draw, plot, plot_font, max_text_width)
+            
+            for line in plot_lines[:7]: # Max 7 lines for plot
+                draw.text((text_start_x, current_y), line, font=plot_font, fill="white")
+                current_y += 35 # Reduced spacing
 
         # 4. Provider Logos
         if providers:
