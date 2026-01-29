@@ -7,7 +7,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import temp
 from info import *
-from plugins.Extra.binged import HEADERS, ADMIN_IDS, clean_text, get_tmdb_details, search_tmdb_advanced, format_search_title, update_channel_post
+from plugins.Extra.binged import HEADERS, ADMIN_IDS, clean_text, get_tmdb_details, search_tmdb_advanced, format_search_title
 from database.users_chats_db import db
 from TechVJ.bot import TechVJBot
 from plugins.Extra.image_gen import generate_status_image
