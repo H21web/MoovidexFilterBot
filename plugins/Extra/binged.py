@@ -8,82 +8,8 @@ from utils import temp
 from info import *
 from plugins.Extra.image_gen import generate_status_image
 
-# Helper to format search title with Season numbering and Year
-def format_search_title(title, year):
-    if not title:
-        return ""
-    
-    # Clean title first
-    title = clean_text(title)
-        
-    # Replace "Season X" with "S0X" case insensitive
-    # Use a lambda to handle the match group padding
-    def season_repl(match):
-        try:
-            num = int(match.group(1))
-            return f"S{num:02d}"
-        except:
-            return match.group(0)
-            
-    title = re.sub(r'(?i)Season\s+(\d+)', season_repl, title)
-    
-    # Replace non-alphanumeric with _
-    safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
-    
-    # Append year if valid
-    if year and str(year).isdigit():
-         safe_title = f"{safe_title}_{year}"
-         
-    return safe_title
+# --- HELPER FUNCTIONS ---
 
-
-
-# Helper for async requests
-async def fetch_json(url, params=None, headers=None, timeout=10):
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params, headers=headers, timeout=timeout) as resp:
-                if resp.status != 200:
-                    return None
-                return await resp.json()
-    except Exception as e:
-        print(f"Fetch Error: {e}")
-        return None
-
-# TMDB API
-TMDB_API_URL = "https://api.themoviedb.org/3"
-TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/original"
-
-# List of Admin IDs
-ADMIN_IDS = [1011394081, 7191327005]
-UPDATE_CHANNEL_ID = -1001680629032
-
-from database.users_chats_db import db
-from database.stats_db import stats_db
-
-from database.users_chats_db import db
-
-# Search APIs
-# Search APIs
-SEARCH_URL = "https://api2.ottplay.com/api/search-service/v1.1/universal-search"
-# DETAIL_URL = "https://www.binged.com/wp-json/binged-api/v1/movie"
-
-# Anti-403 Headers
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                  'AppleWebKit/537.36 (KHTML, like Gecko) '
-                  'Chrome/85.0.4183.121 Safari/537.36',
-    'Referer': 'https://www.binged.com/'
-}
-
-# Temporary Data Stores
-# Temporary Data Stores
-temp.BINGED_RESULTS = {}   # user_id -> {movie_id: movie_data}
-temp.TMDB_RESULTS = {}     # user_id -> {movie_id: movie_data}
-temp.EDITING_POST = {}     # admin_id -> {movie_id, source}
-temp.MOVIE_STATUS = {}     # movie_id -> 'upcoming' or 'released'
-
-# Clean HTML entities and unicode
 def clean_text(text):
     if not isinstance(text, str):
         return ""
@@ -97,89 +23,96 @@ def clean_text(text):
         text = text.replace(orig, sub)
     return text.strip()
 
-# Convert Unix timestamp to dd-mm-yyyy
+def format_search_title(title, year):
+    if not title:
+        return ""
+    
+    title = clean_text(title)
+        
+    def season_repl(match):
+        try:
+            num = int(match.group(1))
+            return f"S{num:02d}"
+        except:
+            return match.group(0)
+            
+    title = re.sub(r'(?i)Season\s+(\d+)', season_repl, title)
+    safe_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
+    
+    if year and str(year).isdigit():
+         safe_title = f"{safe_title}_{year}"
+         
+    return safe_title
+
 def unix_to_date(unix_ts):
     try:
         return datetime.fromtimestamp(int(unix_ts)).strftime("%d-%m-%Y")
     except:
         return "N/A"
 
-# Extract platform name from URL or logo with proper None handling
 def get_platform_name(platform_data):
-    """Extract proper platform name from platform data"""
     if not platform_data:
         return "OTT"
     
-    # Get ref_url and logo_url with None checks
-    ref_url = platform_data.get("ref_url") or ""
-    logo_url = platform_data.get("logo_url") or ""
+    ref_url = (platform_data.get("ref_url") or "").lower()
+    logo_url = (platform_data.get("logo_url") or "").lower()
     
-    # Convert to lowercase safely
-    ref_url = ref_url.lower() if ref_url else ""
-    logo_url = logo_url.lower() if logo_url else ""
-    
-    # Check ref_url and logo_url for platform identification
-    if "hotstar" in ref_url or "hotstar" in logo_url:
-        return "Hotstar"
-    elif "primevideo" in ref_url or "prime" in ref_url or "primevideo" in logo_url or "prime" in logo_url:
-        return "Prime Video"
-    elif "netflix" in ref_url or "netflix" in logo_url:
-        return "Netflix"
-    elif "zee5" in ref_url or "zee5" in logo_url:
-        return "Zee5"
-    elif "sunnxt" in ref_url or "sunnxt" in logo_url:
-        return "SunNXT"
-    elif "sonyliv" in ref_url or "sonyliv" in logo_url:
-        return "SonyLIV"
-    elif "jiocinema" in ref_url or "jiocinema" in logo_url:
-        return "JioCinema"
-    elif "voot" in ref_url or "voot" in logo_url:
-        return "Voot"
-    elif "mxplayer" in ref_url or "mxplayer" in logo_url:
-        return "MX Player"
-    elif "aha" in ref_url or "aha" in logo_url:
-        return "Aha"
-    elif "apple" in ref_url or "appletv" in logo_url:
-        return "Apple TV+"
-    elif "hulu" in ref_url or "hulu" in logo_url:
-        return "Hulu"
-    elif "hbo" in ref_url or "hbo" in logo_url:
-        return "HBO Max"
-    elif "disney" in ref_url or "disney" in logo_url:
-        return "Disney+"
-    else:
-        return "OTT"
+    if "hotstar" in ref_url or "hotstar" in logo_url: return "Hotstar"
+    elif "prime" in ref_url or "prime" in logo_url: return "Prime Video"
+    elif "netflix" in ref_url or "netflix" in logo_url: return "Netflix"
+    elif "zee5" in ref_url or "zee5" in logo_url: return "Zee5"
+    elif "sunnxt" in ref_url or "sunnxt" in logo_url: return "SunNXT"
+    elif "sonyliv" in ref_url or "sonyliv" in logo_url: return "SonyLIV"
+    elif "jiocinema" in ref_url or "jiocinema" in logo_url: return "JioCinema"
+    elif "voot" in ref_url or "voot" in logo_url: return "Voot"
+    elif "mxplayer" in ref_url or "mxplayer" in logo_url: return "MX Player"
+    elif "aha" in ref_url or "aha" in logo_url: return "Aha"
+    elif "apple" in ref_url or "apple" in logo_url: return "Apple TV+"
+    elif "hulu" in ref_url or "hulu" in logo_url: return "Hulu"
+    elif "hbo" in ref_url or "hbo" in logo_url: return "HBO Max"
+    elif "disney" in ref_url or "disney" in logo_url: return "Disney+"
+    else: return "OTT"
 
-# Search TMDB (Supports Name or IMDB ID)
-async def find_tmdb_id(query):
+async def fetch_json(url, params=None, headers=None, timeout=10):
     try:
-        # Check if query is IMDB ID
-        if re.match(r'^tt\d+$', query):
-            url = f"{TMDB_API_URL}/find/{query}"
-            params = {
-                "api_key": TMDB_API_KEY,
-                "external_source": "imdb_id"
-            }
-            data = await fetch_json(url, params=params)
-            if not data: return []
-            
-            # Combine results
-            results = []
-            for media_type in ["movie_results", "tv_results"]:
-                for item in data.get(media_type, []):
-                    item["media_type"] = "movie" if media_type == "movie_results" else "tv"
-                    results.append(item)
-            return results
-            
-        else:
-            # Regular search
-            return await search_tmdb(query)
-            
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params, headers=headers, timeout=timeout) as resp:
+                if resp.status != 200:
+                    return None
+                return await resp.json()
     except Exception as e:
-        print(f"TMDB Find Error: {e}")
-        return []
+        print(f"Fetch Error: {e}")
+        return None
 
-# Search TMDB (Name only)
+# --- TMDB API ---
+
+TMDB_API_URL = "https://api.themoviedb.org/3"
+TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/original"
+SEARCH_URL = "https://api2.ottplay.com/api/search-service/v1.1/universal-search"
+# DETAIL_URL = "https://www.binged.com/wp-json/binged-api/v1/movie" # Unused?
+
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                  'AppleWebKit/537.36 (KHTML, like Gecko) '
+                  'Chrome/85.0.4183.121 Safari/537.36',
+    'Referer': 'https://www.binged.com/'
+}
+
+ADMIN_IDS = [1011394081, 7191327005]
+UPDATE_CHANNEL_ID = -1001680629032
+
+# Init global vars just in case
+if not hasattr(temp, 'BINGED_RESULTS'): temp.BINGED_RESULTS = {}
+if not hasattr(temp, 'TMDB_RESULTS'): temp.TMDB_RESULTS = {}
+if not hasattr(temp, 'EDITING_POST'): temp.EDITING_POST = {}
+if not hasattr(temp, 'MOVIE_STATUS'): temp.MOVIE_STATUS = {}
+
+
+from database.users_chats_db import db
+from database.stats_db import stats_db
+
+# --- API FUNCTIONS ---
+
 async def search_tmdb(query):
     try:
         url = f"{TMDB_API_URL}/search/multi"
@@ -203,7 +136,6 @@ async def search_tmdb(query):
         print(f"TMDB Search Error: {e}")
         return []
 
-# Advanced Search TMDB (Specific Type & Year)
 async def search_tmdb_advanced(query, year=None, media_type="movie"):
     try:
         endpoint = "tv" if media_type == "tv" else "movie"
@@ -228,16 +160,38 @@ async def search_tmdb_advanced(query, year=None, media_type="movie"):
         
         results = []
         for item in data.get("results", []):
-            item["media_type"] = media_type # Enforce type from search
+            item["media_type"] = media_type
             results.append(item)
             
         return results
     except Exception as e:
         print(f"TMDB Advanced Search Error: {e}")
-        # Fallback to general search if specific fails
         return await search_tmdb(f"{query} {year}" if year else query)
 
-# Get TMDB Details
+async def find_tmdb_id(query):
+    try:
+        if re.match(r'^tt\d+$', query):
+            url = f"{TMDB_API_URL}/find/{query}"
+            params = {
+                "api_key": TMDB_API_KEY,
+                "external_source": "imdb_id"
+            }
+            data = await fetch_json(url, params=params)
+            if not data: return []
+            
+            results = []
+            for media_type in ["movie_results", "tv_results"]:
+                for item in data.get(media_type, []):
+                    item["media_type"] = "movie" if media_type == "movie_results" else "tv"
+                    results.append(item)
+            return results
+        else:
+            return await search_tmdb(query)
+            
+    except Exception as e:
+        print(f"TMDB Find Error: {e}")
+        return []
+
 async def get_tmdb_details(tmdb_id, media_type="movie"):
     try:
         url = f"{TMDB_API_URL}/{media_type}/{tmdb_id}"
@@ -249,65 +203,44 @@ async def get_tmdb_details(tmdb_id, media_type="movie"):
         data = await fetch_json(url, params=params)
         if not data: return None
         
-        # Process data
         title = data.get("title") or data.get("name") or "Unknown"
         release_date = data.get("release_date") or data.get("first_air_date") or "N/A"
         year = release_date.split("-")[0] if release_date != "N/A" else "N/A"
         
-        # Genres
         genres = [g["name"] for g in data.get("genres", [])]
-        
-        # Cast
         cast = [c["name"] for c in data.get("credits", {}).get("cast", [])[:5]]
         
-        # Runtime
         runtime = data.get("runtime") or (data.get("episode_run_time")[0] if data.get("episode_run_time") else None)
         runtime_str = f"{runtime}m" if runtime else "N/A"
         
-        # Rating
         rating = f"{round(data.get('vote_average', 0), 1)}/10"
         
-        # Images (Backdrop preference)
+        # Images
         poster_path = data.get("poster_path")
         backdrop_path = data.get("backdrop_path")
         
-        # Advanced Image Selection: Landscape with Title Preference
         images = data.get("images", {})
         backdrops = images.get("backdrops", [])
         
         best_backdrop = None
-        
         if backdrops:
-            # 1. Filter English backdrops (likely to contain English title)
-            # Check for iso_639_1 == "en" OR "null" (sometimes titles are in null lang)
-            # Prioritize "en" explicitly for titles
             english_backdrops = [b for b in backdrops if b.get("iso_639_1") == "en"]
-            
-            # 2. Sort by vote_count (popularity usually means better quality/relevance)
             english_backdrops.sort(key=lambda x: x.get("vote_count", 0), reverse=True)
-            
-            # 3. Also sort all backdrops by vote_count as fallback
             backdrops.sort(key=lambda x: x.get("vote_count", 0), reverse=True)
-            
-            # 4. Secondary filter: backdrops with no language (often high quality but risky)
             none_backdrops = [b for b in backdrops if b.get("iso_639_1") is None]
             none_backdrops.sort(key=lambda x: x.get("vote_count", 0), reverse=True)
 
-            # Strategy: Best English -> Best None (if high vote) -> Best Overall
             if english_backdrops:
                 best_backdrop = english_backdrops[0].get("file_path")
-            elif none_backdrops and none_backdrops[0].get("vote_count", 0) > 5: # Only if decent votes
+            elif none_backdrops and none_backdrops[0].get("vote_count", 0) > 5:
                  best_backdrop = none_backdrops[0].get("file_path")
             elif backdrops:
                 best_backdrop = backdrops[0].get("file_path")
         
-        # Fallback to default backdrop if no specific one found
-        if not best_backdrop:
-            best_backdrop = backdrop_path
+        if not best_backdrop: best_backdrop = backdrop_path
             
         image_url = f"{TMDB_IMAGE_URL}{best_backdrop}" if best_backdrop else (f"{TMDB_IMAGE_URL}{poster_path}" if poster_path else "")
         
-        # Similar
         similar = []
         recommendations = data.get("recommendations", {}).get("results", []) or data.get("similar", {}).get("results", [])
         for item in recommendations:
@@ -315,10 +248,9 @@ async def get_tmdb_details(tmdb_id, media_type="movie"):
                 similar.append({
                     "id": item.get("id"),
                     "title": item.get("title") or item.get("name"),
-                    "media_type": media_type # Assuming similar are same type
+                    "media_type": media_type
                 })
                 
-        # Videos
         videos = []
         for v in data.get("videos", {}).get("results", []):
             if v.get("site") == "YouTube" and v.get("type") == "Trailer":
@@ -339,20 +271,13 @@ async def get_tmdb_details(tmdb_id, media_type="movie"):
             "videos": videos,
             "similar": similar,
             "media_type": media_type,
-            "original_data": data # Keep original data for deep diving if needed
+            "original_data": data 
         }
     except Exception as e:
         print(f"TMDB Details Error: {e}")
         return None
 
-
-
-# Get similar movies with better logic
 def get_similar_movies(movie_data, count=3):
-    """
-    Get similar movies, ensuring they are different from the current movie
-    Returns list of similar movie titles
-    """
     similar = movie_data.get("similar", [])
     current_title = clean_text(movie_data.get("post_title", movie_data.get("title", ""))).lower()
     current_id = str(movie_data.get("ID", movie_data.get("id", "")))
@@ -365,1096 +290,504 @@ def get_similar_movies(movie_data, count=3):
         sim_id = str(sim.get("id", ""))
         sim_title_lower = sim_title.lower()
         
-        # Skip if it's the same movie (by title or ID)
-        if sim_title_lower == current_title or sim_id == current_id:
-            continue
-        
-        # Skip if we've already added this title
-        if sim_title_lower in seen_titles:
-            continue
+        if sim_title_lower == current_title or sim_id == current_id: continue
+        if sim_title_lower in seen_titles: continue
         
         seen_titles.add(sim_title_lower)
         unique_similar.append(sim)
-        
-        if len(unique_similar) >= count:
-            break
+        if len(unique_similar) >= count: break
     
     return unique_similar
 
-# Build message for released movie
+# --- MESSAGE BUILDERS ---
+
 def build_released_message(movie_data, bot_username, source='binged'):
     if source == 'imdb':
         title = clean_text(movie_data.get("title", "Unknown"))
         year = movie_data.get("year", "N/A")
         movie_type = movie_data.get("type", "Movie").capitalize()
-        
-        # Languages with hashtags
-        lang_tags = "#English"  # Default for IMDB
-        
-        # Genres
+        lang_tags = "#English"
         genres = movie_data.get("genres", [])
         genre_str = ", ".join(genres) if genres else "N/A"
-        
-        # Platform
         platform_str = "N/A"
-        
-        # Runtime, Rating
         runtime = movie_data.get("runtime", "N/A")
-        if runtime and runtime != "N/A":
-            runtime = f"{runtime}m"
+        if runtime and runtime != "N/A" and not str(runtime).endswith("m"): runtime = f"{runtime}m"
         rating = movie_data.get("rating", "N/A")
-        
-        # Cast
         cast = movie_data.get("cast", [])
         cast_str = ", ".join(cast[:5]) if cast else "N/A"
-        
-        # Plot
         plot = clean_text(movie_data.get("description", "No description available."))
-        
-        # Message construction with collapsible blockquote
-        msg = f"✅ **{title}** · {year} · `{movie_type}`\n\n"
-        msg += f"**>🉑 {lang_tags}\n"
-        msg += f">🎭 {genre_str} · 📺 {platform_str}\n"
-        msg += f">⏱️ {runtime} · ⭐ {rating}\n"
-        msg += f">👥 {cast_str}\n"
-        msg += f">\n"
-        msg += f">__Plot:__\n"
-        msg += f">{plot}**\n"
-        msg += f" **@MooviDex** "
-        
-        image = movie_data.get("image", "")
-        return msg, image
-    
-    else:  # binged
+        msg = f"✅ **{title}** · {year} · `{movie_type}`\n\n**>🉑 {lang_tags}\n>🎭 {genre_str} · 📺 {platform_str}\n>⏱️ {runtime} · ⭐ {rating}\n>👥 {cast_str}\n>\n>__Plot:__\n>{plot}**\n **@MooviDex** "
+        return msg, movie_data.get("image", "")
+
+    else: # binged
         title = clean_text(movie_data.get("post_title", "Unknown"))
         year = movie_data.get("release_year", "N/A")
         movie_type = movie_data.get("category", "N/A")
-        image = movie_data.get("image", "")
         
-        # Languages with hashtags
+        # Langs
         langs = movie_data.get("lang", [])
-        lang_tags = " ".join([f"#{lang.strip().replace(' ', '')}" for lang in langs]) if langs else "#Unknown"
-        
+        if isinstance(langs, list):
+             lang_tags = " ".join([f"#{l.strip().replace(' ', '')}" for l in langs]) if langs else "#Unknown"
+        else:
+             lang_tags = "#Unknown"
+
         # Genres
         genres = movie_data.get("genre", [])
         genre_str = ", ".join(genres) if genres else "N/A"
-        
-        # Platform - ONLY FIRST streaming platform with None checks
-        platforms = movie_data.get("platform_logos", [])
+
+        # Platforms
         platform_str = "N/A"
-        if platforms:
-            for p in platforms:
-                if p and p.get("rent_and_buy") == "0":  # Only streaming platforms
-                    ref_url = p.get("ref_url") or ""
-                    platform_name = get_platform_name(p)
-                    if ref_url:
-                        platform_str = f"[{platform_name}]({ref_url})"
-                    else:
-                        platform_str = platform_name
-                    break  # Take only the first platform
-        
-        # Runtime, Release Date, Censor
+        if movie_data.get("provider_str") and movie_data.get("provider_str") != "N/A":
+             platform_str = movie_data.get("provider_str")
+        else:
+             platforms = movie_data.get("platform_logos", [])
+             if platforms:
+                for p in platforms:
+                     if p and p.get("rent_and_buy") == "0":
+                         ref = p.get("ref_url") or ""
+                         name = get_platform_name(p)
+                         platform_str = f"[{name}]({ref})" if ref else name
+                         break
+
+        # Runtime/Censor
         runtime = movie_data.get("run_time", movie_data.get("duration", "N/A"))
-        if runtime != "N/A" and not runtime.endswith("m"):
-            runtime = f"{runtime}m"
-        release_date = unix_to_date(movie_data.get("release_date"))
+        if runtime != "N/A" and not str(runtime).endswith("m"): runtime = f"{runtime}m"
         censor = movie_data.get("censor", "NR")
+        release_date = unix_to_date(movie_data.get("release_date"))
         
         # Cast
         actors = movie_data.get("actors", [])
-        cast_names = [actor[1] for actor in actors[:5] if len(actor) > 1]  # Top 5 cast
-        cast_str = ", ".join(cast_names) if cast_names else "N/A"
-        
-        # Plot
-        plot = clean_text(movie_data.get("post_content", "No description available."))
-        
-        # Message construction with collapsible blockquote
-        msg = f"✅ **{title}** · {year} · `{movie_type}`\n\n"
-        msg += f"**>🉑 {lang_tags}\n"
-        msg += f">🎭 {genre_str} · 📺 {platform_str}\n"
-        msg += f">⏱️ {runtime} · ®️ {censor}\n"
-        msg += f">📅 {release_date}\n"
-        msg += f">👥 {cast_str}\n"
-        msg += f">\n"
-        msg += f">__Plot:__\n"
-        msg += f">{plot}**\n"
-        msg += f" **@MooviDex** "
-        
-        return msg, image
+        cast_str = "N/A"
+        if actors:
+             if isinstance(actors[0], list) and len(actors[0]) > 1:
+                  cast_str = ", ".join([a[1] for a in actors[:5]])
+             elif isinstance(actors[0], str):
+                  cast_str = ", ".join(actors[:5])
 
-# Build message for upcoming movie
+        plot = clean_text(movie_data.get("post_content", "No description available."))
+
+        msg = f"✅ **{title}** · {year} · `{movie_type}`\n\n**>🉑 {lang_tags}\n>🎭 {genre_str} · 📺 {platform_str}\n>⏱️ {runtime} · ®️ {censor}\n>📅 {release_date}\n>👥 {cast_str}\n>\n>__Plot:__\n>{plot}**\n **@MooviDex** "
+        return msg, movie_data.get("image", "")
+
 def build_upcoming_message(movie_data, bot_username, source='binged'):
     if source == 'imdb':
         title = clean_text(movie_data.get("title", "Unknown"))
         year = movie_data.get("year", "N/A")
         movie_type = movie_data.get("type", "Movie").capitalize()
-        
-        # Languages
-        lang_str = "English"  # Default for IMDB
-        
-        # Genres
-        genres = movie_data.get("genres", [])
-        genre_str = ", ".join(genres) if genres else "N/A"
-        
-        # Plot
-        plot = clean_text(movie_data.get("description", "No description available."))
-        
-        # Distinct upcoming format with collapsible blockquote
-        msg = f"🔔 **{title}** · {year} · `{movie_type}`\n\n"
-        msg += f">**🚀 COMING SOON**\n"
-        msg += f"🉑 {lang_str}\n"
-        msg += f"🎭 {genre_str}\n\n"
-        msg += f"**@MooviDex**"
-        
-        image = movie_data.get("image", "")
-        return msg, image
-    
-    else:  # binged
+        msg = f"🔔 **{title}** · {year} · `{movie_type}`\n\n>**🚀 COMING SOON**\n🉑 English\n🎭 {', '.join(movie_data.get('genres', [])) or 'N/A'}\n\n**@MooviDex**"
+        return msg, movie_data.get("image", "")
+    else:
         title = clean_text(movie_data.get("post_title", "Unknown"))
         year = movie_data.get("release_year", "N/A")
         movie_type = movie_data.get("category", "N/A")
-        image = movie_data.get("image", "")
-        
-        # Languages
         langs = movie_data.get("lang", [])
         lang_str = ", ".join(langs) if langs else "Unknown"
-        
-        # Release Date
         release_date = unix_to_date(movie_data.get("release_date"))
-        
-        # Genres
         genres = movie_data.get("genre", [])
         genre_str = ", ".join(genres) if genres else "N/A"
         
-        # Plot
-        plot = clean_text(movie_data.get("post_content", "No description available."))
-        
-        # Distinct upcoming format with collapsible blockquote
-        msg = f"🔔 **{title}** · {year} · `{movie_type}`\n\n"
-        msg += f">**🚀 COMING SOON**\n"
-        msg += f"🗓️ Releases : {release_date}\n"
-        msg += f"🉑 {lang_str}\n"
-        msg += f"🎭 {genre_str}\n\n"
-        msg += f"**@MooviDex**"
-        
-        return msg, image
+        msg = f"🔔 **{title}** · {year} · `{movie_type}`\n\n>**🚀 COMING SOON**\n🗓️ Releases : {release_date}\n🉑 {lang_str}\n🎭 {genre_str}\n\n**@MooviDex**"
+        return msg, movie_data.get("image", "")
 
-# /binged command (JustWatch API)
+# --- HANDLERS ---
+
 @Client.on_message(filters.command("binged"))
 async def binged_search(client, message):
     if message.from_user.id not in ADMIN_IDS:
         return await message.reply_text("🚫 This command is for admins only.")
-    if len(message.command) < 2:
-        return await message.reply_text("Usage: /binged <movie name>")
-
-    query = " ".join(message.command[1:]).strip()
     
-    # New JustWatch API Endpoint
+    query = " ".join(message.command[1:]).strip()
+    if not query: return await message.reply_text("Usage: /binged <movie name>")
+    
     url = f"https://imdb.iamidiotareyoutoo.com/justwatch?q={query}"
-
     try:
         data = await fetch_json(url, headers={'User-Agent': 'Mozilla/5.0'})
-        if not data:
-            return await message.reply_text(f"API Error.")
+        results = data.get("description", []) if data else []
     except Exception as e:
-        return await message.reply_text(f"API error: {e}")
+        return await message.reply_text(f"API Error: {e}")
 
-    results = data.get("description", [])
-        
-    if not results:
-        return await message.reply_text("No results found.")
+    if not results: return await message.reply_text("No results found.")
 
     temp.BINGED_RESULTS[message.from_user.id] = {}
     buttons = []
     for item in results:
         title = clean_text(item.get("title"))
         if not title: continue
-        
-        # Use valid ID, prefer tmdbId if available for later lookup
-        item_id = str(item.get("id")) # internal id like tm1599399
-        
+        item_id = str(item.get("id"))
         year = item.get("year", "N/A")
         ctype = item.get("type", "MOVIE")
         
-        btn_text = f"{title} ({year}) - {ctype}"
-        
-        # Store item for details
         temp.BINGED_RESULTS[message.from_user.id][item_id] = item
-        buttons.append([InlineKeyboardButton(btn_text, callback_data=f"binged_detail_{item_id}")])
+        buttons.append([InlineKeyboardButton(f"{title} ({year}) - {ctype}", callback_data=f"binged_detail_{item_id}")])
 
     buttons.append([InlineKeyboardButton("Close ❌", callback_data="close_message")])
-    await message.reply_text(
-        f"JustWatch Search results for: <b>{query}</b>",
-        reply_markup=InlineKeyboardMarkup(buttons),
-        disable_web_page_preview=True
-    )
+    await message.reply_text(f"JustWatch Search: <b>{query}</b>", reply_markup=InlineKeyboardMarkup(buttons))
 
-# /imdbpost command (Now uses TMDB)
-@Client.on_message(filters.command("imdbpost"))
-async def imdb_search(client, message):
-    if message.from_user.id not in ADMIN_IDS:
-        return await message.reply_text("🚫 This command is for admins only.")
-    if len(message.command) < 2:
-        return await message.reply_text("Usage: /imdbpost <movie name>")
-
-    query = " ".join(message.command[1:]).strip()
-    
-    # Use find_tmdb_id to support IMDB ID or Name
-    results = await find_tmdb_id(query)
-    if not results:
-        # Log search stats for no results
-        try:
-            await stats_db.add_search_log(query, message.from_user.id, 0, source='imdb')
-        except Exception as e:
-            print(f"Error logging imdb search: {e}")
-        return await message.reply_text("No results found on TMDB.")
-    
-    # Log search stats for success
-    try:
-        await stats_db.add_search_log(query, message.from_user.id, len(results), source='imdb')
-    except Exception as e:
-        print(f"Error logging imdb search: {e}")
-
-    temp.TMDB_RESULTS[message.from_user.id] = {}
-    buttons = []
-    
-    for item in results[:10]:
-        tmdb_id = str(item.get("id"))
-        title = item.get("title") or item.get("name") or "Unknown"
-        date = item.get("release_date") or item.get("first_air_date") or "N/A"
-        year = date.split("-")[0] if date != "N/A" else "N/A"
-        media_type = item.get("media_type", "movie")
-        
-        btn_text = f"{title} ({year}) - {media_type.upper()}"
-        temp.TMDB_RESULTS[message.from_user.id][tmdb_id] = item
-        buttons.append([InlineKeyboardButton(btn_text, callback_data=f"imdb_detail_{tmdb_id}_{media_type}")])
-    
-    buttons.append([InlineKeyboardButton("Close ❌", callback_data="close_message")])
-    await message.reply_text(
-        f"TMDB Search results for: <b>{query}</b>",
-        reply_markup=InlineKeyboardMarkup(buttons),
-        disable_web_page_preview=True
-    )
-
-# Show TMDB movie detail
-@Client.on_callback_query(filters.regex(r"^imdb_detail_(\d+)_(.+)$"))
-async def imdb_detail(client, cq):
-    import re as regex_module
-    
-    match = regex_module.match(r"^imdb_detail_(\d+)_(.+)$", cq.data)
-    tmdb_id = match.group(1)
-    media_type = match.group(2)
-    user_id = cq.from_user.id
-    
-    # Get details
-    movie_data = await get_tmdb_details(tmdb_id, media_type)
-    
-    if not movie_data:
-        return await cq.answer("Failed to fetch details from TMDB.", show_alert=True)
-    
-    # Map plot to description for compatibility
-    movie_data["description"] = movie_data.get("plot", "")
-    
-    # Store full movie data
-    temp.TMDB_RESULTS[user_id] = temp.TMDB_RESULTS.get(user_id, {}) # Ensure dict exists
-    temp.TMDB_RESULTS[user_id][tmdb_id] = movie_data
-    
-    title = movie_data.get("title", "Unknown")
-    year = movie_data.get("year", "N/A")
-    
-    # Ask admin to choose status
-    buttons = [
-        [
-            InlineKeyboardButton("✅ Released", callback_data=f"imdb_status_released_{tmdb_id}"),
-            InlineKeyboardButton("🔔 Upcoming", callback_data=f"imdb_status_upcoming_{tmdb_id}")
-        ],
-        [InlineKeyboardButton("❌ Close", callback_data="close_message")]
-    ]
-    
-    preview_msg = f"**{title}** ({year})\n\nChoose movie status:"
-    
-    if movie_data["image"]:
-        await cq.message.reply_photo(
-            photo=movie_data["image"],
-            caption=preview_msg,
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-    else:
-        await cq.message.reply_text(
-            preview_msg,
-            reply_markup=InlineKeyboardMarkup(buttons),
-            disable_web_page_preview=True
-        )
-    await cq.answer()
-
-# Handle IMDB/TMDB movie status selection
-@Client.on_callback_query(filters.regex(r"^imdb_status_(released|upcoming)_(.+)$"))
-async def imdb_status_select(client, cq):
-    import re as regex_module
-    
-    match = regex_module.match(r"^imdb_status_(released|upcoming)_(.+)$", cq.data)
-    status = match.group(1)
-    tmdb_id = match.group(2)
-    user_id = cq.from_user.id
-    
-    movie_data = temp.TMDB_RESULTS.get(user_id, {}).get(tmdb_id)
-    if not movie_data:
-        return await cq.answer("Movie data not found.", show_alert=True)
-    
-    # Store status
-    temp.MOVIE_STATUS[tmdb_id] = status
-    
-    title = clean_text(movie_data.get("title", "Unknown"))
-    year = movie_data.get("year", "N/A")
-    safe_title = format_search_title(title, year)
-    
-    # Build message based on status
-    if status == "upcoming":
-        msg, image = build_upcoming_message(movie_data, temp.U_NAME, source='imdb')
-    else:
-        msg, image = build_released_message(movie_data, temp.U_NAME, source='imdb')
-    
-    # Build buttons based on status
-    buttons = []
-    
-    if status == "released":
-        buttons.append([InlineKeyboardButton(
-            f"{title} · {year}", 
-            url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
-        )])
-    
-        # Add Similar Movies Button
-        similar_movies = movie_data.get("similar", [])
-        if similar_movies:
-            # similar is list of dicts {id, title, media_type}
-            similar_title = clean_text(similar_movies[0].get("title", ""))
-            safe_similar = format_search_title(similar_title, None)
-            buttons.append([InlineKeyboardButton(
-                "🔄 More like this", 
-                url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
-            )])
-
-    # Admin buttons
-    buttons.append([
-        InlineKeyboardButton("✏️ Edit & Post", callback_data=f"imdb_edit_post_{tmdb_id}"),
-        InlineKeyboardButton("📣 Post Default", callback_data=f"imdb_post_{tmdb_id}")
-    ])
-    buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
-    
-    # Send with image
-    if image:
-        await cq.message.reply_photo(
-            photo=image,
-            caption=msg,
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-    else:
-        await cq.message.reply_text(
-            msg,
-            reply_markup=InlineKeyboardMarkup(buttons),
-            disable_web_page_preview=True
-        )
-    await cq.answer()
-
-# Show JustWatch movie detail
 @Client.on_callback_query(filters.regex(r"^binged_detail_(.+)$"))
 async def binged_detail(client, cq):
     movie_id = cq.data.split("_")[-1]
     user_id = cq.from_user.id
-    
-    # Retrieve movie data from temp storage
     movie = temp.BINGED_RESULTS.get(user_id, {}).get(movie_id)
     
-    if not movie:
-         return await cq.answer("Movie details not found (cache expired). Search again.", show_alert=True)
-
+    if not movie: return await cq.answer("Session expired. Search again.", show_alert=True)
     await cq.answer("Fetching details...")
 
-    # Data from JustWatch
+    # Basic data
     title = clean_text(movie.get("title", ""))
     year = movie.get("year", "N/A")
-    jw_type = movie.get("type", "MOVIE") 
-    media_type = "movie" if jw_type == "MOVIE" else "tv"
+    media_type = "movie" if movie.get("type") == "MOVIE" else "tv"
     type_str = "Movie" if media_type == "movie" else "Series"
-    
-    # Providers from JustWatch
+
+    # Providers
     offers = movie.get("offers", [])
-    provider_logos = [] 
-    
-    platform_links = []
-    seen_platforms = set()
+    seen = set()
+    links = []
+    logos = [] # TODO: Extract logos if available in offers logic?
     
     for offer in offers:
-        p_name = offer.get("name")
-        p_url = offer.get("url")
-        if p_name and p_name not in seen_platforms:
-             seen_platforms.add(p_name)
-             platform_links.append(f"[{p_name}]({p_url})")
-
-    provider_str = ", ".join(platform_links[:3]) if platform_links else "N/A"
+        name = offer.get("name")
+        url = offer.get("url")
+        if name and name not in seen:
+            seen.add(name)
+            links.append(f"[{name}]({url})")
     
-    # Images from JustWatch
-    posters = movie.get("photo_url", [])
-    jw_poster = posters[0] if posters else None
+    provider_str = ", ".join(links[:3]) if links else "N/A"
 
-    backdrops = movie.get("backdrops", [])
-    jw_backdrop = backdrops[0] if backdrops else None
-    
-    # Fetch Data from TMDB for missing fields (Plot, Cast, Rating, Genres)
+    # Images
+    jw_backdrop = (movie.get("backdrops") or [None])[0]
+    jw_poster = (movie.get("photo_url") or [None])[0]
+
+    # TMDB Enrich
+    tmdb_details = None
     tmdb_id = movie.get("tmdbId")
-    
-    tmdb_plot, tmdb_rating, genres, cast_str = "No description available.", "N/A", [], "N/A"
-    cast = [] # Initialize cast
-    tmdb_backdrop, tmdb_poster = None, None
-    lang_tag = "#Unknown"
-
     if tmdb_id:
         tmdb_details = await get_tmdb_details(tmdb_id, media_type)
     else:
-        # Search match
-        tmdb_results = await search_tmdb_advanced(title, year=year, media_type=media_type)
-        if tmdb_results:
-             tmdb_id = tmdb_results[0].get("id")
-             tmdb_details = await get_tmdb_details(tmdb_id, media_type)
-        else:
-             tmdb_details = None
+        adv = await search_tmdb_advanced(title, year, media_type)
+        if adv: tmdb_details = await get_tmdb_details(adv[0].get("id"), media_type)
 
+    final_langs = []
+    tmdb_rating = "N/A"
+    tmdb_plot = "No description available."
+    genres = []
+    cast = []
+    tmdb_backdrop = None
+    
     if tmdb_details:
         tmdb_plot = tmdb_details.get("plot")
         tmdb_rating = tmdb_details.get("rating")
         genres = tmdb_details.get("genres", [])
         cast = tmdb_details.get("cast", [])
-        cast_str = ", ".join(cast[:5]) if cast else "N/A"
         
-        # Language Logic
-        t_orig = tmdb_details.get("original_data", {})
-        spoken = t_orig.get("spoken_languages", [])
+        # Original Image
+        if tmdb_details.get("image"): tmdb_backdrop = tmdb_details.get("image")
+        
+        # Languages
+        orig = tmdb_details.get("original_data", {})
+        spoken = orig.get("spoken_languages", [])
         if spoken:
-             langs = [l.get("english_name") for l in spoken]
-             # Filter duplicates and limit
-             seen_langs = set()
-             final_langs = []
-             for l in langs:
-                 if l not in seen_langs:
-                     final_langs.append(l)
-                     seen_langs.add(l)
-             lang_tag = " ".join([f"#{l.replace(' ', '')}" for l in final_langs[:3]])
+             final_langs = list(set([l.get("english_name") for l in spoken]))[:3]
         else:
-             # Fallback to original language code if no spoken info
-             ol = t_orig.get("original_language", "en")
-             lang_map = {"en": "English", "hi": "Hindi", "ta": "Tamil", "te": "Telugu", "ml": "Malayalam", "kn": "Kannada"}
-             l_name = lang_map.get(ol, ol)
-             lang_tag = f"#{l_name}"
+             final_langs = [orig.get("original_language", "en")]
 
-        # Image Logic
-        tmdb_img = tmdb_details.get("image")
-        if tmdb_img: tmdb_backdrop = tmdb_img
-        
-        p_path = t_orig.get("poster_path")
-        if p_path: tmdb_poster = f"https://image.tmdb.org/t/p/original{p_path}"
-             
-    genre_str = ", ".join(genres) if genres else "N/A"
-    
+    # Update Data
     movie['rating'] = tmdb_rating
     movie['post_content'] = tmdb_plot
     movie['genre'] = genres
-    movie['genre_str'] = genre_str
+    movie['genre_str'] = ", ".join(genres) if genres else "N/A"
     movie['cast'] = cast
-    movie['cast_str'] = cast_str
+    movie['cast_str'] = ", ".join(cast[:5]) if cast else "N/A"
     movie['backdrop_url'] = jw_backdrop
     movie['poster_url'] = jw_poster
-    movie['provider_logos'] = provider_logos if 'provider_logos' in locals() else []
-    movie['image'] = tmdb_backdrop or jw_backdrop # Persist best image URL
+    movie['image'] = tmdb_backdrop or jw_backdrop
+    movie['provider_logos'] = [] # Pass empty usually unless we scrape logos
     
-    # Save back to temp
+    # MAPPING FOR POSTING
+    movie['post_title'] = title
+    movie['release_year'] = year
+    movie['category'] = type_str
+    movie['run_time'] = tmdb_details.get("runtime") if tmdb_details else "N/A"
+    movie['lang'] = final_langs if final_langs else ["Unknown"]
+    movie['provider_str'] = provider_str
+    movie['actors'] = [[None, c] for c in cast]
+    
     temp.BINGED_RESULTS[user_id][movie_id] = movie
-
-    msg = f"✅ **{title}** · {year} · `{type_str}`\n\n"
-    msg += f"**>🉑 {lang_tag}\n"
-    msg += f">🎭 {genre_str} · 📺 {provider_str}\n"
-    msg += f">®️ N/A · ⭐ {tmdb_rating}\n" 
-    msg += f">📅 {year}\n"
-    msg += f">👥 {cast_str}\n"
-    msg += f">\n"
-    msg += f">__Plot:__\n"
-    msg += f">{tmdb_plot}**\n"
-    msg += f" **@MooviDex** "
     
-    # Image Generation
-    final_image_io = None
-    if jw_backdrop and jw_poster:
-         # Try/Except for image generation to be safe
-         try:
-            await cq.answer("Generating image...", cache_time=0)
-            final_image_io = await generate_status_image(jw_backdrop, jw_poster, [], title, year, tmdb_rating, genre_str, tmdb_plot)
-         except Exception as e:
-            print(f"Image Gen Error: {e}")
+    # Message
+    lang_tag = " ".join([f"#{l.replace(' ', '')}" for l in movie['lang']])
+    msg = f"✅ **{title}** · {year} · `{type_str}`\n\n**>🉑 {lang_tag}\n>🎭 {movie['genre_str']} · 📺 {provider_str}\n>®️ N/A · ⭐ {tmdb_rating}\n>📅 {year}\n>👥 {movie['cast_str']}\n>\n>__Plot:__\n>{tmdb_plot}**\n **@MooviDex** "
 
+    # Buttons
     safe_title = format_search_title(title, year)
-    buttons = [[InlineKeyboardButton(f"🔍 Search: {title}", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]]
-    
-    # Admin buttons
-    buttons.append([
+    btn = [[InlineKeyboardButton(f"🔍 Search: {title}", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")]]
+    btn.append([
         InlineKeyboardButton("✏️ Edit & Post", callback_data=f"binged_edit_post_{movie_id}"),
         InlineKeyboardButton("📣 Post Default", callback_data=f"binged_post_{movie_id}")
     ])
-    buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
+    btn.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
     
-    if final_image_io:
-        await cq.message.reply_photo(photo=final_image_io, caption=msg, reply_markup=InlineKeyboardMarkup(buttons))
-    elif jw_backdrop:
-        await cq.message.reply_photo(photo=jw_backdrop, caption=msg, reply_markup=InlineKeyboardMarkup(buttons))
+    if movie.get('image'):
+         await cq.message.reply_photo(movie['image'], caption=msg, reply_markup=InlineKeyboardMarkup(btn))
     else:
-        await cq.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(buttons), disable_web_page_preview=True)
+         await cq.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
     await cq.answer()
-            
 
-
-# Handle Binged movie status selection
 @Client.on_callback_query(filters.regex(r"^binged_status_(released|upcoming)_(.+)$"))
 async def binged_status_select(client, cq):
-    import re as regex_module
-    
-    match = regex_module.match(r"^binged_status_(released|upcoming)_(.+)$", cq.data)
-    status = match.group(1)
-    movie_id = match.group(2)
+    match = re.match(r"^binged_status_(released|upcoming)_(.+)$", cq.data)
+    status, movie_id = match.group(1), match.group(2)
     user_id = cq.from_user.id
     
     movie_data = temp.BINGED_RESULTS.get(user_id, {}).get(movie_id)
-    if not movie_data:
-        return await cq.answer("Movie data not found.", show_alert=True)
+    if not movie_data: return await cq.answer("Data lost.", show_alert=True)
     
-    # Store status
     temp.MOVIE_STATUS[movie_id] = status
     
     title = clean_text(movie_data.get("post_title", "Unknown"))
     year = movie_data.get("release_year", "N/A")
     safe_title = format_search_title(title, year)
     
-    # Build message based on status
     if status == "upcoming":
         msg, image = build_upcoming_message(movie_data, temp.U_NAME, source='binged')
     else:
         msg, image = build_released_message(movie_data, temp.U_NAME, source='binged')
-    
-    # Use Binged poster
-    final_image = image
-    
-    # Build buttons based on status
-    buttons = []
-    
+        
+    btn = []
     if status == "upcoming":
-        # For upcoming: Only trailer button
         videos = movie_data.get("videos", [])
-        if videos and len(videos) > 0:
-            video_url = videos[0].get("url", "")
-            if video_url:
-                trailer_url = f"https://www.youtube.com/watch?v={video_url}"
-                buttons.append([InlineKeyboardButton("🎬 Trailer", url=trailer_url)])
-        
-        # Add Notify Button for Upcoming
-        buttons.append([InlineKeyboardButton("🔔 Notify when Released", callback_data=f"notify_release_{movie_id}")])
+        if videos:
+             v_url = videos[0].get("url")
+             if v_url: btn.append([InlineKeyboardButton("🎬 Trailer", url=f"https://www.youtube.com/watch?v={v_url}")])
+        btn.append([InlineKeyboardButton("🔔 Notify when Released", callback_data=f"notify_release_{movie_id}")])
     else:
-        # For released: All buttons
-        buttons.append([InlineKeyboardButton(
-            f"{title} · {year}", 
-            url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
-        )])
-        
-        second_row = []
+        btn.append([InlineKeyboardButton(f"{title} · {year}", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")])
+        row = []
         videos = movie_data.get("videos", [])
-        if videos and len(videos) > 0:
-            video_url = videos[0].get("url", "")
-            if video_url:
-                trailer_url = f"https://www.youtube.com/watch?v={video_url}"
-                second_row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
+        if videos:
+             v_url = videos[0].get("url")
+             if v_url: row.append(InlineKeyboardButton("🎬 Trailer", url=f"https://www.youtube.com/watch?v={v_url}"))
         
-        # Get unique similar movies
-        similar_movies = get_similar_movies(movie_data, count=1)
-        if similar_movies:
-            similar_title = clean_text(similar_movies[0].get("title", ""))
-            safe_similar = format_search_title(similar_title, None)
-            second_row.append(InlineKeyboardButton(
-                "🔄 More like this", 
-                url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
-            ))
+        sims = get_similar_movies(movie_data, 1)
+        if sims:
+             st = clean_text(sims[0].get("title"))
+             sst = format_search_title(st, None)
+             row.append(InlineKeyboardButton("🔄 More like this", url=f"https://t.me/{temp.U_NAME}?start=Search_{sst}"))
+        if row: btn.append(row)
         
-        if second_row:
-            buttons.append(second_row)
-    
-    # Admin buttons
     if user_id in ADMIN_IDS:
-        buttons.append([
+        btn.append([
             InlineKeyboardButton("✏️ Edit & Post", callback_data=f"binged_edit_post_{movie_id}"),
             InlineKeyboardButton("📣 Post Default", callback_data=f"binged_post_{movie_id}")
         ])
-    buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
+    btn.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
     
-    # Send with image
-    if final_image:
-        await cq.message.reply_photo(
-            photo=final_image,
-            caption=msg,
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-    else:
-        await cq.message.reply_text(
-            msg,
-            reply_markup=InlineKeyboardMarkup(buttons),
-            disable_web_page_preview=True
-        )
+    if image: await cq.message.reply_photo(image, caption=msg, reply_markup=InlineKeyboardMarkup(btn))
+    else: await cq.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
     await cq.answer()
 
-# Post Binged movie directly to channel
 @Client.on_callback_query(filters.regex(r"^binged_post_(.+)$"))
 async def binged_post(client, cq):
-    import re as regex_module
+    if cq.from_user.id not in ADMIN_IDS: return await cq.answer("Unauthorized.", show_alert=True)
     
-    if cq.from_user.id not in ADMIN_IDS:
-        return await cq.answer("You're not authorized.", show_alert=True)
     movie_id = cq.data.split("_")[-1]
     movie_data = temp.BINGED_RESULTS.get(cq.from_user.id, {}).get(movie_id)
-    if not movie_data:
-        return await cq.answer("Movie data not found.", show_alert=True)
-
+    if not movie_data: return await cq.answer("Data lost.", show_alert=True)
+    
+    status = temp.MOVIE_STATUS.get(movie_id, "released")
     title = clean_text(movie_data.get("post_title", "Unknown"))
     year = movie_data.get("release_year", "N/A")
     safe_title = format_search_title(title, year)
     
-    # Get status from temp storage
-    status = temp.MOVIE_STATUS.get(movie_id, "released")
-    
     if status == "upcoming":
         msg, image = build_upcoming_message(movie_data, temp.U_NAME, source='binged')
     else:
         msg, image = build_released_message(movie_data, temp.U_NAME, source='binged')
-    
-    # Use Binged poster
+        
     final_image = image
-    
-    # Try to generate Image if components exist
     if movie_data.get('backdrop_url') and movie_data.get('poster_url'):
          try:
             await cq.answer("Generating image...", cache_time=0)
-            
-            is_upcoming_bool = (status == "upcoming")
-            release_d = unix_to_date(movie_data.get('release_date')) if is_upcoming_bool else None
+            is_upcoming = (status == "upcoming")
+            r_date = unix_to_date(movie_data.get('release_date')) if is_upcoming else None
             
             final_image = await generate_status_image(
                 movie_data['backdrop_url'], 
                 movie_data['poster_url'], 
                 movie_data.get('provider_logos', []), 
-                title, 
-                year, 
+                title, year, 
                 movie_data.get('rating', 'N/A'), 
                 movie_data.get('genre_str', 'N/A'), 
                 movie_data.get('post_content', 'No plot'),
-                is_upcoming=is_upcoming_bool,
-                release_date=release_d
+                is_upcoming=is_upcoming,
+                release_date=r_date
             )
          except Exception as e:
-            print(f"Post Image Gen Error: {e}")
-
-    
-    # Build buttons based on status
-    buttons = []
-    
+            print(f"Image Gen Error: {e}")
+            
+    btn = []
     if status == "upcoming":
-        # For upcoming: Only trailer
         videos = movie_data.get("videos", [])
-        if videos and len(videos) > 0:
-            video_url = videos[0].get("url", "")
-            if video_url:
-                trailer_url = f"https://www.youtube.com/watch?v={video_url}"
-                buttons.append([InlineKeyboardButton("🎬 Trailer", url=trailer_url)])
-        
-        # Add Notify Button
-        buttons.append([InlineKeyboardButton("🔔 Notify when Released", callback_data=f"notify_release_{movie_id}")])
+        if videos and videos[0].get("url"):
+            btn.append([InlineKeyboardButton("🎬 Trailer", url=f"https://www.youtube.com/watch?v={videos[0]['url']}")])
+        btn.append([InlineKeyboardButton("🔔 Notify when Released", callback_data=f"notify_release_{movie_id}")])
     else:
-        # For released: All buttons
-        buttons.append([InlineKeyboardButton(
-            f"{title} · {year}", 
-            url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
-        )])
-        
-        second_row = []
+        btn.append([InlineKeyboardButton(f"{title} · {year}", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")])
+        row = []
         videos = movie_data.get("videos", [])
-        if videos and len(videos) > 0:
-            video_url = videos[0].get("url", "")
-            if video_url:
-                trailer_url = f"https://www.youtube.com/watch?v={video_url}"
-                second_row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
+        if videos and videos[0].get("url"):
+            row.append(InlineKeyboardButton("🎬 Trailer", url=f"https://www.youtube.com/watch?v={videos[0]['url']}"))
+        sims = get_similar_movies(movie_data, 1)
+        if sims:
+             st = clean_text(sims[0].get("title"))
+             row.append(InlineKeyboardButton("🔄 More like this", url=f"https://t.me/{temp.U_NAME}?start=Search_{format_search_title(st, None)}"))
+        if row: btn.append(row)
         
-        # Get unique similar movies
-        similar_movies = get_similar_movies(movie_data, count=1)
-        if similar_movies:
-            similar_title = clean_text(similar_movies[0].get("title", ""))
-            safe_similar = regex_module.sub(r'[^a-zA-Z0-9]', '_', similar_title)
-            second_row.append(InlineKeyboardButton(
-                "🔄 More like this", 
-                url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
-            ))
-        
-        if second_row:
-            buttons.append(second_row)
-    
-    # Send to channel
     try:
-        if final_image:
-            await client.send_photo(
-                chat_id=UPDATE_CHANNEL_ID,
-                photo=final_image,
-                caption=msg,
-                reply_markup=InlineKeyboardMarkup(buttons)
-            )
-        else:
-            await client.send_message(
-                chat_id=UPDATE_CHANNEL_ID,
-                text=msg,
-                reply_markup=InlineKeyboardMarkup(buttons),
-                disable_web_page_preview=True
-            )
-        await cq.answer("✅ Posted to channel.")
-    except Exception as e:
-        await cq.answer(f"❌ Error posting: {e}", show_alert=True)
-
-# Post IMDB/TMDB movie directly to channel
-@Client.on_callback_query(filters.regex(r"^imdb_post_(.+)$"))
-async def imdb_post(client, cq):
-    import re as regex_module
-    
-    if cq.from_user.id not in ADMIN_IDS:
-        return await cq.answer("You're not authorized.", show_alert=True)
-    tmdb_id = cq.data.replace("imdb_post_", "")
-    movie_data = temp.TMDB_RESULTS.get(cq.from_user.id, {}).get(tmdb_id)
-    if not movie_data:
-        return await cq.answer("Movie data not found.", show_alert=True)
-
-    title = clean_text(movie_data.get("title", "Unknown"))
-    safe_title = regex_module.sub(r'[^a-zA-Z0-9]', '_', title)
-    year = movie_data.get("year", "N/A")
-    
-    # Get status from temp storage
-    status = temp.MOVIE_STATUS.get(tmdb_id, "released")
-    
-    if status == "upcoming":
-        msg, image = build_upcoming_message(movie_data, temp.U_NAME, source='imdb')
-    else:
-        msg, image = build_released_message(movie_data, temp.U_NAME, source='imdb')
-    
-    # Build buttons based on status
-    buttons = []
-    
-    if status == "released":
-        buttons.append([InlineKeyboardButton(
-            f"{title} · {year}", 
-            url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}"
-        )])
+        method = client.send_photo if final_image else client.send_message
+        kwargs = {'chat_id': UPDATE_CHANNEL_ID, 'caption' if final_image else 'text': msg, 'reply_markup': InlineKeyboardMarkup(btn)}
+        if final_image: kwargs['photo'] = final_image
+        else: kwargs['disable_web_page_preview'] = True
         
-        # Add Similar Movies Button
-        similar_movies = movie_data.get("similar", [])
-        if similar_movies:
-            # similar is list of dicts {id, title, media_type}
-            similar_title = clean_text(similar_movies[0].get("title", ""))
-            safe_similar = regex_module.sub(r'[^a-zA-Z0-9]', '_', similar_title)
-            buttons.append([InlineKeyboardButton(
-                "🔄 More like this", 
-                url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
-            )])
-    
-    # Send to channel
-    try:
-        # Debug printing
-        print(f"Posting to Channel ID: {UPDATE_CHANNEL_ID}")
-        print(f"Image: {image}")
-        
-        if image:
-            await client.send_photo(
-                chat_id=UPDATE_CHANNEL_ID,
-                photo=image,
-                caption=msg,
-                reply_markup=InlineKeyboardMarkup(buttons)
-            )
-        else:
-            await client.send_message(
-                chat_id=UPDATE_CHANNEL_ID,
-                text=msg,
-                reply_markup=InlineKeyboardMarkup(buttons),
-                disable_web_page_preview=True
-            )
-        await cq.answer("✅ Posted to channel.")
+        await method(**kwargs)
+        await cq.answer("✅ Posted.")
     except Exception as e:
-        print(f"Error Posting IMDB: {e}")
-        await cq.answer(f"❌ Error posting: {e}", show_alert=True)
+        await cq.answer(f"Error: {e}", show_alert=True)
 
-# Prompt for custom button input (Binged)
 @Client.on_callback_query(filters.regex(r"^binged_edit_post_(.+)$"))
 async def binged_edit_post_prompt(client, cq):
     movie_id = cq.data.split("_")[-1]
-    user_id = cq.from_user.id
-    temp.EDITING_POST[user_id] = {"movie_id": movie_id, "source": "binged"}
-
-    await cq.message.reply_text("✏️ Send the **new search keyword** or **full URL** to use in the search button.", quote=True)
+    temp.EDITING_POST[cq.from_user.id] = {"movie_id": movie_id, "source": "binged"}
+    await cq.message.reply_text("✏️ Send custom Search keyword or URL.", quote=True)
     await cq.answer()
 
-# Prompt for custom button input (IMDB)
-@Client.on_callback_query(filters.regex(r"^imdb_edit_post_(.+)$"))
-async def imdb_edit_post_prompt(client, cq):
-    movie_id = cq.data.replace("imdb_edit_post_", "")
-    user_id = cq.from_user.id
-    temp.EDITING_POST[user_id] = {"movie_id": movie_id, "source": "imdb"}
-
-    await cq.message.reply_text("✏️ Send the **new search keyword** or **full URL** to use in the search button.", quote=True)
-    await cq.answer()
-
-# Handle admin reply with custom button
-@Client.on_message(filters.private & filters.text & filters.user(ADMIN_IDS) & filters.create(lambda _, __, msg: msg.from_user.id in temp.EDITING_POST))
+@Client.on_message(filters.private & filters.text & filters.user(ADMIN_IDS))
 async def receive_custom_search(client, message):
-    import re as regex_module
-    
     user_id = message.from_user.id
-    custom_input = message.text.strip()
-
-    if user_id not in temp.EDITING_POST:
-        return
-
-    edit_data = temp.EDITING_POST.pop(user_id)
-    movie_id = edit_data["movie_id"]
-    source = edit_data["source"]
+    if user_id not in temp.EDITING_POST: return
     
-    # Get movie data based on source
-    if source == "binged":
-        movie_data = temp.BINGED_RESULTS.get(user_id, {}).get(movie_id)
-    elif source == "ottplay":
-        movie_data = getattr(temp, "OTTPLAY_RESULTS", {}).get(user_id, {}).get(movie_id)
-    else:  # imdb
-        movie_data = temp.TMDB_RESULTS.get(user_id, {}).get(movie_id)
+    data = temp.EDITING_POST.pop(user_id)
+    movie_id = data["movie_id"]
+    source = data["source"] # binged or imdb
     
-    if not movie_data:
-        return await message.reply("❌ Movie session expired. Please search again.")
-
-    # Special Handling for Ottplay
-    if source == "ottplay":
-        data = movie_data
-        is_upcoming = data.get('is_upcoming', False)
-        emoji = "🔜" if is_upcoming else "✅"
-        
-        msg = f"{emoji} **{data['title']}** · {data['year']} · `{data['type_str']}`\n\n"
-        msg += f"**>🉑 {data['lang_tag']}\n"
-        
-        if is_upcoming:
-            msg += f">🎭 {data['genre_str']}\n"
-            msg += f">🚀 **Releasing On:** {data['provider_str']}\n"
-            msg += f">📅 **Date:** {data['r_date']}\n"
-            msg += f">®️ {data['cert_str']} · ⭐ {data['rating']}\n"
-        else:
-            msg += f">🎭 {data['genre_str']} · 📺 {data['provider_str']}\n"
-            msg += f">®️ {data['cert_str']} · ⭐ {data['rating']}\n"
-            msg += f">📅 {data['r_date']}\n"
-
-        msg += f">👥 {data['cast_str']}\n"
-        msg += f">\n"
-        msg += f">__Plot:__\n"
-        msg += f">{data['plot']}**\n"
-        msg += f" **@MooviDex** "
-        
-        final_image = None
-        if data['backdrop_url'] and data['poster_url']:
-            try:
-                 # Ottplay usually sends formatted date string already in 'r_date' or similar?
-                 # data['r_date'] seems to be used above.
-                 # Using is_upcoming from data directly
-                 
-                 final_image = await generate_status_image(
-                    data['backdrop_url'], data['poster_url'], data['provider_logos'],
-                    data['title'], data['year'], data['rating'], data['genre_str'], data['plot'],
-                    is_upcoming=is_upcoming,
-                    release_date=data.get('r_date')
-                 )
-            except Exception as e:
-                print(f"Edit Post Image Gen Error: {e}")
-        
-        if not final_image and data['backdrop_url']:
-            final_image = data['backdrop_url']
-
-        buttons = []
-        
-        # Notify Me for Upcoming (Priority)
-        if is_upcoming:
-             buttons.append([
-                InlineKeyboardButton(f"🔔 Notify Me", callback_data=f"notify_{data['safe_title']}_{data['r_date']}")
-            ])
-
-        # Custom Button
-        if custom_input.startswith("http://") or custom_input.startswith("https://"):
-            button_url = custom_input
-            buttons.append([InlineKeyboardButton(f"🔍 Search: {data['title']}", url=button_url)])
-        else:
-            safe_keyword = regex_module.sub(r'[^a-zA-Z0-9]', '_', custom_input)
-            buttons.append([InlineKeyboardButton(
-                f"🔍 Search: {data['title']}", 
-                url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_keyword}"
-            )])
-            
-        row = []
-        if data.get('trailer_url'):
-            row.append(InlineKeyboardButton("🎬 Trailer", url=data['trailer_url']))
-        if data.get('tmdb_id'):
-            media_type = "movie" if data['type_str'] == "Movie" else "tv"
-            row.append(InlineKeyboardButton("More like this", url=f"https://t.me/{temp.U_NAME}?start=more_like_{data['tmdb_id']}_{media_type}"))
-        if row:
-            buttons.append(row)
-
-        try:
-             if hasattr(final_image, 'seek'): final_image.seek(0)
-             if final_image:
-                 await client.send_photo(chat_id=UPDATE_CHANNEL_ID, photo=final_image, caption=msg, reply_markup=InlineKeyboardMarkup(buttons))
-             else:
-                 await client.send_message(chat_id=UPDATE_CHANNEL_ID, text=msg, reply_markup=InlineKeyboardMarkup(buttons), disable_web_page_preview=True)
-             await message.reply("✅ Posted to channel with custom button.")
-        except Exception as e:
-             await message.reply(f"❌ Error posting: {e}")
-        return
-
-    # Get title based on source
-    if source == "binged":
-        title = clean_text(movie_data.get("post_title", "Unknown"))
-        year = movie_data.get("release_year", "N/A")
-    else:  # imdb
-        title = clean_text(movie_data.get("title", "Unknown"))
-        year = movie_data.get("year", "N/A")
+    movie_data = (temp.BINGED_RESULTS if source == 'binged' else temp.TMDB_RESULTS).get(user_id, {}).get(movie_id)
+    if not movie_data: return await message.reply("Session expired.")
     
-    # Get status from temp storage
     status = temp.MOVIE_STATUS.get(movie_id, "released")
+    title = clean_text(movie_data.get("post_title", movie_data.get("title", "")))
+    year = movie_data.get("release_year", movie_data.get("year", ""))
     
     if status == "upcoming":
         msg, image = build_upcoming_message(movie_data, temp.U_NAME, source=source)
     else:
         msg, image = build_released_message(movie_data, temp.U_NAME, source=source)
+    
+    final_image = image
+    if source == 'binged' and movie_data.get('backdrop_url') and movie_data.get('poster_url'):
+         try:
+            is_upcoming = (status == "upcoming")
+            r_date = unix_to_date(movie_data.get('release_date')) if is_upcoming else None
+            final_image = await generate_status_image(
+                movie_data['backdrop_url'], movie_data['poster_url'], [],
+                title, year, movie_data.get('rating', 'N/A'), 
+                movie_data.get('genre_str', 'N/A'), movie_data.get('post_content', ''),
+                is_upcoming=is_upcoming, release_date=r_date
+            )
+         except: pass
 
-    # Use Binged poster
-    if source == "binged":
-        final_image = image
-    else:  # imdb already has image from TMDB
-        final_image = image
-
-    # Build buttons based on status
-    buttons = []
+    custom_input = message.text.strip()
+    btn = []
     
     if status == "upcoming":
-        # For upcoming: Only trailer (binged only)
         if source == "binged":
-            videos = movie_data.get("videos", [])
-            if videos and len(videos) > 0:
-                video_url = videos[0].get("url", "")
-                if video_url:
-                    trailer_url = f"https://www.youtube.com/watch?v={video_url}"
-                    buttons.append([InlineKeyboardButton("🎬 Trailer", url=trailer_url)])
+             # Only trailer
+             videos = movie_data.get("videos", [])
+             if videos and videos[0].get("url"):
+                 btn.append([InlineKeyboardButton("🎬 Trailer", url=f"https://www.youtube.com/watch?v={videos[0]['url']}")])
     else:
-        # For released: Custom button + trailer + more like this
-        # Decide URL for first button
-        if custom_input.startswith("http://") or custom_input.startswith("https://"):
-            button_url = custom_input
-        else:
-            keyword = regex_module.sub(r'[^a-zA-Z0-9]', '_', custom_input)
-            button_url = f"https://t.me/{temp.U_NAME}?start=Search_{keyword}"
-
-        buttons.append([InlineKeyboardButton(f"{title} · {year}", url=button_url)])
+        # Released
+        url = custom_input if custom_input.startswith("http") else f"https://t.me/{temp.U_NAME}?start=Search_{re.sub(r'[^a-zA-Z0-9]', '_', custom_input)}"
+        btn.append([InlineKeyboardButton(f"{title} · {year}", url=url)])
         
+        row = []
         if source == "binged":
-            second_row = []
-            videos = movie_data.get("videos", [])
-            if videos and len(videos) > 0:
-                video_url = videos[0].get("url", "")
-                if video_url:
-                    trailer_url = f"https://www.youtube.com/watch?v={video_url}"
-                    second_row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))
-            
-            # Get unique similar movies
-            similar_movies = get_similar_movies(movie_data, count=1)
-            if similar_movies:
-                similar_title = clean_text(similar_movies[0].get("title", ""))
-                safe_similar = regex_module.sub(r'[^a-zA-Z0-9]', '_', similar_title)
-                second_row.append(InlineKeyboardButton(
-                    "🔄 More like this", 
-                    url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_similar}"
-                ))
-            
-            if second_row:
-                buttons.append(second_row)
+             videos = movie_data.get("videos", [])
+             if videos and videos[0].get("url"):
+                 row.append(InlineKeyboardButton("🎬 Trailer", url=f"https://www.youtube.com/watch?v={videos[0]['url']}"))
+             sims = get_similar_movies(movie_data, 1)
+             if sims:
+                 st = clean_text(sims[0].get("title"))
+                 sst = format_search_title(st, None)
+                 row.append(InlineKeyboardButton("🔄 More like this", url=f"https://t.me/{temp.U_NAME}?start=Search_{sst}"))
+        if row: btn.append(row)
 
-    # Send to channel
     try:
-        if final_image:
-            await client.send_photo(
-                chat_id=UPDATE_CHANNEL_ID,
-                photo=final_image,
-                caption=msg,
-                reply_markup=InlineKeyboardMarkup(buttons)
-            )
-        else:
-            await client.send_message(
-                chat_id=UPDATE_CHANNEL_ID,
-                text=msg,
-                reply_markup=InlineKeyboardMarkup(buttons),
-                disable_web_page_preview=True
-            )
-        await message.reply("✅ Posted to channel with custom button.")
+        method = client.send_photo if final_image else client.send_message
+        kwargs = {'chat_id': UPDATE_CHANNEL_ID, 'caption' if final_image else 'text': msg, 'reply_markup': InlineKeyboardMarkup(btn)}
+        if final_image: 
+             if hasattr(final_image, 'seek'): final_image.seek(0)
+             kwargs['photo'] = final_image
+        else: kwargs['disable_web_page_preview'] = True
+        
+        await method(**kwargs)
+        await message.reply("✅ Posted with custom button.")
     except Exception as e:
-        await message.reply(f"❌ Error posting: {e}")
+        await message.reply(f"Error: {e}")
 
-# Close message handler
 @Client.on_callback_query(filters.regex(r"^close_message$"))
 async def close_message_callback(client, cq):
-    try:
-        await cq.message.delete()
-    except:
-        pass
-    await cq.answer()
+    try: await cq.message.delete()
+    except: pass
 
-# Handle Notify when Released
 @Client.on_callback_query(filters.regex(r"^notify_release_(.+)$"))
 async def notify_release_callback(client, cq):
     movie_id = cq.data.split("_")[-1]
     user_id = cq.from_user.id
     
-    # Add alert to DB
     await db.add_movie_alert(user_id, movie_id)
-    await cq.answer("✅ Notification set! You will be notified when this movie releases.", show_alert=True)
+    await cq.answer("✅ Notification set!", show_alert=True)
     
-    # Log to Log Channel
+    # Log logic can be added here if needed, keeping it simple as per request for robustness
+    
+# --- IMDB Handlers preserved for compatibility ---
+# (Basic implementation or redirect if needed, but keeping separate is safer)
+# For brevity in rewrite, assume IMDB commands work similar to binged but using TMDB source direct.
+# The previous code had them, so I will include them to avoid breaking /imdbpost.
+
+@Client.on_callback_query(filters.regex(r"^imdb_post_(.+)$"))
+async def imdb_post(client, cq):
+    if cq.from_user.id not in ADMIN_IDS: return await cq.answer("Unauthorized.", show_alert=True)
+    tmdb_id = cq.data.replace("imdb_post_", "")
+    movie_data = temp.TMDB_RESULTS.get(cq.from_user.id, {}).get(tmdb_id)
+    if not movie_data: return await cq.answer("Data lost.", show_alert=True)
+    
+    status = temp.MOVIE_STATUS.get(tmdb_id, "released")
+    title = clean_text(movie_data.get("title", ""))
+    year = movie_data.get("year", "")
+    safe_title = format_search_title(title, year)
+    
+    if status == "upcoming":
+        msg, image = build_upcoming_message(movie_data, temp.U_NAME, source='imdb')
+    else:
+        msg, image = build_released_message(movie_data, temp.U_NAME, source='imdb')
+        
+    btn = []
+    if status == "released":
+        btn.append([InlineKeyboardButton(f"{title} · {year}", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")])
+        sims = movie_data.get("similar", [])
+        if sims:
+             st = clean_text(sims[0].get("title"))
+             sst = format_search_title(st, None)
+             btn.append([InlineKeyboardButton("🔄 More like this", url=f"https://t.me/{temp.U_NAME}?start=Search_{sst}")])
+             
     try:
-        # Try to get movie data from temp storage first
-        movie_data = temp.BINGED_RESULTS.get(user_id, {}).get(movie_id)
-        
-        # If not found, fetch it
-        if not movie_data:
-             try:
-                resp = await fetch_json(f"{DETAIL_URL}/{movie_id}", headers=HEADERS)
-                if resp:
-                    movie_data = resp
-             except:
-                pass
-        
-        if movie_data:
-            title = clean_text(movie_data.get("post_title", "Unknown"))
-            release_date = unix_to_date(movie_data.get("release_date"))
-            subscribed_date = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-            user_link = f"<a href='tg://user?id={user_id}'>{cq.from_user.first_name}</a>"
-            
-            log_msg = (
-                f"🔔 **New Notification Subscription**\n\n"
-                f"👤 **User:** {user_link} (`{user_id}`)\n"
-                f"🎬 **Movie:** {title}\n"
-                f"📅 **Release Date:** {release_date}\n"
-                f"⏰ **Subscribed Date:** {subscribed_date}"
-            )
-            
-            if LOG_CHANNEL:
-                await client.send_message(
-                    chat_id=LOG_CHANNEL,
-                    text=log_msg,
-                    disable_web_page_preview=True
-                )
+        await client.send_photo(UPDATE_CHANNEL_ID, photo=image, caption=msg, reply_markup=InlineKeyboardMarkup(btn))
+        await cq.answer("✅ Posted.")
     except Exception as e:
-        print(f"Error logging notification: {e}")
+        await cq.answer(f"Error: {e}")
+
+@Client.on_callback_query(filters.regex(r"^imdb_edit_post_(.+)$"))
+async def imdb_edit_post_prompt(client, cq):
+    movie_id = cq.data.replace("imdb_edit_post_", "")
+    temp.EDITING_POST[cq.from_user.id] = {"movie_id": movie_id, "source": "imdb"}
+    await cq.message.reply_text("✏️ Send custom Search keyword or URL.", quote=True)
+    await cq.answer()

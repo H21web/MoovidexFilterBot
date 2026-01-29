@@ -237,13 +237,9 @@ async def upcoming_detail(client, cq):
     
     msg = f"🔜 **{title}** · {year} · `{type_str}`\n\n"
     msg += f"**>🉑 {lang_tag}\n"
-    msg += f">🎭 {genre_str} · 📺 {provider_str}\n"
-    msg += f">®️ {cert_str} · ⭐ {rating}\n"
+    msg += f">📺 {provider_str}\n"
     msg += f">📅 {r_date}\n"
-    msg += f">👥 {cast_str}\n"
-    msg += f">\n"
-    msg += f">__Plot:__\n"
-    msg += f">{plot}**\n"
+
     msg += f" **@MooviDex** "
     
     backdrop_url = tmdb_backdrop if tmdb_backdrop else ottplay_poster
