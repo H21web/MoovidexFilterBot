@@ -41,7 +41,13 @@ async def maintenance_callback(client, query: CallbackQuery):
         await query.message.reply("📝 Send me the maintenance reason (in one message).")
 
 
-@Client.on_message(filters.user(ADMINS) & filters.text & filters.private)
+# Custom filter to check if waiting for reason
+async def check_waiting_reason(_, __, message):
+    return AWAITING_REASON.get(message.from_user.id, False)
+
+waiting_reason_filter = filters.create(check_waiting_reason)
+
+@Client.on_message(filters.user(ADMINS) & filters.text & filters.private & waiting_reason_filter)
 async def handle_reason(client, message: Message):
     user_id = message.from_user.id
 

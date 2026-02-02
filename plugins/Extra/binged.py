@@ -679,7 +679,16 @@ async def binged_edit_post_prompt(client, cq):
     await cq.message.reply_text("✏️ Send custom Search keyword or URL.", quote=True)
     await cq.answer()
 
-@Client.on_message(filters.private & filters.text & filters.user(ADMIN_IDS))
+# Custom Filter to check if user is editing
+async def is_editing_filter(_, __, message):
+    try:
+        return message.from_user.id in temp.EDITING_POST
+    except:
+        return False
+
+editing_filter = filters.create(is_editing_filter)
+
+@Client.on_message(filters.private & filters.text & filters.user(ADMIN_IDS) & editing_filter)
 async def receive_custom_search(client, message):
     user_id = message.from_user.id
     if user_id not in temp.EDITING_POST: return
