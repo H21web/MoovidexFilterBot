@@ -69,6 +69,7 @@ class Database:
         self.posted = self.db.posted_movies
         self.upcoming = self.db.upcoming_movies
         self.alerts = self.db.movie_alerts
+        self.new_releases = self.db.new_updates
 
 
     def new_user(self, id, name):
@@ -388,5 +389,35 @@ class Database:
         """Get all active alerts"""
         cursor = self.alerts.find({})
         return await cursor.to_list(length=1000)
+
+    # --- New Release Logic ---
+    async def add_new_release(self, movie_data):
+        """Store a new release (name, year, etc)"""
+        # Ensure we have a unique ID, usually from API
+        m_id = str(movie_data.get("_id") or movie_data.get("id"))
+        movie_data["stored_at"] = datetime.datetime.now()
+        await self.new_releases.update_one(
+            {'id': m_id},
+            {'$set': movie_data},
+            upsert=True
+        )
+
+    async def get_all_new_releases(self):
+        """Get all currently tracked releases"""
+        cursor = self.new_releases.find({})
+        return await cursor.to_list(length=1000)
+
+    async def delete_old_releases(self, limit=100):
+        """Keep only the latest 'limit' releases (FIFO)"""
+        # Logic: Sort by stored_at descending, skip 'limit', and delete the rest.
+        count = await self.new_releases.count_documents({})
+        if count > limit:
+            # Find the date of the Nth item
+            cursor = self.new_releases.find().sort("stored_at", -1).skip(limit).limit(1)
+            docs = await cursor.to_list(length=1)
+            if docs:
+                cutoff_date = docs[0]['stored_at']
+                # Delete anything older or equal to that date
+                await self.new_releases.delete_many({'stored_at': {'$lte': cutoff_date}})
 
 db = Database(USER_DB_URI, DATABASE_NAME)
