@@ -14,8 +14,9 @@ from TechVJ.bot import TechVJBot
 from plugins.Extra.image_gen import generate_status_image
 from database.ia_filterdb import get_search_results
 
-# Configuration
+# --- CONFIGURATION & GLOBAL STATE ---
 UPDATE_CHANNEL_ID = -1001680629032  # Update Channel ID
+PROCESSING_MOVIES = set()           # Cache to prevent race conditions
 
 # --- API FETCHERS ---
 
@@ -99,13 +100,27 @@ async def process_and_post_movie(movie, file_name_found=None):
     """
     try:
         movie_id = str(movie.get("_id") or movie.get("id"))
-        title = clean_text(movie.get("name", ""))
-        year = movie.get("release_year")
         
-        # Check if already posted
+        # 0. Check Processing Lock (Thread-Safeish for Asyncio tasks)
+        if movie_id in PROCESSING_MOVIES:
+            return False
+
+        # 1. Check DB First
         if await db.is_movie_posted(movie_id):
             return False
 
+        # 2. Acquire Lock
+        PROCESSING_MOVIES.add(movie_id)
+        
+        # 3. Double Check DB (in case of race condition during await above)
+        is_posted = await db.is_movie_posted(movie_id)
+        if is_posted:
+             PROCESSING_MOVIES.remove(movie_id)
+             return False
+
+        title = clean_text(movie.get("name", ""))
+        year = movie.get("release_year")
+        
         print(f"✅ Preparing Post for: {title} ({year})")
         
         # --- Gather Details ---
@@ -240,10 +255,20 @@ async def process_and_post_movie(movie, file_name_found=None):
             
         # Mark Posted
         await db.add_posted_movie(movie_id)
+        
+        # Remove from Processing Lock after DB update is secure
+        if movie_id in PROCESSING_MOVIES:
+             PROCESSING_MOVIES.remove(movie_id)
+             
         return True
 
     except Exception as e:
         print(f"Post Error: {e}")
+        # Release lock on error to allow retry later
+        movie_id = str(movie.get("_id") or movie.get("id"))
+        if movie_id in PROCESSING_MOVIES:
+             PROCESSING_MOVIES.remove(movie_id)
+             
         traceback.print_exc()
         return False
 
