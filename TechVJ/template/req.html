@@ -290,12 +290,12 @@
         });
     }
 
-    // Initialize OPlayer (Fixed for MKV/MP4)
+    // Initialize OPlayer with video and poster
     function initializePlayer(posterUrl) {
         OPlayer.make('#oplayer', {
             source: {
-                src: downloadlink,
-                poster: posterUrl
+                src: downloadlink,  // Dynamic download link
+                poster: posterUrl   // Dynamic poster URL
             }
         })
         .use([
@@ -303,16 +303,38 @@
                 fullscreen: true,
                 coverButton: true,
                 miniProgressBar: true,
-                autoFocus: false, // Better for mobile scrolling
+                autoFocus: true,
                 forceLandscapeOnFullscreen: true,
+                screenshot: false,
                 pictureInPicture: true,
                 showControls: 'always',
                 keyboard: { focused: true, global: false },
-                settings: ['loop', 'speed'], // Simplified settings
-                theme: { primaryColor: '#6A00BE' }
+                settings: ['loop'],
+                theme: {
+                    primaryColor: '#6A00BE',
+                    watermark: {
+                        src: 'https://h21web.github.io/cdn/assets/moovidex-logo.png',
+                        style: {
+                            position: 'absolute',
+                            top: '0px',
+                            right: '8px',
+                            width: '40px',
+                            height: 'auto'
+                        },
+                        attrs: {
+                            class: 'watermark'
+                        }
+                    }
+                },
+                speeds: ['2.0', '1.75', '1.25', '1.0', '0.75', '0.5'],
+                slideToSeek: 'long-touch',
+                controlBar: false,
+                topSetting: false,
             }),
-            // Only load HLS if actually needed (usually not for direct file downloads)
-            // OHls({ forceHLS: false }) 
+            OHls({
+                forceHLS: true,
+                library: 'https://cdn.jsdelivr.net/npm/hls.js@0.14.17/dist/hls.min.js'
+            })
         ])
         .create();
     }
