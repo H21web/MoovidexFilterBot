@@ -223,8 +223,8 @@ async def process_and_post_movie(movie, file_name_found=None):
 
         # Buttons
         buttons = []
-        if media_type != "tv":
-            buttons.append([InlineKeyboardButton(f"🔍 Search: {title}", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")])
+        # Add search button for all content types (movies and TV shows)
+        buttons.append([InlineKeyboardButton(f"🔍 Search: {title}", url=f"https://t.me/{temp.U_NAME}?start=Search_{safe_title}")])
             
         row = []
         if trailer_url: row.append(InlineKeyboardButton("🎬 Trailer", url=trailer_url))

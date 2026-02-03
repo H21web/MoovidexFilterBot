@@ -213,7 +213,15 @@
 <!-- External Player and Video Player Scripts -->
 <!-- Responsive & Player Styles -->
 <style>
-    .oplayer-con { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; }
+    .oplayer-con { 
+        width: 100%; 
+        aspect-ratio: 16/9; 
+        background: #000; 
+        border-radius: 8px; 
+        overflow: hidden; 
+        display: block !important;
+        min-height: 200px;
+    }
     .nft-details { display: flex; flex-direction: column; gap: 15px; }
     @media (min-width: 768px) {
         .nft-details { flex-direction: row; }
@@ -231,34 +239,59 @@
     const tmdbKey = "{{ tmdb_api_key }}";
     const botUrl = "{{ bot_url }}";
 
-    // Extract URL details
-    const videoLink = window.location.href;
-    const url = new URL(videoLink);
-    const domainUrl = url.origin;
-    const pathnameParts = url.pathname.split('/');
-    const videoId = pathnameParts[2];
-    const FileName = pathnameParts[3]; 
-    const hashParam = url.searchParams.get("hash");
-    const encodedName = encodeURIComponent(FileName);
-    const downloadlink = `${domainUrl}/${videoId}/${encodedName}?hash=${hashParam}`;
+    // Safe URL details extraction with error handling
+    let downloadlink = "";
+    let FileName = "{{ file_name }}"; // Use template variable as primary source
+    
+    try {
+        const videoLink = window.location.href;
+        const url = new URL(videoLink);
+        const domainUrl = url.origin;
+        const pathnameParts = url.pathname.split('/');
+        
+        // Safer array access
+        const videoId = pathnameParts.length > 2 ? pathnameParts[2] : 'unknown';
+        const urlFileName = pathnameParts.length > 3 ? pathnameParts[3] : FileName;
+        
+        // Use URL filename if template variable is not rendered
+        if (!FileName || FileName.includes("{{")) {
+            FileName = decodeURIComponent(urlFileName);
+        }
 
-    // Clean Filename for Search
-    function cleanTitle(filename) {
-        // Remove file extension
-        let name = filename.replace(/\.[^/.]+$/, "");
-        // Replace dots, underscores with spaces
-        name = name.replace(/[._-]/g, " ");
-        // Remove common junk (quality, year brackets, etc) - simple heuristic
-        name = name.replace(/\[.*?\]|\(.*?\)/g, "").trim();
-        // Remove years (19xx, 20xx) to just get title (optional, but helps search)
-        // name = name.replace(/\b(19|20)\d{2}\b/g, ""); 
-        return name.trim();
+        const hashParam = url.searchParams.get("hash") || "";
+        const encodedName = encodeURIComponent(FileName);
+        downloadlink = `${domainUrl}/${videoId}/${encodedName}?hash=${hashParam}`;
+    } catch (e) {
+        console.error("URL Parsing Error:", e);
+        downloadlink = window.location.href; // Fallback to current URL
     }
 
-    // Robust Poster Fetch using TMDB
+    // Enhanced Clean Filename for Better TMDB Search
+    function cleanTitle(filename) {
+        if (!filename) return "";
+        let name = filename;
+        
+        // Remove file extension
+        name = name.replace(/\.[^/.]+$/, "");
+        
+        // Replace separators with spaces
+        name = name.replace(/[._-]/g, " ");
+        
+        // Remove common quality/scene tags and brackets
+        const junkPatterns = /\b(1080p|720p|480p|2160p|4k|5k|8k|HD|SD|FHD|UHD|WEB-DL|WEBRip|BluRay|BRRip|DVDRip|DVD-Rip|H264|H265|x264|x265|AAC|AC3|E-AC3|DTS|TrueHD|10bit|HEVC|HDR|REMUX|S\d+E\d+|S\d+|E\d+|EXTENDED|REMASTERED|UNRATED|DIRECTORS.CUT)\b/gi;
+        name = name.replace(junkPatterns, "");
+        
+        // Remove content in brackets and parentheses
+        name = name.replace(/\[.*?\]|\(.*?\)/g, "");
+        
+        // Clean up multiple spaces
+        return name.replace(/\s+/g, ' ').trim();
+    }
+
+    // Robust Poster Fetch using TMDB with Enhanced Error Handling
     function fetchPoster(rawFilename, callback) {
-        if (!tmdbKey || tmdbKey === "None") {
-            console.log("No TMDB Key, using default poster.");
+        if (!tmdbKey || tmdbKey === "None" || tmdbKey.includes("{{")) {
+            console.log("No TMDB Key available, using default poster.");
             callback(defaultImageUrl);
             return;
         }
@@ -266,77 +299,103 @@
         const cleanName = cleanTitle(decodeURIComponent(rawFilename));
         console.log("Searching TMDB for:", cleanName);
 
+        if (!cleanName) {
+            console.log("Empty search query, using default poster.");
+            callback(defaultImageUrl);
+            return;
+        }
+
         const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${tmdbKey}&query=${encodeURIComponent(cleanName)}`;
 
         $.ajax({
             url: searchUrl,
             method: "GET",
+            timeout: 5000, // 5 second timeout to prevent hanging
             success: function(data) {
                 if (data.results && data.results.length > 0) {
-                    const result = data.results[0]; // Take first match
-                    const posterPath = result.poster_path || result.backdrop_path;
+                    const result = data.results[0];
+                    // Prefer backdrop for video player poster (better aspect ratio)
+                    const posterPath = result.backdrop_path || result.poster_path;
                     if (posterPath) {
-                         callback(`https://image.tmdb.org/t/p/w780${posterPath}`);
+                        const posterUrl = `https://image.tmdb.org/t/p/w780${posterPath}`;
+                        console.log("TMDB Poster found:", posterUrl);
+                        callback(posterUrl);
                     } else {
-                         callback(defaultImageUrl);
+                        console.log("No poster path in TMDB result.");
+                        callback(defaultImageUrl);
                     }
                 } else {
+                    console.log("No TMDB results found for query.");
                     callback(defaultImageUrl);
                 }
             },
-            error: function() {
+            error: function(xhr, status, error) {
+                console.error("TMDB API Error:", status, error);
                 callback(defaultImageUrl);
             }
         });
     }
 
-    // Initialize OPlayer with video and poster
+    // Initialize OPlayer with video and poster - Enhanced with Error Handling
     function initializePlayer(posterUrl) {
-        OPlayer.make('#oplayer', {
-            source: {
-                src: downloadlink,  // Dynamic download link
-                poster: posterUrl   // Dynamic poster URL
-            }
-        })
-        .use([
-            OUI({
-                fullscreen: true,
-                coverButton: true,
-                miniProgressBar: true,
-                autoFocus: true,
-                forceLandscapeOnFullscreen: true,
-                screenshot: false,
-                pictureInPicture: true,
-                showControls: 'always',
-                keyboard: { focused: true, global: false },
-                settings: ['loop'],
-                theme: {
-                    primaryColor: '#6A00BE',
-                    watermark: {
-                        src: 'https://h21web.github.io/cdn/assets/moovidex-logo.png',
-                        style: {
-                            position: 'absolute',
-                            top: '0px',
-                            right: '8px',
-                            width: '40px',
-                            height: 'auto'
-                        },
-                        attrs: {
-                            class: 'watermark'
-                        }
-                    }
-                },
-                speeds: ['2.0', '1.75', '1.25', '1.0', '0.75', '0.5'],
-                slideToSeek: 'long-touch',
-                controlBar: false,
-                topSetting: false,
-            }),
-            OHls({
-                forceHLS: true,
-                library: 'https://cdn.jsdelivr.net/npm/hls.js@0.14.17/dist/hls.min.js'
+        if (typeof OPlayer === 'undefined') {
+            console.error("OPlayer library not loaded!");
+            return;
+        }
+        
+        console.log("Initializing player with poster:", posterUrl);
+        console.log("Video source:", downloadlink);
+        
+        try {
+            OPlayer.make('#oplayer', {
+                source: {
+                    src: downloadlink,
+                    poster: posterUrl
+                }
             })
-        ])
-        .create();
+            .use([
+                OUI({
+                    fullscreen: true,
+                    coverButton: true,
+                    miniProgressBar: true,
+                    autoFocus: false, // Prevent unwanted scrolling
+                    forceLandscapeOnFullscreen: true,
+                    screenshot: false,
+                    pictureInPicture: true,
+                    showControls: 'always',
+                    keyboard: { focused: true, global: false },
+                    settings: ['loop'],
+                    theme: {
+                        primaryColor: '#6A00BE',
+                        watermark: {
+                            src: 'https://h21web.github.io/cdn/assets/moovidex-logo.png',
+                            style: {
+                                position: 'absolute',
+                                top: '0px',
+                                right: '8px',
+                                width: '40px',
+                                height: 'auto'
+                            },
+                            attrs: {
+                                class: 'watermark'
+                            }
+                        }
+                    },
+                    speeds: ['2.0', '1.75', '1.25', '1.0', '0.75', '0.5'],
+                    slideToSeek: 'long-touch',
+                    controlBar: false,
+                    topSetting: false,
+                }),
+                OHls({
+                    forceHLS: true,
+                    library: 'https://cdn.jsdelivr.net/npm/hls.js@0.14.17/dist/hls.min.js'
+                })
+            ])
+            .create();
+            console.log("Player initialized successfully!");
+        } catch (e) {
+            console.error("Player Initialization Error:", e);
+        }
     }
 
     // Trigger Flow
@@ -352,8 +411,8 @@
     }
 
     function vlc_player() {
-        // VLC Android Intent
-        const intent = `intent:${downloadlink}#Intent;package=org.videolan.vlc;type=video/*;scheme=https;end`;
+        // VLC Android Intent - Fixed (removed problematic scheme parameter)
+        const intent = `intent:${downloadlink}#Intent;package=org.videolan.vlc;type=video/*;end`;
         window.location.href = intent;
     }
 
@@ -384,7 +443,7 @@
     }
       
     function openTG() {
-        if(botUrl && botUrl !== "None") {
+        if(botUrl && botUrl !== "None" && !botUrl.includes("{{")) {
              const url = botUrl.startsWith("http") ? botUrl : "https://" + botUrl;
              window.open(url, '_blank');
         } else {

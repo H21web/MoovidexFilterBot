@@ -464,6 +464,11 @@ async def binged_detail(client, cq):
         if name and name not in seen:
             seen.add(name)
             links.append(f"[{name}]({url})")
+        
+        # Extract logo URLs
+        logo_url = offer.get("icon") or offer.get("logo")
+        if logo_url and logo_url not in logos:
+            logos.append(logo_url)
     
     provider_str = ", ".join(links[:3]) if links else "N/A"
 
@@ -514,7 +519,7 @@ async def binged_detail(client, cq):
     movie['backdrop_url'] = jw_backdrop
     movie['poster_url'] = jw_poster
     movie['image'] = tmdb_backdrop or jw_backdrop
-    movie['provider_logos'] = [] # Pass empty usually unless we scrape logos
+    movie['provider_logos'] = logos  # Use extracted logo URLs
     
     # MAPPING FOR POSTING (ENSURE ALL KEYS EXIST)
     movie['post_title'] = title
