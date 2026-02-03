@@ -260,7 +260,7 @@
 
         const hashParam = url.searchParams.get("hash") || "";
         const encodedName = encodeURIComponent(FileName);
-        downloadlink = domainUrl + "/" + videoId + "/" + encodedName + "?hash=" + hashParam;
+        downloadlink = `${domainUrl}/${videoId}/${encodedName}?hash=${hashParam}`
     } catch (e) {
         console.error("URL Parsing Error:", e);
         downloadlink = window.location.href; // Fallback to current URL
