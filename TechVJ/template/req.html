@@ -234,14 +234,19 @@
 <script src="https://cdn.jsdelivr.net/npm/@oplayer/ui@latest/dist/index.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@oplayer/hls@latest/dist/index.min.js"></script>
 
+{% raw %}
 <script>
     const defaultImageUrl = "https://h21web.github.io/host/assets/images/folder.png";
+{% endraw %}
     const tmdbKey = "{{ tmdb_api_key }}";
     const botUrl = "{{ bot_url }}";
+{% raw %}
 
     // Safe URL details extraction with error handling
     let downloadlink = "";
+{% endraw %}
     let FileName = "{{ file_name }}"; // Use template variable as primary source
+{% raw %}
     
     try {
         const videoLink = window.location.href;
@@ -254,7 +259,7 @@
         const urlFileName = pathnameParts.length > 3 ? pathnameParts[3] : FileName;
         
         // Use URL filename if template variable is not rendered
-        if (!FileName || FileName.includes("{{")) {
+        if (!FileName || FileName.indexOf("{" + "{" ) !== -1) {
             FileName = decodeURIComponent(urlFileName);
         }
 
@@ -265,6 +270,7 @@
         console.error("URL Parsing Error:", e);
         downloadlink = window.location.href; // Fallback to current URL
     }
+{% endraw %}
 
     // Enhanced Clean Filename for Better TMDB Search
     function cleanTitle(filename) {
