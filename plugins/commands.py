@@ -3,12 +3,35 @@
 # Ask Doubt on telegram @KingVJ01
 
 import os, string, logging, random, asyncio, time, datetime, re, sys, json, base64
+
+_autodelete_tasks = set()
+
+async def _autodelete_after(delay, messages=(), notice=None, notice_text=None, notice_markup=None):
+    await asyncio.sleep(delay)
+    for m in messages:
+        try:
+            await m.delete()
+        except Exception:
+            pass
+    if notice is not None and notice_text is not None:
+        try:
+            await notice.edit_text(notice_text, reply_markup=notice_markup)
+        except Exception:
+            pass
+
+def schedule_autodelete(delay, messages=(), notice=None, notice_text=None, notice_markup=None):
+    # Run the delayed deletion in the background instead of blocking the
+    # handler with a long sleep.
+    task = asyncio.create_task(_autodelete_after(delay, tuple(messages), notice, notice_text, notice_markup))
+    _autodelete_tasks.add(task)
+    task.add_done_callback(_autodelete_tasks.discard)
+    return task
 from Script import script
 from pyrogram import Client, filters, enums
 from pyrogram.errors import ChatAdminRequired, FloodWait
 from pyrogram.types import *
 from plugins.pm_filter import doo
-from database.ia_filterdb import col, sec_col, get_file_details, unpack_new_file_id, get_bad_files
+from database.ia_filterdb import col, sec_col, get_file_details, unpack_new_file_id, get_bad_files, count_bad_files
 from database.users_chats_db import db, delete_all_referal_users, get_referal_users_count, get_referal_all_users, referal_add_user
 from database.join_reqs import JoinReqs
 from database.requests_db import requests_db
@@ -176,7 +199,7 @@ async def start(client, message):
             await client.send_message(chat_id = user_id, text = "<b>{} start the bot with your referral link\n\nTotal Referals - {}</b>".format(message.from_user.mention, num_referrals))
             if num_referrals == REFERAL_COUNT:
                 time = REFERAL_PREMEIUM_TIME       
-                seconds = await get_seconds(time)
+                seconds = get_seconds(time)
                 if seconds > 0:
                     expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
                     user_data = {"id": user_id, "expiry_time": expiry_time} 
@@ -283,10 +306,8 @@ async def start(client, message):
             await asyncio.sleep(1) 
         await sts.delete()
         k = await client.send_message(chat_id = message.from_user.id, text=f"<blockquote><b><u>❗️❗️❗️IMPORTANT❗️️❗️❗️</u></b>\n\nᴛʜɪs ᴍᴇssᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ɪɴ <b><u>10 mins</u> 🫥 <i></b>(ᴅᴜᴇ ᴛᴏ ᴄᴏᴘʏʀɪɢʜᴛ ɪssᴜᴇs)</i>.\n\n<b><i>ᴘʟᴇᴀsᴇ ғᴏʀᴡᴀʀᴅ ᴛʜɪs ᴍᴇssᴀɢᴇ ᴛᴏ ʏᴏᴜʀ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs ᴏʀ ᴀɴʏ ᴘʀɪᴠᴀᴛᴇ ᴄʜᴀᴛ.</i></b></blockquote>")
-        await asyncio.sleep(600)
-        for x in filesarr:
-            await x.delete()
-        await k.edit_text("<b>🗑 Your file is successfully deleted</b>")  
+        schedule_autodelete(600, messages=filesarr, notice=k,
+                            notice_text="<b>🗑 Your file is successfully deleted</b>")
         return
     
     elif data.split("_", 1)[0] == "Search":
@@ -361,10 +382,8 @@ async def start(client, message):
             await asyncio.sleep(1)
         await sts.delete()
         k = await client.send_message(chat_id = message.from_user.id, text=f"<blockquote><b><u>❗️❗️❗️IMPORTANT❗️️❗️❗️</u></b>\n\nᴛʜɪs ᴍᴇssᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ɪɴ <b><u>10 mins</u> 🫥 <i></b>(ᴅᴜᴇ ᴛᴏ ᴄᴏᴘʏʀɪɢʜᴛ ɪssᴜᴇs)</i>.\n\n<b><i>ᴘʟᴇᴀsᴇ ғᴏʀᴡᴀʀᴅ ᴛʜɪs ᴍᴇssᴀɢᴇ ᴛᴏ ʏᴏᴜʀ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs ᴏʀ ᴀɴʏ ᴘʀɪᴠᴀᴛᴇ ᴄʜᴀᴛ.</i></b></blockquote>")
-        await asyncio.sleep(600)
-        for x in filesarr:
-            await x.delete()
-        await k.edit_text("<b>🗑 Your file is successfully deleted</b>")
+        schedule_autodelete(600, messages=filesarr, notice=k,
+                            notice_text="<b>🗑 Your file is successfully deleted</b>")
         return
 
     elif data.split("-", 1)[0] == "verify":
@@ -397,8 +416,8 @@ async def start(client, message):
         if PREMIUM_AND_REFERAL_MODE == True:
             text += "<b>ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴅɪʀᴇᴄᴛ ғɪʟᴇꜱ ᴡɪᴛʜᴏᴜᴛ ᴀɴʏ ᴏᴘᴇɴɪɴɢ ʟɪɴᴋ ᴀɴᴅ ᴡᴀᴛᴄʜɪɴɢ ᴀᴅs ᴛʜᴇɴ ʙᴜʏ ʙᴏᴛ ꜱᴜʙꜱᴄʀɪᴘᴛɪᴏɴ ☺️\n\n💶 ꜱᴇɴᴅ /plan ᴛᴏ ʙᴜʏ ꜱᴜʙꜱᴄʀɪᴘᴛɪᴏɴ</b>"
         k = await client.send_message(chat_id=message.from_user.id, text=text, reply_markup=InlineKeyboardMarkup(btn))
-        await asyncio.sleep(300)
-        await k.edit("<b>🗑 Your file is successfully deleted</b>")
+        schedule_autodelete(300, notice=k,
+                            notice_text="<b>🗑 Your file is successfully deleted</b>")
         return
         
     
@@ -417,8 +436,8 @@ async def start(client, message):
         if PREMIUM_AND_REFERAL_MODE == True:
             text += "<b>ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴅɪʀᴇᴄᴛ ғɪʟᴇꜱ ᴡɪᴛʜᴏᴜᴛ ᴀɴʏ ᴏᴘᴇɴɪɴɢ ʟɪɴᴋ ᴀɴᴅ ᴡᴀᴛᴄʜɪɴɢ ᴀᴅs ᴛʜᴇɴ ʙᴜʏ ʙᴏᴛ ꜱᴜʙꜱᴄʀɪᴘᴛɪᴏɴ ☺️\n\n💶 ꜱᴇɴᴅ /plan ᴛᴏ ʙᴜʏ ꜱᴜʙꜱᴄʀɪᴘᴛɪᴏɴ</b>"
         k = await client.send_message(chat_id=user, text=text, reply_markup=InlineKeyboardMarkup(btn))
-        await asyncio.sleep(1200)
-        await k.edit("<b>🗑 Your file is successfully deleted</b>")
+        schedule_autodelete(1200, notice=k,
+                            notice_text="<b>🗑 Your file is successfully deleted</b>")
         return
         
     elif data.startswith("all"):
@@ -469,10 +488,8 @@ async def start(client, message):
             )
             filesarr.append(msg)
         k = await client.send_message(chat_id = message.from_user.id, text=f"<blockquote><b><u>❗️❗️❗️IMPORTANT❗️️❗️❗️</u></b>\n\nᴛʜɪs ᴍᴇssᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ɪɴ <b><u>10 mins</u> 🫥 <i></b>(ᴅᴜᴇ ᴛᴏ ᴄᴏᴘʏʀɪɢʜᴛ ɪssᴜᴇs)</i>.\n\n<b><i>ᴘʟᴇᴀsᴇ ғᴏʀᴡᴀʀᴅ ᴛʜɪs ᴍᴇssᴀɢᴇ ᴛᴏ ʏᴏᴜʀ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs ᴏʀ ᴀɴʏ ᴘʀɪᴠᴀᴛᴇ ᴄʜᴀᴛ.</i></b></blockquote>")
-        await asyncio.sleep(600)
-        for x in filesarr:
-            await x.delete()
-        await k.edit_text("<b>🗑 Your file is successfully deleted</b>")
+        schedule_autodelete(600, messages=filesarr, notice=k,
+                            notice_text="<b>🗑 Your file is successfully deleted</b>")
         return    
         
     elif data.startswith("files"):
@@ -494,8 +511,8 @@ async def start(client, message):
             if PREMIUM_AND_REFERAL_MODE == True:
                 text += "<b>ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴅɪʀᴇᴄᴛ ғɪʟᴇꜱ ᴡɪᴛʜᴏᴜᴛ ᴀɴʏ ᴏᴘᴇɴɪɴɢ ʟɪɴᴋ ᴀɴᴅ ᴡᴀᴛᴄʜɪɴɢ ᴀᴅs ᴛʜᴇɴ ʙᴜʏ ʙᴏᴛ ꜱᴜʙꜱᴄʀɪᴘᴛɪᴏɴ ☺️\n\n💶 ꜱᴇɴᴅ /plan ᴛᴏ ʙᴜʏ ꜱᴜʙꜱᴄʀɪᴘᴛɪᴏɴ</b>"
             k = await client.send_message(chat_id=message.from_user.id, text=text, reply_markup=InlineKeyboardMarkup(btn))
-            await asyncio.sleep(1200)
-            await k.edit("<b>🗑 Your file is successfully deleted</b>")
+            schedule_autodelete(1200, notice=k,
+                                notice_text="<b>🗑 Your file is successfully deleted</b>")
             return
     user = message.from_user.id
     files_ = await get_file_details(file_id)           
@@ -542,9 +559,9 @@ async def start(client, message):
             await msg.edit_caption(caption=f_caption)
             btn = [[InlineKeyboardButton("♻️ Get File Again ♻️", callback_data=f'del#{file_id}')]]
             k = await msg.reply(text=f"<blockquote><b><u>❗️❗️❗️IMPORTANT❗️️❗️❗️</u></b>\n\nᴛʜɪs ᴍᴇssᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ɪɴ <b><u>10 mins</u> 🫥 <i></b>(ᴅᴜᴇ ᴛᴏ ᴄᴏᴘʏʀɪɢʜᴛ ɪssᴜᴇs)</i>.\n\n<b><i>ᴘʟᴇᴀsᴇ ғᴏʀᴡᴀʀᴅ ᴛʜɪs ᴍᴇssᴀɢᴇ ᴛᴏ ʏᴏᴜʀ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs ᴏʀ ᴀɴʏ ᴘʀɪᴠᴀᴛᴇ ᴄʜᴀᴛ.</i></b></blockquote>")
-            await asyncio.sleep(600)
-            await msg.delete()
-            await k.edit_text("<b>🗑 Your file is successfully deleted ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴀɢᴀɪɴ ᴛʜᴇɴ ᴄʟɪᴄᴋ ᴏɴ ʙᴇʟᴏᴡ ʙᴜᴛᴛᴏɴ</b>",reply_markup=InlineKeyboardMarkup(btn))
+            schedule_autodelete(600, messages=[msg], notice=k,
+                                notice_text="<b>🗑 Your file is successfully deleted ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴀɢᴀɪɴ ᴛʜᴇɴ ᴄʟɪᴄᴋ ᴏɴ ʙᴇʟᴏᴡ ʙᴜᴛᴛᴏɴ</b>",
+                                notice_markup=InlineKeyboardMarkup(btn))
             return
         except:
             pass
@@ -590,9 +607,9 @@ async def start(client, message):
     )
     btn = [[InlineKeyboardButton("♻️ Get File Again ♻️", callback_data=f'del#{file_id}')]]
     k = await msg.reply(text=f"<blockquote><b><u>❗️❗️❗️IMPORTANT❗️️❗️❗️</u></b>\n\nᴛʜɪs ᴍᴇssᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ɪɴ <b><u>10 mins</u> 🫥 <i></b>(ᴅᴜᴇ ᴛᴏ ᴄᴏᴘʏʀɪɢʜᴛ ɪssᴜᴇs)</i>.\n\n<b><i>ᴘʟᴇᴀsᴇ ғᴏʀᴡᴀʀᴅ ᴛʜɪs ᴍᴇssᴀɢᴇ ᴛᴏ ʏᴏᴜʀ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs ᴏʀ ᴀɴʏ ᴘʀɪᴠᴀᴛᴇ ᴄʜᴀᴛ.</i></b></blockquote>")
-    await asyncio.sleep(600)
-    await msg.delete()
-    await k.edit_text("<b>🗑 Your file is successfully deleted ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴀɢᴀɪɴ ᴛʜᴇɴ ᴄʟɪᴄᴋ ᴏɴ ʙᴇʟᴏᴡ ʙᴜᴛᴛᴏɴ</b>",reply_markup=InlineKeyboardMarkup(btn))
+    schedule_autodelete(600, messages=[msg], notice=k,
+                        notice_text="<b>🗑 Your file is successfully deleted ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴀɢᴀɪɴ ᴛʜᴇɴ ᴄʟɪᴄᴋ ᴏɴ ʙᴇʟᴏᴡ ʙᴜᴛᴛᴏɴ</b>",
+                        notice_markup=InlineKeyboardMarkup(btn))
     return   
 
 @Client.on_message(filters.command('channel') & filters.user(ADMINS))
@@ -694,13 +711,13 @@ async def delete(bot, message):
         await msg.edit('This is not supported file format')
         return
     
-    file_id, file_ref = unpack_new_file_id(media.file_id)
+    file_id = unpack_new_file_id(media.file_id)
 
-    result = col.delete_one({
+    result = await col.delete_one({
         'file_id': file_id,
     })
-    if not result.deleted_count:
-        result = sec_col.delete_one({
+    if not result.deleted_count and sec_col is not None:
+        result = await sec_col.delete_one({
             'file_id': file_id,
         })
     if result.deleted_count:
@@ -712,12 +729,12 @@ async def delete(bot, message):
             file_name = file_name.replace(char, '')
         file_name = ' '.join(filter(lambda x: not x.startswith('@'), file_name.split()))
     
-        result = col.delete_many({
+        result = await col.delete_many({
             'file_name': file_name,
             'file_size': media.file_size
         })
-        if not result.deleted_count:
-            result = sec_col.delete_many({
+        if not result.deleted_count and sec_col is not None:
+            result = await sec_col.delete_many({
                 'file_name': file_name,
                 'file_size': media.file_size
             })
@@ -726,12 +743,12 @@ async def delete(bot, message):
         else:
             # files indexed before https://github.com/EvamariaTG/EvaMaria/commit/f3d2a1bcb155faf44178e5d7a685a1b533e714bf#diff-86b613edf1748372103e94cacff3b578b36b698ef9c16817bb98fe9ef22fb669R39 
             # have original file name.
-            result = col.delete_many({
+            result = await col.delete_many({
                 'file_name': media.file_name,
                 'file_size': media.file_size
             })
-            if not result.deleted_count:
-                result = sec_col.delete_many({
+            if not result.deleted_count and sec_col is not None:
+                result = await sec_col.delete_many({
                     'file_name': media.file_name,
                     'file_size': media.file_size
                 })
@@ -758,8 +775,9 @@ async def delete_all_index(bot, message):
 
 @Client.on_callback_query(filters.regex(r'^autofilter_delete'))
 async def delete_all_index_confirm(bot, query):
-    col.drop()
-    sec_col.drop()
+    await col.drop()
+    if sec_col is not None:
+        await sec_col.drop()
     await query.answer('Piracy Is Crime')
     await query.message.edit('Succesfully Deleted All The Indexed Files.')
 
@@ -1103,7 +1121,7 @@ async def deletemultiplefiles(bot, message):
     except:
         return await message.reply_text(f"<b>Hey {message.from_user.mention}, Give me a keyword along with the command to delete files.</b>")
     k = await bot.send_message(chat_id=message.chat.id, text=f"<b>Fetching Files for your query {keyword} on DB... Please wait...</b>")
-    files, total = await get_bad_files(keyword)
+    total = await count_bad_files(keyword)
     await k.delete()
     #await k.edit_text(f"<b>Found {total} files for your query {keyword} !\n\nFile deletion process will start in 5 seconds !</b>")
     #await asyncio.sleep(5)
@@ -1362,7 +1380,7 @@ async def give_premium_cmd_handler(client, message):
     if len(message.command) == 3:
         user_id = int(message.command[1])  # Convert the user_id to integer
         time = message.command[2]        
-        seconds = await get_seconds(time)
+        seconds = get_seconds(time)
         if seconds > 0:
             expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
             user_data = {"id": user_id, "expiry_time": expiry_time} 
@@ -1389,7 +1407,7 @@ async def remove_premium_cmd_handler(client, message):
         user_id = int(message.command[1])  # Convert the user_id to integer
       #  time = message.command[2]
         time = "1s"
-        seconds = await get_seconds(time)
+        seconds = get_seconds(time)
         if seconds > 0:
             expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
             user_data = {"id": user_id, "expiry_time": expiry_time}  # Using "id" instead of "user_id"

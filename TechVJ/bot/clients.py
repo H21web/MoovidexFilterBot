@@ -4,6 +4,7 @@
 
 import asyncio
 import logging
+import info
 from info import *
 from pyrogram import Client
 from TechVJ.util.config_parser import TokenParser
@@ -39,9 +40,9 @@ async def initialize_clients():
             logging.error(f"Failed starting Client - {client_id} Error:", exc_info=True)
     
     clients = await asyncio.gather(*[start_client(i, token) for i, token in all_tokens.items()])
-    multi_clients.update(dict(clients))
+    multi_clients.update(dict(result for result in clients if result is not None))
     if len(multi_clients) != 1:
-        MULTI_CLIENT = True
+        info.MULTI_CLIENT = True
         print("Multi-Client Mode Enabled")
     else:
         print("No additional clients were initialized, using default client")

@@ -41,12 +41,12 @@ class RequestsDB:
     async def update_request_status(self, request_id, status):
         from bson.objectid import ObjectId
         try:
-             await self.col.update_one(
+            result = await self.col.update_one(
                 {"_id": ObjectId(request_id)},
                 {"$set": {"status": status}}
             )
-             return True
-        except:
+            return result.matched_count > 0
+        except Exception:
             return False
     
     async def get_request(self, request_id):

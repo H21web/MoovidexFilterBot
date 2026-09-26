@@ -22,7 +22,22 @@ if MULTIPLE_DATABASE:
     sec_db = sec_client[DATABASE_NAME]
     sec_col = sec_db[COLLECTION_NAME]
 else:
+    sec_db = None
     sec_col = None
+
+async def ensure_indexes():
+    """Create helper indexes if missing. Non-unique on purpose: deployed data
+    is not guaranteed duplicate-free, so a unique index could fail and block
+    startup. Safe to call repeatedly (create_index is idempotent)."""
+    targets = [("primary", col)]
+    if MULTIPLE_DATABASE and sec_col is not None:
+        targets.append(("secondary", sec_col))
+    for label, collection in targets:
+        try:
+            await collection.create_index("file_id", name="file_id_1")
+            logger.info(f"Ensured file_id index on {label} file collection")
+        except Exception as e:
+            logger.warning(f"Could not ensure index on {label} file collection: {e}")
 
 async def save_file(media):
     """Save file in the database."""
@@ -53,7 +68,7 @@ async def save_file(media):
     except DuplicateKeyError:
         return False, 0
     except Exception as e:
-        if MULTIPLE_DATABASE and sec_col:
+        if MULTIPLE_DATABASE and sec_col is not None:
             try:
                 await sec_col.insert_one(file)
                 try:
@@ -90,7 +105,7 @@ async def is_file_already_saved(file_id, file_name):
     if await col.find_one(found1) or await col.find_one(found):
         return True
     
-    if MULTIPLE_DATABASE and sec_col:
+    if MULTIPLE_DATABASE and sec_col is not None:
         if await sec_col.find_one(found1) or await sec_col.find_one(found):
             return True
             
@@ -120,70 +135,94 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
 
     projection = {'file_id': 1, 'file_name': 1, 'file_size': 1, 'caption': 1, '_id': 0}
 
-    files = []
-    cursor1 = col.find(filter_criteria, projection).sort('$natural', -1).skip(offset).limit(max_results)
-    async for file in cursor1:
-        files.append(file)
-        
-    if MULTIPLE_DATABASE and sec_col:
-        # If we haven't filled max_results, check secondary
-        if len(files) < max_results:
-             # Adjust limit based on what we already have
-             remaining_limit = max_results - len(files)
-             # Note: Offset handling across two DBs is tricky. 
-             # For simplicity/speed in this context, we just query secondary with same simple logic
-             # Proper pagination across 2 DBs requires counting or complex logic.
-             # Current logic: Append secondary results
-             cursor2 = sec_col.find(filter_criteria, projection).sort('$natural', -1).skip(offset).limit(remaining_limit)
-             async for file in cursor2:
-                 files.append(file)
-                 
-    # Optimized Count: Use estimated_document_count if no filter (fast), else count_documents
+    # Count first: correct cross-DB pagination needs the primary match count so
+    # the secondary query can skip the right number of documents.
     if not filter_criteria:
-        total_results = await col.estimated_document_count()
-        if MULTIPLE_DATABASE and sec_col:
-            total_results += await sec_col.estimated_document_count()
+        primary_total = await col.estimated_document_count()
     else:
-        total_results = await col.count_documents(filter_criteria)
-        if MULTIPLE_DATABASE and sec_col:
-            total_results += await sec_col.count_documents(filter_criteria)
+        primary_total = await col.count_documents(filter_criteria)
+
+    files = []
+    if not MULTIPLE_DATABASE or sec_col is None:
+        total_results = primary_total
+        cursor1 = col.find(filter_criteria, projection).sort('$natural', -1).skip(offset).limit(max_results)
+        async for file in cursor1:
+            files.append(file)
+    else:
+        if not filter_criteria:
+            secondary_total = await sec_col.estimated_document_count()
+        else:
+            secondary_total = await sec_col.count_documents(filter_criteria)
+        total_results = primary_total + secondary_total
+
+        if offset < primary_total:
+            # Page starts in the primary DB; fill the rest from secondary.
+            cursor1 = col.find(filter_criteria, projection).sort('$natural', -1).skip(offset).limit(max_results)
+            async for file in cursor1:
+                files.append(file)
+            remaining = max_results - len(files)
+            if remaining > 0:
+                cursor2 = sec_col.find(filter_criteria, projection).sort('$natural', -1).skip(0).limit(remaining)
+                async for file in cursor2:
+                    files.append(file)
+        else:
+            # Page lies entirely in the secondary DB.
+            cursor2 = sec_col.find(filter_criteria, projection).sort('$natural', -1).skip(offset - primary_total).limit(max_results)
+            async for file in cursor2:
+                files.append(file)
 
     next_offset = "" if (offset + max_results) >= total_results else (offset + max_results)
 
     return files, next_offset, total_results
 
-async def get_bad_files(query, file_type=None, use_filter=False):
+def bad_files_filter(query):
+    """Build the file_name/caption filter for admin mass-delete. The query is
+    regex-escaped: raw user input used to crash this with `re.error` (or match
+    far more than intended) when it contained regex metacharacters."""
     query = query.strip()
-    # Logic preserved but made async
     if not query:
         raw_pattern = '.'
     elif ' ' not in query:
-        raw_pattern = rf'(\b|[.+-_]){query}(\b|[.+-_])'
+        raw_pattern = rf'(\b|[.+-_]){re.escape(query)}(\b|[.+-_])'
     else:
-        raw_pattern = query.replace(' ', r'.*[s.+-_]')
-        
+        raw_pattern = r'.*[s.+-_]'.join(re.escape(word) for word in query.split())
+
     regex = {'$regex': raw_pattern, '$options': 'i'}
     filter_criteria = {'file_name': regex}
-    
+
     if USE_CAPTION_FILTER:
         filter_criteria = {'$or': [filter_criteria, {'caption': regex}]}
+    return filter_criteria
+
+
+async def get_bad_files(query, file_type=None, use_filter=False):
+    filter_criteria = bad_files_filter(query)
+    # Only the fields the delete flows need; full docs (with captions) used to
+    # be loaded for every match.
+    projection = {'file_id': 1, 'file_name': 1, '_id': 0}
 
     files = []
-    async for file in col.find(filter_criteria):
+    async for file in col.find(filter_criteria, projection):
         files.append(file)
-        
-    total_results = len(files)
-    
-    if MULTIPLE_DATABASE and sec_col:
-         async for file in sec_col.find(filter_criteria):
-             files.append(file)
-         total_results = len(files)
 
-    return files, total_results
+    if MULTIPLE_DATABASE and sec_col is not None:
+        async for file in sec_col.find(filter_criteria, projection):
+            files.append(file)
+
+    return files, len(files)
+
+
+async def count_bad_files(query):
+    """Match count for `get_bad_files` without loading any documents."""
+    filter_criteria = bad_files_filter(query)
+    total = await col.count_documents(filter_criteria)
+    if MULTIPLE_DATABASE and sec_col is not None:
+        total += await sec_col.count_documents(filter_criteria)
+    return total
 
 async def get_file_details(query):
     file = await col.find_one({'file_id': query})
-    if not file and MULTIPLE_DATABASE and sec_col:
+    if not file and MULTIPLE_DATABASE and sec_col is not None:
         file = await sec_col.find_one({'file_id': query})
     return file
 

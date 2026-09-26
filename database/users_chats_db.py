@@ -5,37 +5,38 @@
 import re
 from pymongo.errors import DuplicateKeyError
 import motor.motor_asyncio
-from pymongo import MongoClient
 from info import DATABASE_NAME, USER_DB_URI, OTHER_DB_URI, CUSTOM_FILE_CAPTION, IMDB, IMDB_TEMPLATE, MELCOW_NEW_USERS, BUTTON_MODE, SPELL_CHECK_REPLY, PROTECT_CONTENT, AUTO_DELETE, MAX_BTN, AUTO_FFILTER, SHORTLINK_API, SHORTLINK_URL, SHORTLINK_MODE, TUTORIAL, IS_TUTORIAL
 import time
 import datetime
 
-my_client = MongoClient(OTHER_DB_URI)
+# Motor (async) client: the old synchronous PyMongo client blocked the event
+# loop inside these `async def` helpers.
+my_client = motor.motor_asyncio.AsyncIOMotorClient(OTHER_DB_URI)
 mydb = my_client["referal_user"]
 
 async def referal_add_user(user_id, ref_user_id):
     user_db = mydb[str(user_id)]
     user = {'_id': ref_user_id}
     try:
-        user_db.insert_one(user)
+        await user_db.insert_one(user)
         return True
     except DuplicateKeyError:
         return False
-    
+
 
 async def get_referal_all_users(user_id):
     user_db = mydb[str(user_id)]
-    return user_db.find()
-    
+    return await user_db.find().to_list(length=None)
+
 async def get_referal_users_count(user_id):
     user_db = mydb[str(user_id)]
-    count = user_db.count_documents({})
+    count = await user_db.count_documents({})
     return count
-    
+
 
 async def delete_all_referal_users(user_id):
     user_db = mydb[str(user_id)]
-    user_db.delete_many({}) 
+    await user_db.delete_many({})
 
 default_setgs = {
     'button': BUTTON_MODE,
@@ -95,13 +96,14 @@ class Database:
                 is_disabled=False,
                 reason="",
             ),
-            settings=default_setgs
+            # copy: mutating one chat's settings must not affect the defaults
+            settings=dict(default_setgs)
         )
     
     async def add_user(self, id, name):
         user = self.new_user(id, name)
         user['joined_date'] = datetime.date.today().isoformat()
-        await self.col.insert_one(user)
+        await self.col.update_one({'id': id}, {'$setOnInsert': user}, upsert=True)
     
     async def is_user_exist(self, id):
         user = await self.col.find_one({'id':int(id)})
@@ -212,7 +214,7 @@ class Database:
 
     async def add_chat(self, chat, title):
         chat = self.new_group(chat, title)
-        await self.grp.insert_one(chat)
+        await self.grp.update_one({'id': chat['id']}, {'$setOnInsert': chat}, upsert=True)
     
 
     async def get_chat(self, chat):
@@ -234,8 +236,13 @@ class Database:
     async def get_settings(self, id):
         chat = await self.grp.find_one({'id':int(id)})
         if chat:
-            return chat.get('settings', default_setgs)
-        return default_setgs
+            # Return a copy: utils.save_group_settings() mutates the returned
+            # dict, which used to corrupt the shared global `default_setgs`.
+            settings = chat.get('settings') or {}
+            merged = dict(default_setgs)
+            merged.update(settings)
+            return merged
+        return dict(default_setgs)
     
 
     async def disable_chat(self, chat, reason="No Reason"):
@@ -285,7 +292,9 @@ class Database:
     
     async def check_remaining_uasge(self, userid):
         user_id = userid
-        user_data = await self.get_user(user_id)        
+        user_data = await self.get_user(user_id)
+        if not user_data:
+            return datetime.timedelta(0)
         expiry_time = user_data.get("expiry_time")
         # Calculate remaining time
         remaining_time = expiry_time - datetime.datetime.now()
@@ -316,28 +325,28 @@ class Database:
 
     async def get_thumbnail(self, id):
         user = await self.col.find_one({'id': int(id)})
-        return user.get('file_id', None)
+        return (user or {}).get('file_id', None)
 
     async def set_caption(self, id, caption):
         await self.col.update_one({'id': int(id)}, {'$set': {'caption': caption}})
 
     async def get_caption(self, id):
         user = await self.col.find_one({'id': int(id)})
-        return user.get('caption', None)
+        return (user or {}).get('caption', None)
 
     async def set_msg_command(self, id, com):
         await self.col.update_one({'id': int(id)}, {'$set': {'message_command': com}})
 
     async def get_msg_command(self, id):
         user = await self.col.find_one({'id': int(id)})
-        return user.get('message_command', None)
+        return (user or {}).get('message_command', None)
 
     async def set_save(self, id, save):
         await self.col.update_one({'id': int(id)}, {'$set': {'save': save}})
 
     async def get_save(self, id):
         user = await self.col.find_one({'id': int(id)})
-        return user.get('save', False) 
+        return (user or {}).get('save', False)
     
     async def add_posted_movie(self, movie_id):
         await self.posted.update_one(

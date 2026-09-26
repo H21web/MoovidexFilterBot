@@ -17,7 +17,7 @@ import logging
 logger = logging.getLogger(__name__)
 logging.getLogger("pyrogram").setLevel(logging.WARNING)
 
-@Client.on_callback_query(filters.regex('cancel'))
+@Client.on_callback_query(filters.regex(r'^cancel$'))
 async def cancel(bot,update):
     try:
         await update.message.delete()
@@ -29,9 +29,19 @@ async def doc(bot, update):
     try:
         type = update.data.split("_")[1]
         new_name = update.message.text
-        new_filename = new_name.split(":-")[1]
+        try:
+            new_filename = new_name.split(":-")[1].strip().strip("`").strip()
+        except IndexError:
+            await update.message.edit("Could not determine the new file name.")
+            return
+        # confine the rename target inside downloads/: drop any directory
+        # components (path traversal) and reject empty/degenerate names
+        new_filename = os.path.basename(new_filename)
+        if not new_filename or new_filename in (".", ".."):
+            await update.message.edit("Invalid file name.")
+            return
         file = update.message.reply_to_message
-        file_path = f"downloads/{new_filename}"
+        file_path = os.path.join("downloads", new_filename)
         ms = await update.message.edit("⚠️__**Please wait...**__\n\n__Downloading file to my server...__")
         c_time = time.time()
         try:
@@ -40,7 +50,7 @@ async def doc(bot, update):
                     progress=progress_for_pyrogram,
                     progress_args=("**⚠️ Please wait VJ Hack is in processing**", ms, c_time))
         except Exception as e:
-            await ms.edit(e)
+            await ms.edit(str(e))
             return 
         splitpath = path.split("/downloads/")
         dow_file_name = splitpath[1]
@@ -74,7 +84,7 @@ async def doc(bot, update):
                ph_path = await bot.download_media(media.thumbs[0].file_id)
             Image.open(ph_path).convert("RGB").save(ph_path)
             img = Image.open(ph_path)
-            img.resize((320, 320))
+            img = img.resize((320, 320))
             img.save(ph_path, "JPEG")
         await ms.edit("⚠️__**Please wait...**__\n\n__Processing file upload....__")
         c_time = time.time() 

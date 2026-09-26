@@ -609,8 +609,7 @@ async def next_page(bot, query):
         cur_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
         time_difference = timedelta(hours=cur_time.hour, minutes=cur_time.minute, seconds=(cur_time.second+(cur_time.microsecond/1000000))) - timedelta(hours=curr_time.hour, minutes=curr_time.minute, seconds=(curr_time.second+(curr_time.microsecond/1000000)))
         remaining_seconds = "{:.2f}".format(time_difference.total_seconds())
-        btntext = extract_shortdetails(file['file_name'], file['file_size'])
-        cap = await get_cap(settings, remaining_seconds, files, query, total, btntext, search)
+        cap = await get_cap(settings, remaining_seconds, files, query, total, search)
         try:
             await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
         except MessageNotModified:
@@ -628,19 +627,27 @@ async def next_page(bot, query):
 
 @Client.on_callback_query(filters.regex(r"^spol"))
 async def advantage_spoll_choker(bot, query):
-    _, user_id, movie_index = query.data.split('#')
-    movies = SPELL_CHECK.get(query.message.reply_to_message.id)
+    try:
+        _, user_id, movie_index = query.data.split('#')
+        user_id = int(user_id)
+    except (ValueError, AttributeError):
+        return await query.answer("Invalid request.", show_alert=True)
+    reply = query.message.reply_to_message
+    movies = SPELL_CHECK.get(reply.id) if reply else None
 
     if not movies:
         return await query.answer(script.OLD_ALRT_TXT.format(query.from_user.first_name), show_alert=True)
-    
-    if int(user_id) != 0 and query.from_user.id != int(user_id):
+
+    if user_id != 0 and query.from_user.id != user_id:
         return await query.answer(script.ALRT_TXT.format(query.from_user.first_name), show_alert=True)
-    
+
     if movie_index == "close_spellcheck":
         return await query.message.delete()
-    
-    movie = movies[int(movie_index)]
+
+    try:
+        movie = movies[int(movie_index)]
+    except (ValueError, IndexError):
+        return await query.answer("Invalid selection.", show_alert=True)
     
     # Logic: Extract Year, Search Title, Sort by Year
     year_match = re.search(r'\s(\d{4})$', movie)
@@ -767,30 +774,41 @@ async def languages_cb_handler(client: Client, query: CallbackQuery):
     )
 
 @Client.on_callback_query(filters.regex(r"^fl#"))
-async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
-    _, lang, key = query.data.split("#")
+async def filter_fl_cb_handler(client: Client, query: CallbackQuery):
+    # Single handler for "fl#" (filter) callbacks. This used to be two
+    # handlers (filter_languages_cb_handler + filter_qualities_cb_handler)
+    # registered on the same ^fl# pattern, so BOTH fired on every tap; the
+    # quality one also crashed on the undefined name `lang` and never
+    # answered the callback (hanging spinner).
+    try:
+        _, value, key = query.data.split("#")
+    except ValueError:
+        await query.answer("Invalid request.", show_alert=True)
+        return
     curr_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
-    search = FRESH.get(key)
-    search = search.replace("_", " ")
-    baal = lang in search
-    if baal:
-        search = search.replace(lang, "")
-    else:
-        search = search
+    base_search = FRESH.get(key)
+    if not base_search:
+        await query.answer("Search expired.", show_alert=True)
+        return
+    search = base_search.replace("_", " ")
     req = query.from_user.id
     chat_id = query.message.chat.id
     message = query.message
     try:
         if int(req) not in [query.message.reply_to_message.from_user.id, 0]:
             return await query.answer(
-                f"⚠️ Hello {query.from_user.first_name},\n🎬 Only the person who requested this can change languages.",
+                f"⚠️ Hello {query.from_user.first_name},\n🎬 Only the person who requested this can change filters.",
                 show_alert=True,
             )
     except:
         pass
-    if lang != "homepage":
-        full_lang = LANG_MAP.get(lang.lower(), lang)
-        search = f"{search} {full_lang}" 
+    if value != "homepage":
+        # Quality buttons send e.g. "1080p"; anything else is a language key.
+        term = value if value.lower() in QUALITY_MAP else LANG_MAP.get(value.lower(), value)
+        if term in search:
+            search = search.replace(term, "")
+        else:
+            search = f"{search} {term}"
     BUTTONS[key] = search
 
     files, offset, total_results = await get_search_results(chat_id, search, offset=0, filter=True)
@@ -805,7 +823,7 @@ async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
     btn = [
         [
             InlineKeyboardButton(f"🗂 Files: {total_results_str}" , 'total'),
-            
+
            # InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
             InlineKeyboardButton("🎧 Languages", callback_data=f"languages#{key}")
           #  InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
@@ -839,7 +857,7 @@ async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
         ])
 
     # Add BACK button only if filtered
-    if lang and lang != "homepage":
+    if value and value != "homepage":
         btn.append([
             InlineKeyboardButton("◀ Back To Files", callback_data=f"fl#homepage#{key}")
         ])
@@ -876,6 +894,7 @@ async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
             pass
 
     await query.answer()
+
 
 
 @Client.on_callback_query(filters.regex(r"^seasons#"))
@@ -1101,126 +1120,6 @@ async def qualities_cb_handler(client: Client, query: CallbackQuery):
 
     await query.edit_message_reply_markup(InlineKeyboardMarkup(btn))
     
-
-@Client.on_callback_query(filters.regex(r"^fl#"))
-async def filter_qualities_cb_handler(client: Client, query: CallbackQuery):
-    _, qual, key = query.data.split("#")
-    search = FRESH.get(key)
-    try:
-        search = search.replace(' ', '_')
-    except:
-        pass
-    baal = qual in search
-    if baal:
-        search = search.replace(qual, "")
-    else:
-        search = search
-    req = query.from_user.id
-    chat_id = query.message.chat.id
-    message = query.message
-    try:
-        if int(req) not in [query.message.reply_to_message.from_user.id, 0]:
-            return await query.answer(
-                f"⚠️ Hello {query.from_user.first_name},\n🎬 Only the person who requested this can change quality.",
-                show_alert=False,
-            )
-    except:
-        pass
-    searchagain = search
-    if lang != "homepage":
-        search = f"{search} {qual}" 
-    BUTTONS[key] = search
-
-    files, offset, total_results = await get_search_results(chat_id, search, offset=0, filter=True)
-    # files = [file for file in files if re.search(lang, file["file_name"], re.IGNORECASE)]
-    if not files:
-        await query.answer("🚫 𝗡𝗼 𝗙𝗶𝗹𝗲 𝗪𝗲𝗿𝗲 𝗙𝗼𝘂𝗻𝗱 🚫", show_alert=1)
-        return
-    temp.GETALL[key] = files
-    total_results_str = len(files)
-    settings = await get_settings(message.chat.id)
-    pre = 'filep' if settings['file_secure'] else 'file'
-    if settings["button"]:
-        btn = [
-            [
-                InlineKeyboardButton(
-                    text=extract_shortdetails(file['file_name'], file['file_size']),
-                    callback_data=f"{pre}#{file['file_id']}"
-                ),
-            ]
-            for file in files
-        ]
-        btn.insert(0, 
-            [
-                InlineKeyboardButton(f'🎚 Quality', callback_data=f"qualities#{key}"),
-                InlineKeyboardButton('ℹ Info', url='https://t.me/moovidex/11'),
-               # InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
-                InlineKeyboardButton("🗃 Seasons",  callback_data=f"seasons#{key}")
-            ]
-        )
-        btn.insert(0, [
-            InlineKeyboardButton(f"🗂 Files: {total_results_str}" , 'total'),
-           # InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
-            InlineKeyboardButton("🎧 Languages", callback_data=f"languages#{key}")
-           # InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
-        ])
-    else:
-        btn = []
-        btn.insert(0, 
-            [
-                InlineKeyboardButton(f'🎚 Quality', callback_data=f"qualities#{key}"),
-                InlineKeyboardButton('ℹ Info', url='https://t.me/moovidex/11'),
-              #  InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
-                InlineKeyboardButton("🗃 Seasons",  callback_data=f"seasons#{key}")
-            ]
-        )
-        btn.insert(0, [
-            InlineKeyboardButton(f"🗂 Files: {total_results_str}" , 'total'),
-           # InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
-            InlineKeyboardButton("🎧 Languages", callback_data=f"languages#{key}")
-          #  InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
-        ])
-
-    if offset != "":
-        try:
-            if settings['max_btn']:
-                btn.append(
-                    [InlineKeyboardButton("ᴘᴀɢᴇ", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/10)}",callback_data="pages"), InlineKeyboardButton(text="ɴᴇxᴛ ⇛",callback_data=f"next_{req}_{key}_{offset}")]
-                )
-    
-            else:
-                btn.append(
-                    [InlineKeyboardButton("ᴘᴀɢᴇ", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/int(MAX_B_TN))}",callback_data="pages"), InlineKeyboardButton(text="ɴᴇxᴛ ⇛",callback_data=f"next_{req}_{key}_{offset}")]
-                )
-        except KeyError:
-            await save_group_settings(query.message.chat.id, 'max_btn', True)
-            btn.append(
-                [InlineKeyboardButton("ᴘᴀɢᴇ", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/10)}",callback_data="pages"), InlineKeyboardButton(text="ɴᴇxᴛ ⇛",callback_data=f"next_{req}_{key}_{offset}")]
-            )
-    else:
-        btn.append(
-            [InlineKeyboardButton(text="⛔ NO MORE PAGES AVAILABLE ⛔",callback_data="pages")]
-        )
-    if lang != "homepage":
-        req = query.from_user.id
-        offset = 0
-        btn.append([InlineKeyboardButton(text="◀ Back To Files", callback_data=f"next_{req}_{key}_{offset}")])
-    
-    if not settings["button"]:
-        cur_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
-        time_difference = timedelta(hours=cur_time.hour, minutes=cur_time.minute, seconds=(cur_time.second+(cur_time.microsecond/1000000))) - timedelta(hours=curr_time.hour, minutes=curr_time.minute, seconds=(curr_time.second+(curr_time.microsecond/1000000)))
-        remaining_seconds = "{:.2f}".format(time_difference.total_seconds())
-        total_results = len(files)
-        cap = await get_cap(settings, remaining_seconds, files, query, total_results, search)
-        try:
-            await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
-        except MessageNotModified:
-            pass
-    else:
-        try:
-            await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(btn))
-        except MessageNotModified:
-            pass
 
 # --- Smart Filter Callbacks (Moved before cb_handler) ---
 
@@ -1741,16 +1640,6 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 title = ttl.title
                 active = await if_active(str(userid), str(groupid))
                 act = " - ACTIVE" if active else ""
-                if len(languages) > 1:
-                    btn = [
-                        [
-                            InlineKeyboardButton(
-                                text=f"🔊 {lang.title()}",
-                                callback_data=f"lang#{lang}#{key}"
-                            ),
-                        ]
-                        for lang in languages
-                    ]
                 buttons.append(
                     [
                         InlineKeyboardButton(
@@ -1767,23 +1656,35 @@ async def cb_handler(client: Client, query: CallbackQuery):
             )
     elif "gfilteralert" in query.data:
         grp_id = query.message.chat.id
-        i = query.data.split(":")[1]
-        keyword = query.data.split(":")[2]
+        try:
+            i = int(query.data.split(":")[1])
+            keyword = query.data.split(":")[2]
+        except (ValueError, IndexError):
+            return await query.answer("Invalid request.", show_alert=True)
         reply_text, btn, alerts, fileid = await find_gfilter('gfilters', keyword)
         if alerts is not None:
-            alerts = ast.literal_eval(alerts)
-            alert = alerts[int(i)]
+            try:
+                alerts = ast.literal_eval(alerts)
+                alert = alerts[i]
+            except (ValueError, SyntaxError, IndexError, TypeError):
+                return await query.answer("Alert not available.", show_alert=True)
             alert = alert.replace("\\n", "\n").replace("\\t", "\t")
             await query.answer(alert, show_alert=True)
     
     elif "alertmessage" in query.data:
         grp_id = query.message.chat.id
-        i = query.data.split(":")[1]
-        keyword = query.data.split(":")[2]
+        try:
+            i = int(query.data.split(":")[1])
+            keyword = query.data.split(":")[2]
+        except (ValueError, IndexError):
+            return await query.answer("Invalid request.", show_alert=True)
         reply_text, btn, alerts, fileid = await find_filter(grp_id, keyword)
         if alerts is not None:
-            alerts = ast.literal_eval(alerts)
-            alert = alerts[int(i)]
+            try:
+                alerts = ast.literal_eval(alerts)
+                alert = alerts[i]
+            except (ValueError, SyntaxError, IndexError, TypeError):
+                return await query.answer("Alert not available.", show_alert=True)
             alert = alert.replace("\\n", "\n").replace("\\t", "\t")
             await query.answer(alert, show_alert=True)
         
@@ -1920,7 +1821,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
     
     elif query.data.startswith("send_fsall"):
         temp_var, ident, key, offset = query.data.split("#")
-        search = BUTTON0.get(key)
+        search = BUTTONS0.get(key)
      #   if not search:
       #      await query.answer(script.OLD_ALRT_TXT.format(query.from_user.first_name),show_alert=True)
       #      return
@@ -1959,7 +1860,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
                     result = await col.delete_one({
                         'file_id': file_ids,
                     })
-                    if not result.deleted_count:
+                    if not result.deleted_count and sec_col is not None:
                         result = await sec_col.delete_one({
                             'file_id': file_ids,
                         })
@@ -2781,13 +2682,17 @@ async def cb_handler(client: Client, query: CallbackQuery):
         total_users = await db.total_users_count()
         totl_chats = await db.total_chat_count()
         filesp = await col.count_documents({})
-        totalsec = await sec_col.count_documents({})
+        totalsec = await sec_col.count_documents({}) if sec_col is not None else 0
         stats = await vjdb.command('dbStats')
         used_dbSize = (stats['dataSize']/(1024*1024))+(stats['indexSize']/(1024*1024))
         free_dbSize = 512-used_dbSize
-        stats2 = await sec_db.command('dbStats')
-        used_dbSize2 = (stats2['dataSize']/(1024*1024))+(stats2['indexSize']/(1024*1024))
-        free_dbSize2 = 512-used_dbSize2
+        if sec_db is not None:
+            stats2 = await sec_db.command('dbStats')
+            used_dbSize2 = (stats2['dataSize']/(1024*1024))+(stats2['indexSize']/(1024*1024))
+            free_dbSize2 = 512-used_dbSize2
+        else:
+            used_dbSize2 = 0
+            free_dbSize2 = 0
         stats3 = await mydb.command('dbStats')
         used_dbSize3 = (stats3['dataSize']/(1024*1024))+(stats3['indexSize']/(1024*1024))
         free_dbSize3 = 512-used_dbSize3
@@ -2811,13 +2716,17 @@ async def cb_handler(client: Client, query: CallbackQuery):
         total_users = await db.total_users_count()
         totl_chats = await db.total_chat_count()
         filesp = await col.count_documents({})
-        totalsec = await sec_col.count_documents({})
+        totalsec = await sec_col.count_documents({}) if sec_col is not None else 0
         stats = await vjdb.command('dbStats')
         used_dbSize = (stats['dataSize']/(1024*1024))+(stats['indexSize']/(1024*1024))
         free_dbSize = 512-used_dbSize
-        stats2 = await sec_db.command('dbStats')
-        used_dbSize2 = (stats2['dataSize']/(1024*1024))+(stats2['indexSize']/(1024*1024))
-        free_dbSize2 = 512-used_dbSize2
+        if sec_db is not None:
+            stats2 = await sec_db.command('dbStats')
+            used_dbSize2 = (stats2['dataSize']/(1024*1024))+(stats2['indexSize']/(1024*1024))
+            free_dbSize2 = 512-used_dbSize2
+        else:
+            used_dbSize2 = 0
+            free_dbSize2 = 0
         stats3 = await mydb.command('dbStats')
         used_dbSize3 = (stats3['dataSize']/(1024*1024))+(stats3['indexSize']/(1024*1024))
         free_dbSize3 = 512-used_dbSize3

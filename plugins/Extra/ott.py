@@ -120,8 +120,11 @@ async def platform_selected(client, callback_query):
     if not cache or cache["user_id"] != user_id:
         return await callback_query.answer("⚠️ Session expired. Send /ott again.", show_alert=True)
 
-    index = int(callback_query.data.split("ott_platform_")[1])
-    platform = cache['platforms'][index]
+    try:
+        index = int(callback_query.data.split("ott_platform_")[1])
+        platform = cache['platforms'][index]
+    except (ValueError, IndexError):
+        return await callback_query.answer("⚠️ Invalid selection.", show_alert=True)
 
     cache['selected_platform'] = platform
     cache['page'] = 0
@@ -191,7 +194,7 @@ async def ott_next_page(client, callback_query):
     message_id = message.id
 
     cache = OTT_USER_CACHE.get(message_id)
-    if not cache:
+    if not cache or cache.get("user_id") != user_id:
         return await callback_query.answer("⚠️ Session expired.", show_alert=True)
 
     cache['page'] += 1
@@ -210,7 +213,7 @@ async def ott_prev_page(client, callback_query):
     message_id = message.id
 
     cache = OTT_USER_CACHE.get(message_id)
-    if not cache or cache['page'] <= 0:
+    if not cache or cache.get("user_id") != user_id or cache['page'] <= 0:
         return await callback_query.answer("⚠️ Session expired or invalid page.", show_alert=True)
 
     cache['page'] -= 1
@@ -244,7 +247,13 @@ async def ott_back_to_main(client, callback_query):
 
 @Client.on_callback_query(filters.regex("ott_close"))
 async def ott_close_handler(client, callback_query):
+    cache = OTT_USER_CACHE.get(callback_query.message.id)
+    if cache and cache.get("user_id") != callback_query.from_user.id:
+        return await callback_query.answer("⚠️ This menu isn't yours.", show_alert=True)
+    OTT_USER_CACHE.pop(callback_query.message.id, None)
     try:
         await callback_query.message.delete()
-    except:
+    except Exception:
         await callback_query.answer("⚠️ Unable to close.")
+    else:
+        await callback_query.answer()

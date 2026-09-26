@@ -31,26 +31,3 @@ class JsTopDB:
     async def clear_movie_series_names(self, group_id):
         # Remove all movie and series names for the specified group from the database
         await self.collection.delete_many({"group_id": group_id})
-
-async def main():
-    movie_series_db = JsTopDB(OTHER_DB_URI)
-    while True:
-        # Simulating a movie search
-        search_input = input("Enter the movie/series name: ")
-        group_id = input("Enter group ID: ")
-        
-        # Automatically set the movie/series name after search
-        await movie_series_db.set_movie_series_names(search_input, group_id)
-        print("Movie/Series name added automatically.")
-        
-        # Print the updated list of names after each search
-        names = await movie_series_db.get_movie_series_names(group_id)
-        print("Updated Movie/Series Names (Sorted by Search Count):")
-        for name in names:
-            print(name)
-        
-        # Option to clear names (for testing purposes)
-        clear_input = input("Do you want to clear names for this group? (yes/no): ")
-        if clear_input.lower() == "yes":
-            await movie_series_db.clear_movie_series_names(group_id)
-            print("Names cleared successfully.")

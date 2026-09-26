@@ -219,8 +219,9 @@ async def upcoming_detail(client, cq):
     buttons = [[InlineKeyboardButton(f"🔔 Notify Me", callback_data=f"notify_{data['safe_title']}_{data['r_date']}")]]
     
     if user_id in ADMIN_IDS:
+         # NOTE: the "Edit & Post" button was removed: its callback
+         # (upcoming_edit_post_...) had no handler, so it did nothing.
          buttons.append([
-             InlineKeyboardButton("✏️ Edit & Post", callback_data=f"upcoming_edit_post_{movie_id}"),
              InlineKeyboardButton("📣 Post Default", callback_data=f"upcoming_post_{movie_id}")
          ])
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])

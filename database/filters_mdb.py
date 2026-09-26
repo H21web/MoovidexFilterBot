@@ -2,14 +2,16 @@
 # Subscribe YouTube Channel For Amazing Bot @Tech_VJ
 # Ask Doubt on telegram @KingVJ01
 
-import pymongo
+import motor.motor_asyncio
 from info import OTHER_DB_URI, DATABASE_NAME
 from pyrogram import enums
 import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
 
-myclient = pymongo.MongoClient(OTHER_DB_URI)
+# Motor (async) client: the old synchronous PyMongo client blocked the event
+# loop inside every `async def` here.
+myclient = motor.motor_asyncio.AsyncIOMotorClient(OTHER_DB_URI)
 mydb = myclient[DATABASE_NAME]
 
 
@@ -19,59 +21,47 @@ async def add_filter(grp_id, text, reply_text, btn, file, alert):
     # mycol.create_index([('text', 'text')])
 
     data = {
-        'text':str(text),
-        'reply':str(reply_text),
-        'btn':str(btn),
-        'file':str(file),
-        'alert':str(alert)
+        'text': str(text),
+        'reply': str(reply_text),
+        'btn': str(btn),
+        'file': str(file),
+        'alert': str(alert)
     }
 
     try:
-        mycol.update_one({'text': str(text)},  {"$set": data}, upsert=True)
-    except:
-        logger.exception('Some error occured!', exc_info=True)
-             
-     
+        await mycol.update_one({'text': str(text)}, {"$set": data}, upsert=True)
+    except Exception:
+        logger.exception('Some error occured!')
+
+
 async def find_filter(group_id, name):
     mycol = mydb[str(group_id)]
-    
-    query = mycol.find( {"text":name})
-    # query = mycol.find( { "$text": {"$search": name}})
-    try:
-        for file in query:
-            reply_text = file['reply']
-            btn = file['btn']
-            fileid = file['file']
-            try:
-                alert = file['alert']
-            except:
-                alert = None
-        return reply_text, btn, alert, fileid
-    except:
+
+    doc = await mycol.find_one({"text": name})
+    if not doc:
         return None, None, None, None
+    return doc.get('reply'), doc.get('btn'), doc.get('alert'), doc.get('file')
 
 
 async def get_filters(group_id):
     mycol = mydb[str(group_id)]
 
     texts = []
-    query = mycol.find()
     try:
-        for file in query:
-            text = file['text']
-            texts.append(text)
-    except:
-        pass
+        async for doc in mycol.find():
+            texts.append(doc['text'])
+    except Exception:
+        logger.exception('get_filters failed')
     return texts
 
 
 async def delete_filter(message, text, group_id):
     mycol = mydb[str(group_id)]
-    
-    myquery = {'text':text }
-    query = mycol.count_documents(myquery)
+
+    myquery = {'text': text}
+    query = await mycol.count_documents(myquery)
     if query == 1:
-        mycol.delete_one(myquery)
+        await mycol.delete_one(myquery)
         await message.reply_text(
             f"'`{text}`'  deleted. I'll not respond to that filter anymore.",
             quote=True,
@@ -82,15 +72,15 @@ async def delete_filter(message, text, group_id):
 
 
 async def del_all(message, group_id, title):
-    if str(group_id) not in mydb.list_collection_names():
+    if str(group_id) not in await mydb.list_collection_names():
         await message.edit_text(f"Nothing to remove in {title}!")
         return
 
     mycol = mydb[str(group_id)]
     try:
-        mycol.drop()
+        await mycol.drop()
         await message.edit_text(f"All filters from {title} has been removed")
-    except:
+    except Exception:
         await message.edit_text("Couldn't remove all filters from group!")
         return
 
@@ -98,12 +88,12 @@ async def del_all(message, group_id, title):
 async def count_filters(group_id):
     mycol = mydb[str(group_id)]
 
-    count = mycol.count()
+    count = await mycol.count_documents({})
     return False if count == 0 else count
 
 
 async def filter_stats():
-    collections = mydb.list_collection_names()
+    collections = await mydb.list_collection_names()
 
     if "CONNECTION" in collections:
         collections.remove("CONNECTION")
@@ -111,7 +101,7 @@ async def filter_stats():
     totalcount = 0
     for collection in collections:
         mycol = mydb[collection]
-        count = mycol.count()
+        count = await mycol.count_documents({})
         totalcount += count
 
     totalcollections = len(collections)

@@ -1,4 +1,5 @@
 import aiohttp
+import os
 import re
 import html
 from datetime import datetime
@@ -99,8 +100,19 @@ HEADERS = {
     'Referer': 'https://www.binged.com/'
 }
 
-ADMIN_IDS = [1011394081, 7191327005]
-UPDATE_CHANNEL_ID = -1001680629032
+def _env_ids(name, default):
+    ids = []
+    for part in os.environ.get(name, "").replace(",", " ").split():
+        try:
+            ids.append(int(part))
+        except ValueError:
+            pass
+    return ids or default
+
+# Were hardcoded personal IDs; now configurable via environment, defaulting
+# to the bot's configured ADMINS so the repo carries no personal IDs.
+ADMIN_IDS = _env_ids("BINGED_ADMIN_IDS", list(ADMINS))
+UPDATE_CHANNEL_ID = int(os.environ.get("UPDATE_CHANNEL_ID", "-1001680629032"))
 
 # Init global vars just in case
 if not hasattr(temp, 'BINGED_RESULTS'): temp.BINGED_RESULTS = {}

@@ -236,12 +236,12 @@
 
 <script>
     const defaultImageUrl = "https://h21web.github.io/host/assets/images/folder.png";
-    const tmdbKey = "{{ tmdb_api_key }}";
-    const botUrl = "{{ bot_url }}";
+    const tmdbKey = ""; // no API key is passed to this template; the poster fallback below applies
+    const botUrl = {{ bot_url|tojson }};
 
     // Safe URL details extraction with error handling
     let downloadlink = "";
-    let FileName = "{{ file_name }}"; // Use template variable as primary source
+    let FileName = {{ file_name|tojson }}; // Use template variable as primary source
     
     try {
         const videoLink = window.location.href;
@@ -254,7 +254,7 @@
         const urlFileName = pathnameParts.length > 3 ? pathnameParts[3] : FileName;
         
         // Use URL filename if template variable is not rendered
-        if (!FileName || FileName.includes("{{")) {
+        if (!FileName || FileName.includes("{" + "{")) {
             FileName = decodeURIComponent(urlFileName);
         }
 
@@ -290,7 +290,7 @@
 
     // Robust Poster Fetch using TMDB with Enhanced Error Handling
     function fetchPoster(rawFilename, callback) {
-        if (!tmdbKey || tmdbKey === "None" || tmdbKey.includes("{{")) {
+        if (!tmdbKey || tmdbKey === "None" || tmdbKey.includes("{" + "{")) {
             console.log("No TMDB Key available, using default poster.");
             callback(defaultImageUrl);
             return;
@@ -443,7 +443,7 @@
     }
       
     function openTG() {
-        if(botUrl && botUrl !== "None" && !botUrl.includes("{{")) {
+        if(botUrl && botUrl !== "None" && !botUrl.includes("{" + "{")) {
              const url = botUrl.startsWith("http") ? botUrl : "https://" + botUrl;
              window.open(url, '_blank');
         } else {

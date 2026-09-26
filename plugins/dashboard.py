@@ -1,4 +1,5 @@
 import logging
+import secrets
 import jinja2
 import datetime
 import psutil
@@ -6,6 +7,7 @@ import time
 import sys
 import platform
 from aiohttp import web
+from pyrogram.errors import FloodWait
 from info import ADMIN_USERNAME, ADMIN_PASSWORD
 from database.users_chats_db import db
 from database.stats_db import stats_db
@@ -23,15 +25,42 @@ routes = web.RouteTableDef()
 
 # Jinja2 environment setup
 template_loader = jinja2.FileSystemLoader(searchpath="./TechVJ/template/dashboard/")
-template_env = jinja2.Environment(loader=template_loader)
+# autoescape: templates render untrusted data (usernames, request text,
+# search queries). No template uses |safe, so this is behavior-preserving
+# except that HTML metacharacters are now escaped.
+template_env = jinja2.Environment(
+    loader=template_loader,
+    autoescape=jinja2.select_jinja_autoescape(['html', 'htm', 'xml']),
+)
 
 def render_template(name, **kwargs):
     template = template_env.get_template(name)
     return template.render(**kwargs)
 
+# Server-side session store: token -> expiry timestamp. The old code set a
+# client-side cookie `admin_auth=true` after login, which anyone could forge
+# to gain full admin access. Sessions now live server-side only.
+_active_sessions = {}
+
+def _new_session():
+    token = secrets.token_urlsafe(32)
+    _active_sessions[token] = time.time() + 3600 * 24
+    return token
+
+def _drop_session(token):
+    _active_sessions.pop(token, None)
+
 def check_auth(request):
-    auth_cookie = request.cookies.get('admin_auth')
-    return auth_cookie == "true"
+    token = request.cookies.get('admin_auth')
+    if not token:
+        return False
+    expiry = _active_sessions.get(token)
+    if not expiry:
+        return False
+    if expiry < time.time():
+        _drop_session(token)
+        return False
+    return True
 
 @routes.get("/admin/login")
 async def login_page(request):
@@ -45,13 +74,15 @@ async def login_handler(request):
     
     if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
         response = web.HTTPFound('/admin')
-        response.set_cookie('admin_auth', 'true', max_age=3600*24)
+        response.set_cookie('admin_auth', _new_session(), max_age=3600*24,
+                            httponly=True, samesite='Lax')
         return response
     else:
         return web.Response(text=render_template("login.html", error="Invalid credentials"), content_type='text/html')
 
 @routes.get("/admin/logout")
 async def logout_handler(request):
+    _drop_session(request.cookies.get('admin_auth'))
     response = web.HTTPFound('/admin/login')
     response.del_cookie('admin_auth')
     return response
@@ -110,9 +141,9 @@ async def dashboard_home(request):
                                                  no_result_chart_labels=chart_labels,
                                                  no_result_chart_data=chart_data,
                                                  status="Online"), content_type='text/html')
-    except Exception as e:
-        import traceback
-        return web.Response(text=f"Error: {e}\n\n{traceback.format_exc()}", status=500)
+    except Exception:
+        logging.exception("Dashboard home failed")
+        return web.Response(text="Internal Server Error", status=500)
 
 @routes.get("/admin/users")
 async def users_page(request):
@@ -210,21 +241,38 @@ async def clear_pm_searches(request):
 # --- NEW FEATURES ---
 
 # Broadcast
+async def _broadcast_send(chat_id, text, pin):
+    # Bounded FloodWait retries per recipient instead of counting the
+    # recipient as failed on the first rate limit.
+    for attempt in range(4):
+        try:
+            msg = await TechVJBot.send_message(chat_id=chat_id, text=text)
+            if pin:
+                try:
+                    await msg.pin()
+                except Exception:
+                    pass
+            return True
+        except FloodWait as e:
+            wait = min(e.value, 300)
+            logging.warning("Broadcast FloodWait %ss for %s (attempt %d)", e.value, chat_id, attempt + 1)
+            await asyncio.sleep(wait)
+        except Exception:
+            logging.exception("Broadcast send failed for %s", chat_id)
+            return False
+    return False
+
 async def run_broadcast(target, text, pin):
     total = 0
     success = 0
     failed = 0
-    
+
     if target == 'users':
         users = await db.get_all_users()
         async for user in users:
-            try:
-                msg = await TechVJBot.send_message(chat_id=int(user['id']), text=text)
-                if pin:
-                    try: await msg.pin()
-                    except: pass
+            if await _broadcast_send(int(user['id']), text, pin):
                 success += 1
-            except Exception as e:
+            else:
                 failed += 1
             total += 1
             # Rate limiting / yielding
@@ -232,17 +280,13 @@ async def run_broadcast(target, text, pin):
     else:
         groups = await db.get_all_chats()
         async for group in groups:
-            try:
-                msg = await TechVJBot.send_message(chat_id=int(group['id']), text=text)
-                if pin:
-                    try: await msg.pin()
-                    except: pass
+            if await _broadcast_send(int(group['id']), text, pin):
                 success += 1
-            except:
+            else:
                 failed += 1
             total += 1
             if total % 50 == 0: await asyncio.sleep(0.5)
-            
+
     logging.info(f"Broadcast Finished. Total: {total}, Success: {success}, Failed: {failed}")
 
 @routes.get("/admin/broadcast")
@@ -344,8 +388,9 @@ async def files_delete_handler(request):
     
     if file_id:
         try:
-            col.delete_one({'file_id': file_id})
-            sec_col.delete_one({'file_id': file_id})
+            await col.delete_one({'file_id': file_id})
+            if sec_col is not None:
+                await sec_col.delete_one({'file_id': file_id})
         except Exception:
             pass
             
@@ -567,4 +612,5 @@ async def requests_action_handler(request):
         except Exception as e:
             msg_result += f" Failed to notify: {e}"
 
-    return web.HTTPFound(f'/admin/requests?message={msg_result}')
+    from urllib.parse import quote_plus
+    return web.HTTPFound(f'/admin/requests?message={quote_plus(msg_result)}')

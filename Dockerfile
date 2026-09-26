@@ -1,5 +1,5 @@
-# Use a more recent Python base image
-FROM python:3.10-slim-bullseye
+# Python 3.12 on Debian bookworm (verified image tag)
+FROM python:3.12-slim-bookworm
 
 # Install system dependencies including ffmpeg
 RUN apt-get update && apt-get upgrade -y && \

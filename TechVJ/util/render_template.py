@@ -30,11 +30,13 @@ async def render_page(id, secure_hash, src=None):
     else:
         template_file = "TechVJ/template/dl.html"
         async with aiohttp.ClientSession() as s:
-            async with s.get(src) as u:
-                file_size = humanbytes(int(u.headers.get("Content-Length")))
+            async with s.head(src) as u:
+                file_size = humanbytes(int(u.headers.get("Content-Length", file_data.file_size)))
 
     with open(template_file) as f:
-        template = jinja2.Template(f.read())
+        # autoescape: file names are untrusted user-controlled data rendered
+        # into HTML and JS string contexts.
+        template = jinja2.Template(f.read(), autoescape=True)
 
     file_name = file_data.file_name.replace("_", " ")
 
@@ -44,5 +46,4 @@ async def render_page(id, secure_hash, src=None):
         file_size=file_size,
         file_unique_id=file_data.unique_id,
         bot_url=f"https://t.me/{temp.U_NAME}" if temp.U_NAME else "https://t.me/moovidexrobot",
-        tmdb_api_key=TMDB_API_KEY
     )

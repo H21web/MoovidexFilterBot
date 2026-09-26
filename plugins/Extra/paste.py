@@ -42,27 +42,33 @@ async def p_paste(message, extension=None):
 @Client.on_message(filters.command(["tgpaste", "pasty", "paste"]))
 async def pasty(client, message):
     pablo = await message.reply_text("`Please wait...`")
-    tex_t = message.text
     if ' ' in message.text:
         message_s = message.text.split(" ", 1)[1]
     elif message.reply_to_message:
         message_s = message.reply_to_message.text
     else:
-        await message.reply("sorry no in put. please repy to a text or /paste with text")
-    if not tex_t:
+        await pablo.edit("sorry no in put. please repy to a text or /paste with text")
+        return
+    if not message_s:
         if not message.reply_to_message:
             await pablo.edit("`Only text and documents are supported.`")
             return
         if not message.reply_to_message.text:
             file = await message.reply_to_message.download()
-            m_list = open(file, "r").read()
+            try:
+                with open(file, "r") as f:
+                    m_list = f.read()
+            finally:
+                os.remove(file)
             message_s = m_list
-            os.remove(file)
-        elif message.reply_to_message.text:
+        else:
             message_s = message.reply_to_message.text
 
     ext = "py"
     x = await p_paste(message_s, ext)
+    if "error" in x:
+        await pablo.edit(f"Failed to paste: {x['error']}")
+        return
     p_link = x["url"]
     p_raw = x["raw"]
 
