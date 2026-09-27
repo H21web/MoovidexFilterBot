@@ -52,6 +52,22 @@ join_db = JoinReqs
 
 @Client.on_message(filters.command("start") & filters.incoming)
 async def start(client, message):
+    _from_user = message.from_user
+    logging.info("START cmd received: user=%s chat=%s type=%s text=%r",
+                 _from_user.id if _from_user else None, message.chat.id,
+                 message.chat.type, message.text)
+    try:
+        await _start_impl(client, message)
+    except Exception:
+        logging.exception("START handler failed for user=%s",
+                          _from_user.id if _from_user else None)
+        try:
+            await message.reply_text("\u26a0\ufe0f Something went wrong. Please try again.")
+        except Exception:
+            pass
+
+
+async def _start_impl(client, message):
     #try:
      #   await message.react(emoji=random.choice(REACTIONS), big=True)
     #except:
@@ -72,7 +88,10 @@ async def start(client, message):
         return 
     if not await db.is_user_exist(message.from_user.id):
         await db.add_user(message.from_user.id, message.from_user.first_name)
-        await client.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
+        try:
+            await client.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
+        except Exception as e:
+            logging.warning("START: could not log new user to LOG_CHANNEL: %s", e)
     if len(message.command) != 2:
         if PREMIUM_AND_REFERAL_MODE == True:
             buttons = [[
@@ -101,9 +120,12 @@ async def start(client, message):
             ]]
 
         reply_markup = InlineKeyboardMarkup(buttons)
-        m=await message.reply_sticker("CAACAgUAAxkBAAIUs2bjMhInIJKS12_QsJ89vv5gKX9zAAI9EQACuFsYV5D3jfbRkmXmHgQ") 
-        await asyncio.sleep(1)
-        await m.delete()
+        try:
+            m=await message.reply_sticker("CAACAgUAAxkBAAIUs2bjMhInIJKS12_QsJ89vv5gKX9zAAI9EQACuFsYV5D3jfbRkmXmHgQ")
+            await asyncio.sleep(1)
+            await m.delete()
+        except Exception as e:
+            logging.warning("START: sticker send failed, continuing: %s", e)
         await message.reply_photo(
             photo=random.choice(PICS),
             caption=script.START_TXT.format(message.from_user.mention, get_wish()),
