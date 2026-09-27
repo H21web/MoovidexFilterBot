@@ -30,7 +30,8 @@ template_loader = jinja2.FileSystemLoader(searchpath="./TechVJ/template/dashboar
 # except that HTML metacharacters are now escaped.
 template_env = jinja2.Environment(
     loader=template_loader,
-    autoescape=jinja2.select_jinja_autoescape(['html', 'htm', 'xml']),
+    autoescape=jinja2.select_autoescape(['html', 'htm', 'xml']),
+
 )
 
 def render_template(name, **kwargs):
