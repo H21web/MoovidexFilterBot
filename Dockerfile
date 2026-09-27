@@ -1,10 +1,10 @@
 # Python 3.12 on Debian bookworm (verified image tag)
 FROM python:3.12-slim-bookworm
 
-# Install system dependencies including ffmpeg
+# Install system dependencies including ffmpeg.
+# gcc + python3-dev are needed to compile tgcrypto (no prebuilt wheel for py3.12)
 RUN apt-get update && apt-get upgrade -y && \
-    apt-get install -y git ffmpeg && \
-    apt-get clean && \
+    apt-get install -y --no-install-recommends git ffmpeg gcc python3-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Set working directory
