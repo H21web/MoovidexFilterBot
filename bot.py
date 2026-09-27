@@ -93,21 +93,25 @@ async def start():
         try:
             k = await TechVJBot.send_message(chat_id=ch, text="**Bot Restarted**")
             await k.delete()
-        except (PeerIdInvalid, ChannelPrivate, ChatAdminRequired, ChatWriteForbidden) as e:
+        except Exception as e:
+            # Broad catch: a startup notification must never kill polling
+            # (e.g. FloodWait from rapid sends to many channels).
             logging.error("Could not post restart notice in file channel %s: %s. "
                           "Make the bot an admin there with full rights.", ch, e)
     if AUTH_CHANNEL is not None:
         try:
             k = await TechVJBot.send_message(chat_id=AUTH_CHANNEL, text="**Bot Restarted**")
             await k.delete()
-        except (PeerIdInvalid, ChannelPrivate, ChatAdminRequired, ChatWriteForbidden) as e:
+        except Exception as e:
             logging.error("Could not post restart notice in AUTH_CHANNEL %s: %s. "
                           "Make the bot an admin there with full rights.", AUTH_CHANNEL, e)
 
+    logging.info("STARTUP: restart notices done, starting web server...")
     app = web.AppRunner(await web_server())
     await app.setup()
     bind_address = "0.0.0.0"
     await web.TCPSite(app, bind_address, PORT).start()
+    logging.info("STARTUP: web server up, entering idle (update polling active)...")
     try:
         await idle()
     finally:
