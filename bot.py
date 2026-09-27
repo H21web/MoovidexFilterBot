@@ -64,6 +64,14 @@ async def start():
     print('\n')
     print('Initalizing Your Bot')
     await TechVJBot.start()
+    try:
+        _d = TechVJBot.dispatcher
+        _groups = {g: len(h) for g, h in _d.groups.items()}
+        logging.info("DIAG DISPATCHER: no_updates=%s workers_param=%s active_tasks=%s groups=%s",
+                     TechVJBot.no_updates, TechVJBot.workers,
+                     len(_d.handler_worker_tasks), _groups)
+    except Exception as _e:
+        logging.info("DIAG DISPATCHER FAILED: %s", _e)
     me = await TechVJBot.get_me()
     try:
         await ensure_indexes()
