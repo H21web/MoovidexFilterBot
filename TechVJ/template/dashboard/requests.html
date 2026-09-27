@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .status-badge { padding: 5px 10px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .status-pending { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+    .status-fulfilled { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .status-rejected { background-color: #ffcccc; color: #cc0000; border: 1px solid #ffb3b3; } /* Brighter Red */
+    
+    .action-btn { padding: 6px 12px; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85rem; margin-right: 5px; color: white; text-align: center; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-weight: 500; transition: opacity 0.2s; }
+    .action-btn:hover { opacity: 0.9; }
+    .btn-uploaded { background-color: #0d6efd; } /* Bootstrap Primary Blue */
+    .btn-available { background-color: #198754; } /* Bootstrap Success Green */
+    .btn-unavailable { background-color: #dc3545; } /* Bootstrap Danger Red */
+    .btn-delete { background-color: #6c757d; } /* Bootstrap Secondary Grey */
+
+    /* Table Styles */
+    table { width: 100%; border-collapse: separate; border-spacing: 0; background: #2c2c2c; border-radius: 8px; overflow: hidden; }
+    th { background: #333; color: #fff; text-align: left; padding: 12px 15px; font-weight: 600; border-bottom: 2px solid #444; }
+    td { padding: 12px 15px; border-bottom: 1px solid #444; color: #e0e0e0; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover { background-color: #383838; }
+
+    /* Modal */
+    .modal { display: none; position: fixed; z-index: 1001; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.7); backdrop-filter: blur(2px); }
+    .modal-content { background-color: #2c2c2c; margin: 10% auto; padding: 25px; border: 1px solid #444; width: 90%; max-width: 500px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+    .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; line-height: 20px;}
+    .close:hover { color: #fff; }
+    
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; margin-bottom: 8px; font-weight: 500; color: #ccc;}
+    .form-group input, .form-group textarea { width: 100%; padding: 10px; box-sizing: border-box; background: #3a3a3a; border: 1px solid #555; color: white; border-radius: 6px; font-family: inherit; }
+    .form-group input:focus, .form-group textarea:focus { border-color: #2196F3; outline: none; }
+    
+    .filter-bar { margin-bottom: 25px; display: flex; gap: 15px; border-bottom: 1px solid #444; padding-bottom: 1px; }
+    .filter-bar a { color: #888; text-decoration: none; padding-bottom: 10px; border-bottom: 3px solid transparent; font-weight: 500; transition: all 0.2s; }
+    .filter-bar a.active { color: #fff; border-bottom: 3px solid #2196F3; }
+    .filter-bar a:hover { color: #ddd; }
+</style>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0; display: flex; align-items: center; gap: 10px;">📩 <span style="font-weight: 300;">Request Management</span></h2>
+</div>
+
+{% if message %}
+<div style="background: linear-gradient(135deg, #198754, #20c997); color: white; padding: 12px 15px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 10px;">
+    <span>✓</span> {{ message }}
+</div>
+{% endif %}
+
+<div class="card" style="padding: 0; background: transparent; box-shadow: none;">
+    <div class="filter-bar">
+        <a href="/admin/requests?status=all" class="{% if status_filter == 'all' %}active{% endif %}">All Requests</a>
+        <a href="/admin/requests?status=pending" class="{% if status_filter == 'pending' %}active{% endif %}">Pending</a>
+        <a href="/admin/requests?status=fulfilled" class="{% if status_filter == 'fulfilled' %}active{% endif %}">Fulfilled</a>
+        <a href="/admin/requests?status=rejected" class="{% if status_filter == 'rejected' %}active{% endif %}">Rejected</a>
+    </div>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 15%;">Date</th>
+                    <th style="width: 20%;">User</th>
+                    <th>Request Content</th>
+                    <th style="width: 10%;">Status</th>
+                    <th style="width: 25%;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for req in requests %}
+                <tr>
+                    <td>
+                        <div style="color: #fff; font-weight: 500;">{{ req.request_date.strftime('%Y-%m-%d') }}</div>
+                        <small style="color: #888;">{{ req.request_date.strftime('%H:%M') }}</small>
+                    </td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="width: 30px; height: 30px; background: #444; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff;">
+                                {{ req.user_name[0] | upper }}
+                            </div>
+                            <div>
+                                <div style="font-weight: 500;">{{ req.user_name }}</div>
+                                <small style="color: #888; font-family: monospace;">{{ req.user_id }}</small>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="white-space: normal;">
+                        <div style="font-weight: 500; color: #fff; margin-bottom: 5px;">{{ req.content }}</div>
+                        <a href="https://t.me/moovidexrobot?start=Search_{{ req.content | replace(' ', '_') }}" 
+                           target="_blank" 
+                           class="action-btn" 
+                           style="background-color: #17a2b8; font-size: 0.75rem; padding: 4px 8px; display: inline-flex;">
+                           🔍 Search
+                        </a>
+                    </td>
+                    <td>
+                        <span class="status-badge status-{{ req.status }}">
+                            {{ req.status|title }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if req.status == 'pending' %}
+                        <!-- New Action Buttons -->
+                        <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                            <button class="action-btn btn-uploaded" 
+                                data-id="{{ req._id }}" 
+                                data-content="{{ req.content|e }}" 
+                                title="Mark Uploaded"
+                                onclick="openModal('uploaded', this.dataset.id, this.dataset.content)">
+                                ✅ Upload
+                            </button>
+                            <button class="action-btn btn-available" 
+                                data-id="{{ req._id }}" 
+                                data-content="{{ req.content|e }}" 
+                                title="Mark Available"
+                                onclick="openModal('available', this.dataset.id, this.dataset.content)">
+                                📂 Avail
+                            </button>
+                            <button class="action-btn btn-unavailable" 
+                                data-id="{{ req._id }}" 
+                                data-content="{{ req.content|e }}" 
+                                title="Mark Unavailable"
+                                onclick="openModal('unavailable', this.dataset.id, this.dataset.content)">
+                                ❌ Unavail
+                            </button>
+                        </div>
+                        {% else %}
+                        <form action="/admin/requests/action" method="POST" style="display:inline;" onsubmit="return confirm('Permanently delete this request record?');">
+                            <input type="hidden" name="request_id" value="{{ req._id }}">
+                            <input type="hidden" name="action" value="delete">
+                            <button type="submit" class="action-btn btn-delete">
+                                🗑 Delete
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div style="margin-top: 15px; display: flex; justify-content: center; gap: 10px;">
+        {% if page > 1 %}
+        <a href="/admin/requests?page={{ page - 1 }}&status={{ status_filter }}" class="action-btn" style="background: #444;">&laquo; Prev</a>
+        {% endif %}
+        <span style="padding: 5px 10px;">Page {{ page }} of {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a href="/admin/requests?page={{ page + 1 }}&status={{ status_filter }}" class="action-btn" style="background: #444;">Next &raquo;</a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal -->
+<div id="actionModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <h3 id="modalTitle">Process Request</h3>
+        <p id="modalMovie" style="color: #aaa; margin-top: 0;"></p>
+        
+        <form action="/admin/requests/action" method="POST">
+            <input type="hidden" id="modalReqId" name="request_id">
+            <input type="hidden" id="modalAction" name="action">
+            
+            <div class="form-group" id="linkGroup" style="display:none;">
+                <label for="search_link">Search Link (Editable):</label>
+                <input type="text" id="search_link" name="search_link">
+            </div>
+
+            <div class="form-group" id="messageGroup">
+                <label for="message_text">Message to User (Optional):</label>
+                <textarea id="message_text" name="message_text" rows="4"></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="notify" checked> Notify User in PM
+                </label>
+            </div>
+            
+            <div style="text-align: right;">
+                <button type="button" class="action-btn" style="background: #666;" onclick="closeModal()">Cancel</button>
+                <button type="submit" class="action-btn" id="modalSubmitBtn">Confirm</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openModal(action, reqId, content) {
+        document.getElementById('actionModal').style.display = 'block';
+        document.getElementById('modalReqId').value = reqId;
+        document.getElementById('modalAction').value = action;
+        document.getElementById('modalMovie').innerText = 'Requesting: ' + content;
+        
+        const title = document.getElementById('modalTitle');
+        const submitBtn = document.getElementById('modalSubmitBtn');
+        const textarea = document.getElementById('message_text');
+        const linkInput = document.getElementById('search_link');
+        const linkGroup = document.getElementById('linkGroup');
+        const msgGroup = document.getElementById('messageGroup');
+        
+        // Reset defaults
+        linkGroup.style.display = 'none';
+        msgGroup.style.display = 'block';
+        submitBtn.className = 'action-btn'; // reset class
+        
+        // Sanitize content for URL
+        const safeContent = content.replace(/[^a-zA-Z0-9]/g, '_');
+        const defaultLink = `https://t.me/moovidexrobot?start=Search_${safeContent}`;
+
+        if (action === 'uploaded') {
+            title.innerText = '✅ Mark as Uploaded';
+            submitBtn.innerText = 'Notify & Update';
+            submitBtn.style.backgroundColor = '#2196F3';
+            textarea.placeholder = 'Optional custom message...';
+            
+            linkGroup.style.display = 'block';
+            linkInput.value = defaultLink;
+            
+        } else if (action === 'available') {
+            title.innerText = '📂 Mark as Available';
+            submitBtn.innerText = 'Notify & Update';
+            submitBtn.style.backgroundColor = '#4CAF50';
+            textarea.placeholder = 'Optional custom message...';
+            
+            linkGroup.style.display = 'block';
+            linkInput.value = defaultLink;
+
+        } else if (action === 'unavailable') {
+            title.innerText = '❌ Mark as Unavailable';
+            submitBtn.innerText = 'Reject Request';
+            submitBtn.style.backgroundColor = '#f44336';
+            textarea.placeholder = 'Reason (e.g., Not released yet)...';
+            linkGroup.style.display = 'none';
+        }
+    }
+    
+    function closeModal() {
+        document.getElementById('actionModal').style.display = 'none';
+    }
+    
+    // Close modal if clicked outside
+    window.onclick = function(event) {
+        if (event.target == document.getElementById('actionModal')) {
+            closeModal();
+        }
+    }
+</script>
+
+{% endblock %}

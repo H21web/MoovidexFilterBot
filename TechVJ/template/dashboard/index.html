@@ -94,7 +94,6 @@
 <script>
     const chartLabels = JSON.parse('{{ no_result_chart_labels|tojson }}');
     const noResultData = JSON.parse('{{ no_result_chart_data|tojson }}');
-    const totalSearchData = JSON.parse('{{ chart_searches_data|tojson }}');
 
     const ctx = document.getElementById('searchChart').getContext('2d');
     const searchChart = new Chart(ctx, {
@@ -102,13 +101,6 @@
         data: {
             labels: chartLabels,
             datasets: [
-                {
-                    label: 'Total Requests',
-                    data: totalSearchData, 
-                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1
-                },
                 {
                     label: 'No Results Found',
                     data: noResultData,

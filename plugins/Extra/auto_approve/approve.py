@@ -43,8 +43,8 @@ async def auto_approve(client, message: ChatJoinRequest):
     if TRY_AGAIN_BTN == True:
         return 
     data = await db.get_msg_command(ap_user_id)
-        
-    if data.split("-", 1)[0] == "VJ":
+
+    if data and data.split("-", 1)[0] == "VJ":
         user_id = int(data.split("-", 1)[1])
         vj = await db.referal_add_user(user_id, message.from_user.id)
         if vj and PREMIUM_AND_REFERAL_MODE == True:
@@ -53,7 +53,7 @@ async def auto_approve(client, message: ChatJoinRequest):
             await client.send_message(chat_id = user_id, text = "<b>{} start the bot with your referral link\n\nTotal Referals - {}</b>".format(message.from_user.mention, num_referrals))
             if num_referrals == REFERAL_COUNT:
                 time = REFERAL_PREMEIUM_TIME       
-                seconds = await get_seconds(time)
+                seconds = get_seconds(time)
                 if seconds > 0:
                     expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
                     user_data = {"id": user_id, "expiry_time": expiry_time} 

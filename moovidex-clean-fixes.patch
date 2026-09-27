@@ -1,0 +1,4221 @@
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/CHANGELOG.md moovidex-fixed/CHANGELOG.md
+--- moovidex-review/CHANGELOG.md	1970-01-01 00:00:00.000000000 +0000
++++ moovidex-fixed/CHANGELOG.md	2026-09-26 16:00:31.295325998 +0000
+@@ -0,0 +1,365 @@
++# MoovidexFilterBot — Audit, Bugfix & Optimization Changelog
++
++- **Repo:** https://github.com/H21web/MoovidexFilterBot (deployed branch `clean`)
++- **Work date:** 2026-09-26
++- **Scope:** full codebase analysis (~15,310 Python lines, ~50 files), bug fixes,
++  safe optimizations, dependency/runtime updates, compile + install verification.
++- **Rules followed:** behavior preserved unless the behavior was a bug; no new
++  features invented; bot never run (needs live Telegram credentials);
++  nothing pushed to GitHub.
++
++Severity legend: **Critical** (crash / data loss / security hole),
++**High** (broken feature, hangs the bot), **Medium** (wrong results, leaks,
++fragile code), **Low** (hygiene, warnings, dead code).
++
++---
++
++## 1. Dependencies & runtime
++
++### requirements.txt — dependency audit (Medium)
++- **Bug:** the file listed packages that are never imported anywhere in the
++  repo (verified by repo-wide import search in both pristine and fixed trees):
++  `bs4` (stub shadow of `beautifulsoup4`), `googletrans`, `speedtest` (wrong
++  package), `PyLeaves`, `NumPy`, `pyshorteners`, `python-dotenv`, `umongo`,
++  `marshmallow`, `apscheduler`, `colorama`, `wheel`, `wget`, `ujson`,
++  `python-decouple`, and `aiofiles` (added to the unused list during this pass —
++  zero imports in pristine or fixed code).
++- **Fix:** removed all unused entries; kept `tgcrypto` (pyrofork's crypto
++  backend, used implicitly) and `dnspython` (required by `pymongo[srv]` for
++  SRV connection strings).
++- **Old → new pins:**
++
++| Package | Old | New |
++|---|---|---|
++| pyrofork | 2.3.24 | 2.3.69 |
++| tgcrypto | 1.2.5 | 1.2.5 |
++| requests | 2.32.3 | 2.34.2 |
++| beautifulsoup4 | 4.12.3 | 4.15.0 |
++| shortzy | 0.0.8 | 0.0.8 |
++| pytz | 2024.1 | 2026.4 |
++| aiohttp | 3.9.5 | 3.14.3 |
++| jinja2 | 3.1.4 | 3.1.6 |
++| hachoir | 3.1.0 | 3.4.0 |
++| pymongo[srv] | 4.7.2 | 4.18.2 |
++| motor | 3.3.2 | 3.7.1 |
++| humanize | 4.9.0 | 4.16.0 |
++| Pillow | 10.3.0 | 12.3.0 |
++| psutil | 5.9.8 | 7.2.2 |
++| dnspython | 2.6.1 | 2.8.0 |
++
++  (Old pins are the values found in the pristine `requirements.txt`; new pins
++  were confirmed published/current on PyPI on 2026-09-26.)
++
++### runtime.txt / Dockerfile — runtime upgrade (Medium)
++- **Bug:** pinned Python 3.10.8 / `python:3.10-slim-bullseye` (old, near EOL).
++- **Fix:** `runtime.txt` → `python-3.12.9`; `Dockerfile` →
++  `python:3.12-slim-bookworm` (image tag verified to exist).
++
++---
++
++## 2. Configuration — info.py (High)
++
++The pristine `info.py` was restored and re-edited surgically (CRLF preserved).
++
++- **Loose/unsafe config parsing:** env values were read with weak fallbacks
++  that silently produced wrong types (e.g. non-boolean strings treated as
++  truthy, malformed ID lists).
++  **Fix:** strict parsing — required values raise a clear error at startup
++  instead of failing mysteriously later; booleans/integers/IDs/ID-lists are
++  validated and normalized.
++- **Admins locked out of auth lists:** `ADMINS` were not automatically part of
++  authorized users.
++  **Fix:** admins are always merged into the authorized-user set.
++- **Bundled API keys:** the file shipped default TMDB and Deepgram keys.
++  **Fix:** defaults removed; keys are only read from the environment.
++  ⚠️ The old keys still exist in the repo's **git history** — rotate them on
++  TMDB/Deepgram; removing them from the working tree does not revoke them.
++- **Payment UPI hardcoded:** **Fix:** now environment-configurable, keeping the
++  deployed fallback value so current payments keep working.
++- Preserved deployed payment wording/plans; restored missing reaction entries.
++
++---
++
++## 3. Core
++
++### bot.py (High)
++- **Path handling:** `logging.config.fileConfig('logging.conf')` depended on the
++  process working directory.
++  **Fix:** resolved from the file's own directory
++  (`Path(__file__).resolve().parent / 'logging.conf'`).
++- **Event loop:** legacy `asyncio.get_event_loop()` usage.
++  **Fix:** `asyncio.run(start())`.
++- **Duplicate `get_me()`:** the bot called `get_me()` twice at startup.
++  **Fix:** single call, reused.
++- **Startup notice crash:** a failure sending the restart notice to
++  `LOG_CHANNEL` was handled with a bare `except` + print.
++  **Fix:** safer handling that never blocks startup.
++- **`AUTH_CHANNEL=None` unsupported:** startup assumed a log/auth channel.
++  **Fix:** `None` is handled gracefully.
++- **HTTP session leak:** the shared aiohttp session was never closed.
++  **Fix:** `close_http_session()` from utils is wired into shutdown.
++- **Missing pyromod:** several plugins used `bot.ask()` / `client.listen()`,
++  but pyromod was never installed → `AttributeError` at runtime.
++  **Fix:** new `TechVJ/util/conversation.py` implements native `ask()`/`listen()`
++  conversation routing; `bot.py` installs it and registers a router at handler
++  group `-1000` so a pending conversation captures the reply before other
++  handlers (raising `StopPropagation`).
++- **Index setup:** `ensure_indexes()` is now awaited at startup; a failure is
++  logged and does not block the bot.
++
++### TechVJ/util/conversation.py (new file)
++- Native replacement for pyromod's `ask`/`listen` used by the rename and
++  other flows. No behavior invented — it restores the calls the code already
++  made.
++
++### TechVJ/bot/clients.py (High)
++- **Crash on failed extra clients:** `dict(clients)` raised `TypeError` when any
++  extra bot token failed to start (`start_client` returns `None` on failure).
++  **Fix (final):** `dict(result for result in clients if result is not None)` —
++  `None` results are filtered *before* tuple unpacking (an earlier draft
++  filtered after unpacking, which still crashed).
++- **Dead flag:** the module set a local `MULTI_CLIENT = True` that nothing read
++  (plugins read `info.MULTI_CLIENT`).
++  **Fix:** writes `info.MULTI_CLIENT = True`; `plugins/route.py` reads
++  `info.MULTI_CLIENT`.
++
++---
++
++## 4. Database layer
++
++### Sync PyMongo inside async code (Critical)
++Multiple database modules called **synchronous** PyMongo inside `async def`
++coroutines, blocking the entire event loop on every DB call:
++`database/connections_mdb.py`, `database/filters_mdb.py`,
++`database/gfilters_mdb.py`, `database/users_chats_db.py`,
++`database/config_db.py`, `database/requests_db.py`, `database/join_reqs.py`,
++`database/stats_db.py`.
++**Fix:** converted to Motor (`AsyncIOMotorClient`); all DB calls awaited.
++
++### database/ia_filterdb.py (High)
++- **Removed API:** `.count()` no longer exists in modern PyMongo/Motor.
++  **Fix:** `count_documents({})`.
++- **Missing awaits / unbound locals / missing-document guards** fixed across
++  query helpers.
++- **Upserts added** to user/chat/config writes to reduce check-then-write races.
++- **Index setup:** safe non-unique index creation in `ensure_indexes()`.
++- **Two-database pagination corrected** (offset math across primary/secondary).
++- **Bad-file search:** regex is now escaped; deletion queries project only the
++  fields they need; new count-only helper `count_bad_files()`.
++- **Single-DB compatibility:** when multi-DB mode is off, `sec_db`/`sec_col`
++  are set to `None` so the unconditional `pm_filter` import cannot crash.
++- **Motor truthiness crash (Critical):** `if MULTIPLE_DATABASE and sec_col:`
++  (5 occurrences) — Motor collections raise `NotImplementedError` on
++  truth-value testing, so multi-DB mode crashed.
++  **Fix:** `... and sec_col is not None`.
++- Deployed typo collection name `uersz` intentionally preserved.
++
++### Other database fixes
++- `database/join_reqs.py`: `_id` queries corrected.
++- `database/requests_db.py`: request-status result reporting fixed.
++- Referral helpers: missing awaits and unbound variables fixed.
++- `database/topdb.py`: removed the dead interactive console loop (it blocked
++  forever waiting on stdin); removed the blank line left at EOF.
++
++---
++
++## 5. Plugins
++
++### plugins/pm_filter.py (Critical/High)
++- **Duplicate `^fl#` handlers:** two handlers with the same pattern both fired
++  on every quality/homepage callback; the second referenced an undefined `lang`
++  → `NameError`.
++  **Fix:** merged into one `filter_fl_cb_handler` with malformed-data and
++  expired-search checks, ownership check, no-results answer, and a final
++  callback answer (no hanging spinners). `QUALITY_MAP` (line 56) verified to
++  exist.
++- **Undefined name:** `BUTTON0` → `BUTTONS0`.
++- **Dead code in `backcb`:** referenced undefined `languages`, `lang`, `key`.
++  **Fix:** removed.
++- **Spell-check callbacks:** no validation of callback structure, user ID,
++  session, or movie index.
++  **Fix:** structural/user validation, missing reply/session handling, index
++  bounds check.
++- **Alert callbacks (`gfilteralert`, `alertmessage`):** `alerts[int(i)]` raised
++  `ValueError`/`IndexError` on crafted callbacks; `ast.literal_eval` unguarded.
++  **Fix:** index parsed and bounds-checked; eval wrapped; user-facing error
++  answers.
++- **Secondary-DB guards:** `sec_col is not None` checks added to deletion/stats
++  paths; `unpack_new_file_id` single-return-value misuse fixed (see
++  files_delete).
++- Exact `^languages#` vs broad `^languages` duplicate handlers noted for
++  follow-up consolidation (both still present; the broad one no longer crashes).
++
++### plugins/commands.py (High)
++- **`unpack_new_file_id` misuse:** `file_id, file_ref = unpack_new_file_id(...)`
++  but the helper returns one value → `ValueError`.
++  **Fix:** single assignment.
++- **Missing awaits** on Motor delete/drop calls; secondary-DB guards added.
++- **Event-loop blocking (High):** 8 sites did `await asyncio.sleep(300–1200)`
++  inside handlers (10/20-min autodeletes), freezing the handler (and, for the
++  sequential paths, delaying everything behind it).
++  **Fix:** new `schedule_autodelete()` helper + a task-reference set; all 8
++  sleeps converted to fire-and-forget background tasks preserving each path's
++  exact behavior (delete media, edit the notice, or both). Verified: 0 long
++  sleeps remain, 8 `schedule_autodelete` call sites.
++
++### plugins/files_delete.py (High)
++- Same `unpack_new_file_id` tuple-unpack fix; missing awaits added;
++  `sec_col is not None` guards.
++
++### plugins/dashboard.py (High/Critical)
++- **Session forgery (Critical):** login set a client-side `admin_auth=true`
++  cookie — anyone could forge it.
++  **Fix:** random server-side session tokens with expiry; logout destroys the
++  token; cookies are `HttpOnly` + `SameSite=Lax`.
++- **XSS:** dashboard Jinja environment had autoescape off.
++  **Fix:** HTML autoescape enabled.
++- **Info leak:** the dashboard home returned tracebacks to visitors.
++  **Fix:** logs server-side, returns generic 500.
++- **Open redirect-ish:** request-action redirect messages now URL-encoded.
++- **Broadcast:** bounded FloodWait retries.
++- File deletion awaits Motor calls and guards `sec_col`.
++
++### plugins/index.py (High)
++- **FloodWait resume never resumed:** the restructured loop slept on FloodWait
++  but then hit an unconditional `break`.
++  **Fix:** `continue` after the capped sleep (max 300 s), resuming at the
++  preserved message offset; aborts cleanly with a user message after 10
++  consecutive FloodWaits instead of hanging forever.
++- **SyntaxWarning:** invalid escape in the t.me link regex → raw string
++  (identical semantics).
++
++### plugins/route.py (High)
++- **Duplicate handler name:** two `stream_handler` functions; the second
++  silently overwrote the first.
++  **Fix:** renamed to `download_handler`.
++- **Header injection (High):** `file_name` (untrusted) was interpolated into
++  `Content-Disposition`.
++  **Fix:** strips `"`, CR, LF (verified by micro-test).
++- Reads the real `info.MULTI_CLIENT` flag.
++
++### TechVJ/util/render_template.py + templates (High/Critical)
++- **Full self-download for size:** the page did `s.get(src)` downloading the
++  whole file to read `Content-Length`.
++  **Fix:** `HEAD` request with `file_data.file_size` fallback.
++- **TMDB key leak (High):** the API key was injected into the public page
++  render. **Fix:** no longer passed; `req.html` no longer references it
++  (client-side TMDB code falls back to the default poster).
++- **XSS (High):** Jinja autoescape enabled on both templates; JS string
++  contexts (`FileName`, `botUrl`) now use `|tojson`.
++- **Broken watch page (Critical, found during verification):** `req.html`
++  contained `FileName.includes("{{")` in three places — Jinja tried to parse
++  the literal `{{` and raised `TemplateSyntaxError` on **every** video/audio
++  page render (pristine repo included: the deployed watch page was broken).
++  **Fix:** `"{" + "{"` keeps the runtime "was the variable substituted?" check
++  without breaking the parser. Verified: template now compiles and renders.
++- `dl.html`: dead `%s` placeholders converted to real Jinja variables; the
++  download link is now quoted.
++
++### plugins/Extra/rename/cb_data.py (High)
++- **Callback hijack:** `filters.regex('cancel')` matched any callback
++  *containing* "cancel" (e.g. `delallcancel`).
++  **Fix:** anchored `r'^cancel$'`.
++- **Path traversal (High):** the new file name was used raw in
++  `f"downloads/{new_filename}"`.
++  **Fix:** `basename`, rejects empty/`.`/`..`, confined to `downloads/`.
++- **Discarded resize:** `img.resize((320, 320))` result thrown away.
++  **Fix:** `img = img.resize((320, 320))`.
++- `await ms.edit(e)` with an exception object → `str(e)`.
++
++### plugins/Extra/rename/filedetect.py (High)
++- **NameError on every call:** `out_filename` used before assignment; the
++  extension branch never ran.
++  **Fix:** output name is built first, then the picker is shown.
++
++### plugins/Extra/paste.py (Medium)
++- No-input path fell through and crashed (`message_s` unbound).
++  **Fix:** replies and returns.
++- Downloaded reply documents were left on disk on some paths.
++  **Fix:** `try/finally` removes the temp file.
++- Paste-service error responses unhandled → `KeyError`.
++  **Fix:** checks `"error"` in the response.
++
++### plugins/Extra/ott.py (Medium)
++- `int(...)` / list index on callback data unguarded → crash on crafted taps.
++  **Fix:** `try/except (ValueError, IndexError)` with user alert.
++- Next/previous/back/close buttons lacked ownership checks — any user could
++  drive another user's menu.
++  **Fix:** `user_id` ownership enforced; cache entry cleared on close;
++  callbacks always answered.
++
++### plugins/Extra/approve.py (Medium)
++- `data.split(...)` when `data` is `None` → `AttributeError`.
++  **Fix:** `if data and ...`.
++- `await get_seconds(time)` — `get_seconds` is sync.
++  **Fix:** dropped the `await`.
++
++### plugins/Extra/binged.py & upcoming.py (Medium)
++- **Hardcoded personal admin IDs** `[1011394081, 7191327005]` and channel ID.
++  **Fix:** `BINGED_ADMIN_IDS` env list, defaulting to configured `ADMINS`;
++  `UPDATE_CHANNEL_ID` env-configurable with the deployed channel as fallback.
++  No personal IDs remain in the repo.
++- **Dead "Edit & Post" button:** its callback had no handler (would have been a
++  new feature to implement).
++  **Fix:** button removed, noted in code.
++
++### utils.py (High/Medium)
++- Async HTTP helpers with bounded retries; shortlink code no longer disables
++  TLS verification; premium/direct-file edge cases fixed; caption/signature
++  builders fixed; string-list parsing fixed; timezone handling fixed
++  (`Asia/Kolkata`); replaced `print` debugging with logging.
++
++### Script.py (Low)
++- Fixed a split `</code>` tag in help text, `message` → `query` in the
++  results template, and a Kannada info block referencing
++  `message.from_user` in a callback context.
++
++---
++
++## 6. Behavior changes (deliberate, bug-driven)
++
++1. Flood-hit extra bot tokens are skipped instead of crashing startup
++   (`TechVJ/bot/clients.py`).
++2. `info.py` fails fast on invalid config instead of running misconfigured.
++3. Long autodeletes (5–20 min) now run as background tasks; the command handler
++   returns immediately. The deletion/notice outcome is unchanged.
++4. Indexing resumes after FloodWait (capped 300 s sleeps) instead of dying;
++   aborts with a message after 10 consecutive FloodWaits.
++5. Dashboard requires a server-side session — old forged `admin_auth=true`
++   cookies stop working.
++6. The "Edit & Post" button in upcoming-movie details was removed (it never
++   worked — no handler existed).
++7. Stream pages no longer receive the TMDB API key (poster falls back to the
++   default image).
++8. `aiofiles` dropped from requirements (never imported).
++
++---
++
++## 7. Verification outcomes (2026-09-26)
++
++| Check | Result |
++|---|---|
++| `python -m compileall` (whole repo, Python 3.12) | ✅ PASS (one pre-existing `SyntaxWarning` in `plugins/index.py` fixed via raw string) |
++| Clean Python 3.12 venv + `pip install -r requirements.txt` | ✅ PASS — all 15 pinned packages + deps installed, incl. building `tgcrypto` |
++| `git diff --check` | ✅ PASS (repo-local `core.whitespace=cr-at-eol` set; repo is CRLF throughout) |
++| Full diff review | ✅ done — 33 files, +1128/−999, all hunks reviewed |
++| Pristine comparison | ✅ `~/workspace/moovidex-review` (branch `clean`, untouched) used as baseline |
++| Filename header sanitizer | ✅ micro-test: `"`, CR, LF stripped |
++| `tojson` XSS test | ✅ `Evil"</script><script>alert(1)</script>` safely escaped |
++| `req.html` Jinja parse | ✅ previously raised `TemplateSyntaxError`; now compiles and renders |
++| `info.py` config check | ✅ dummy-env import passed (earlier pass) |
++| Live bot run / Telegram | ⛔ not done by design (needs real credentials) |
++| GitHub push | ⛔ not done — working copy only, per instructions |
++
++## 8. Follow-ups for the deployer (Hari)
++
++1. **Rotate the old TMDB and Deepgram keys** — they are in the branch's git
++   history; removing them from the working tree does not revoke them.
++2. Set the new environment variables the code now supports: payment UPI,
++   `BINGED_ADMIN_IDS`, `UPDATE_CHANNEL_ID`.
++3. The exact `^languages#` vs broad `^languages` callback handlers in
++   `plugins/pm_filter.py` are both still registered — consider consolidating.
++4. Stream range/mid-stream error paths were hardened for headers but not
++   load-tested (no live run possible here).
++5. `database/topdb.py`'s dead console loop was removed; if any ops runbook
++   invoked it, that path is gone.
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/Dockerfile moovidex-fixed/Dockerfile
+--- moovidex-review/Dockerfile	2026-09-26 15:31:25.058332895 +0000
++++ moovidex-fixed/Dockerfile	2026-09-26 15:37:42.481120093 +0000
+@@ -1,5 +1,5 @@
+-# Use a more recent Python base image
+-FROM python:3.10-slim-bullseye
++# Python 3.12 on Debian bookworm (verified image tag)
++FROM python:3.12-slim-bookworm
+ 
+ # Install system dependencies including ffmpeg
+ RUN apt-get update && apt-get upgrade -y && \
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/Script.py moovidex-fixed/Script.py
+--- moovidex-review/Script.py	2026-09-26 15:31:25.060442627 +0000
++++ moovidex-fixed/Script.py	2026-09-26 15:57:41.305387199 +0000
+@@ -115,8 +115,7 @@
+   
+  <b>✯ Join here : <a href={}>Update Channel</a></b> 
+   
+- ./id - <code>ɢᴇᴛ ɪᴅ ᴏꜰ ᴀ ꜱᴘᴇᴄɪꜰɪᴇᴅ ᴜꜱᴇʀ.</ 
+- code> 
++ ./id - <code>ɢᴇᴛ ɪᴅ ᴏꜰ ᴀ ꜱᴘᴇᴄɪꜰɪᴇᴅ ᴜꜱᴇʀ.</code>
+   
+  ./info  - <code>ɢᴇᴛ ɪɴꜰᴏʀᴍᴀᴛɪᴏɴ ᴀʙᴏᴜᴛ ᴀ ᴜꜱᴇʀ.</code> 
+   
+@@ -295,7 +294,7 @@
+ 🎭 <b>Genre: </b>{genres}
+ 
+ <blockquote>⏱️ Results shown in: {remaining_seconds} <i>seconds</i> 
+-🐱 Requested by : {message.from_user.mention}</b></blockquote>
++🐱 Requested by : {query.from_user.mention}</b></blockquote>
+ 
+ """
+     
+@@ -711,7 +710,7 @@
+ તેમજ તમારી ટીમ વિડિયો કલેક્શનની તાલીમ આપશે..."""
+ 
+     KANNADA_INFO = """
+-ಹೇ {message.from_user.mention}
++ಹೇ <a href='tg://settings'>ᴍʏ ғʀɪᴇɴᴅ</a>
+ 
+  ಈಗ ನೀವು ಟೆಲಿಗ್ರಾಮ್‌ನಲ್ಲಿಯೂ ಹಣ ಗಳಿಸಬಹುದು.
+ 
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/TechVJ/bot/clients.py moovidex-fixed/TechVJ/bot/clients.py
+--- moovidex-review/TechVJ/bot/clients.py	2026-09-26 15:31:25.060728507 +0000
++++ moovidex-fixed/TechVJ/bot/clients.py	2026-09-26 15:58:16.176119584 +0000
+@@ -4,6 +4,7 @@
+ 
+ import asyncio
+ import logging
++import info
+ from info import *
+ from pyrogram import Client
+ from TechVJ.util.config_parser import TokenParser
+@@ -39,9 +40,9 @@
+             logging.error(f"Failed starting Client - {client_id} Error:", exc_info=True)
+     
+     clients = await asyncio.gather(*[start_client(i, token) for i, token in all_tokens.items()])
+-    multi_clients.update(dict(clients))
++    multi_clients.update(dict(result for result in clients if result is not None))
+     if len(multi_clients) != 1:
+-        MULTI_CLIENT = True
++        info.MULTI_CLIENT = True
+         print("Multi-Client Mode Enabled")
+     else:
+         print("No additional clients were initialized, using default client")
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/TechVJ/template/dl.html moovidex-fixed/TechVJ/template/dl.html
+--- moovidex-review/TechVJ/template/dl.html	2026-09-26 15:31:25.061987777 +0000
++++ moovidex-fixed/TechVJ/template/dl.html	2026-09-26 15:51:34.364882645 +0000
+@@ -6,7 +6,7 @@
+     <meta property="og:image" content="https://i.ibb.co/M8S0Zzj/live-streaming.png" itemprop="thumbnailUrl">
+     <meta http-equiv="X-UA-Compatible" content="IE=edge">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-    <title>%s</title>
++    <title>{{ file_name }}</title>
+     <link rel="stylesheet" type='text/css' href="https://adarsh-goel.github.io/resources/style.css">
+     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Raleway">
+     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Delius">
+@@ -18,17 +18,17 @@
+     <header>
+         <div class="toogle"></div>
+         <div id="file-name" class="cyber">
+-		<marquee direction = "left"> %s</marquee>
++		<marquee direction = "left"> {{ file_name }}</marquee>
+         </div>
+     </header>
+ 
+     <div class="container">
+-        <a href=%s>
++        <a href="{{ file_url }}">
+             <button class="cybr-btn">
+                 Download
+                 <span aria-hidden>_</span>
+                 <span aria-hidden class="cybr-btn__glitch">_404 Error</span>
+-                <span aria-hidden class="cybr-btn__tag">_%s</span>
++                <span aria-hidden class="cybr-btn__tag">_{{ file_size }}</span>
+             </button>
+         </a>
+     </div>
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/TechVJ/template/req.html moovidex-fixed/TechVJ/template/req.html
+--- moovidex-review/TechVJ/template/req.html	2026-09-26 15:31:25.062086055 +0000
++++ moovidex-fixed/TechVJ/template/req.html	2026-09-26 15:59:38.325819463 +0000
+@@ -236,12 +236,12 @@
+ 
+ <script>
+     const defaultImageUrl = "https://h21web.github.io/host/assets/images/folder.png";
+-    const tmdbKey = "{{ tmdb_api_key }}";
+-    const botUrl = "{{ bot_url }}";
++    const tmdbKey = ""; // no API key is passed to this template; the poster fallback below applies
++    const botUrl = {{ bot_url|tojson }};
+ 
+     // Safe URL details extraction with error handling
+     let downloadlink = "";
+-    let FileName = "{{ file_name }}"; // Use template variable as primary source
++    let FileName = {{ file_name|tojson }}; // Use template variable as primary source
+     
+     try {
+         const videoLink = window.location.href;
+@@ -254,7 +254,7 @@
+         const urlFileName = pathnameParts.length > 3 ? pathnameParts[3] : FileName;
+         
+         // Use URL filename if template variable is not rendered
+-        if (!FileName || FileName.includes("{{")) {
++        if (!FileName || FileName.includes("{" + "{")) {
+             FileName = decodeURIComponent(urlFileName);
+         }
+ 
+@@ -290,7 +290,7 @@
+ 
+     // Robust Poster Fetch using TMDB with Enhanced Error Handling
+     function fetchPoster(rawFilename, callback) {
+-        if (!tmdbKey || tmdbKey === "None" || tmdbKey.includes("{{")) {
++        if (!tmdbKey || tmdbKey === "None" || tmdbKey.includes("{" + "{")) {
+             console.log("No TMDB Key available, using default poster.");
+             callback(defaultImageUrl);
+             return;
+@@ -443,7 +443,7 @@
+     }
+       
+     function openTG() {
+-        if(botUrl && botUrl !== "None" && !botUrl.includes("{{")) {
++        if(botUrl && botUrl !== "None" && !botUrl.includes("{" + "{")) {
+              const url = botUrl.startsWith("http") ? botUrl : "https://" + botUrl;
+              window.open(url, '_blank');
+         } else {
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/TechVJ/util/conversation.py moovidex-fixed/TechVJ/util/conversation.py
+--- moovidex-review/TechVJ/util/conversation.py	1970-01-01 00:00:00.000000000 +0000
++++ moovidex-fixed/TechVJ/util/conversation.py	2026-09-26 15:38:29.500331218 +0000
+@@ -0,0 +1,94 @@
++"""Minimal conversation (ask/listen) helper for pyrofork.
++
++Several plugins call ``client.ask(...)`` / ``bot.ask(...)`` / ``client.listen(...)``,
++but the pyromod package that provides those methods was never installed, so every
++one of those calls raised ``AttributeError`` at runtime. Installing the real
++pyromod is not safe here: it declares a hard dependency on the ``pyrogram``
++distribution, which pip would install *over* pyrofork (both ship the top-level
++``pyrogram`` package), breaking the bot.
++
++This module provides a small dependency-free equivalent with the same call
++signatures, patched onto :class:`pyrogram.Client` by :func:`install`:
++
++* ``await client.ask(chat_id, text=None, timeout=None, **kwargs)`` — optionally
++  sends ``text`` to ``chat_id``, then waits for the next message in that chat.
++* ``await client.listen(user_id, timeout=None)`` — waits for the next message
++  from ``user_id`` (in any chat).
++
++A dispatcher-level router (registered by the caller, see ``bot.py``) delivers a
++matching message to the oldest pending waiter and stops further propagation,
++which mirrors pyromod closely enough for the admin-only flows that use it.
++"""
++
++import asyncio
++from collections import defaultdict
++
++from pyrogram import Client
++
++# key -> list of futures waiting, oldest first.
++# Keys are ("chat", chat_id) for ask() and ("user", user_id) for listen().
++_pending = defaultdict(list)
++
++
++def match_listener(message):
++    """Return the pending-listener key this message satisfies, if any."""
++    chat = getattr(message, "chat", None)
++    if chat is not None:
++        key = ("chat", chat.id)
++        if _pending.get(key):
++            return key
++    user = getattr(message, "from_user", None)
++    if user is not None:
++        key = ("user", user.id)
++        if _pending.get(key):
++            return key
++    return None
++
++
++async def deliver(message):
++    """Hand ``message`` to the oldest matching waiter. Returns True if claimed."""
++    key = match_listener(message)
++    if key is None:
++        return False
++    waiters = _pending.get(key)
++    if not waiters:
++        return False
++    fut = waiters.pop(0)
++    if not fut.done():
++        fut.set_result(message)
++    return True
++
++
++async def _wait(key, timeout):
++    loop = asyncio.get_running_loop()
++    fut = loop.create_future()
++    _pending[key].append(fut)
++    try:
++        if timeout:
++            return await asyncio.wait_for(fut, timeout)
++        return await fut
++    finally:
++        try:
++            _pending[key].remove(fut)
++        except ValueError:
++            pass
++
++
++async def _ask(self, chat_id, text=None, timeout=None, **kwargs):
++    if text is not None:
++        await self.send_message(chat_id, text, **kwargs)
++    return await _wait(("chat", chat_id), timeout)
++
++
++async def _listen(self, user_id, timeout=None):
++    return await _wait(("user", user_id), timeout)
++
++
++def install():
++    """Patch :class:`pyrogram.Client` with ``ask``/``listen``.
++
++    Returns the ``deliver`` coroutine for the dispatcher router.
++    """
++    Client.ask = _ask
++    Client.listen = _listen
++    return deliver
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/TechVJ/util/render_template.py moovidex-fixed/TechVJ/util/render_template.py
+--- moovidex-review/TechVJ/util/render_template.py	2026-09-26 15:31:25.062865325 +0000
++++ moovidex-fixed/TechVJ/util/render_template.py	2026-09-26 15:52:00.022206088 +0000
+@@ -30,11 +30,13 @@
+     else:
+         template_file = "TechVJ/template/dl.html"
+         async with aiohttp.ClientSession() as s:
+-            async with s.get(src) as u:
+-                file_size = humanbytes(int(u.headers.get("Content-Length")))
++            async with s.head(src) as u:
++                file_size = humanbytes(int(u.headers.get("Content-Length", file_data.file_size)))
+ 
+     with open(template_file) as f:
+-        template = jinja2.Template(f.read())
++        # autoescape: file names are untrusted user-controlled data rendered
++        # into HTML and JS string contexts.
++        template = jinja2.Template(f.read(), autoescape=True)
+ 
+     file_name = file_data.file_name.replace("_", " ")
+ 
+@@ -44,5 +46,4 @@
+         file_size=file_size,
+         file_unique_id=file_data.unique_id,
+         bot_url=f"https://t.me/{temp.U_NAME}" if temp.U_NAME else "https://t.me/moovidexrobot",
+-        tmdb_api_key=TMDB_API_KEY
+     )
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/bot.py moovidex-fixed/bot.py
+--- moovidex-review/bot.py	2026-09-26 15:31:25.063523062 +0000
++++ moovidex-fixed/bot.py	2026-09-26 15:56:30.946278120 +0000
+@@ -4,22 +4,33 @@
+ 
+ # Clone Code Credit : YT - @Tech_VJ / TG - @VJ_Bots / GitHub - @VJBots
+ 
+-import sys, glob, importlib, logging, logging.config, pytz, asyncio
++import asyncio
++import logging
++import logging.config
+ from pathlib import Path
+ 
+-# Get logging configurations
+-logging.config.fileConfig('logging.conf')
++import pytz
++
++# Get logging configurations (resolved from this file, not the CWD)
++logging.config.fileConfig(Path(__file__).resolve().parent / 'logging.conf')
+ logging.getLogger().setLevel(logging.INFO)
+ logging.getLogger("pyrogram").setLevel(logging.ERROR)
+-logging.getLogger("cinemagoer").setLevel(logging.ERROR)
+ 
+-from pyrogram import Client, idle
++from pyrogram import filters, idle, StopPropagation
++from pyrogram.errors import (
++    ChannelPrivate,
++    ChatAdminRequired,
++    ChatWriteForbidden,
++    PeerIdInvalid,
++)
++from pyrogram.handlers import MessageHandler
++
+ from database.users_chats_db import db
++from database.ia_filterdb import ensure_indexes
+ from info import *
+-from utils import temp
+-from typing import Union, Optional, AsyncGenerator
+-from Script import script 
+-from datetime import date, datetime 
++from utils import temp, close_http_session
++from Script import script
++from datetime import date, datetime
+ from aiohttp import web
+ from plugins import web_server
+ 
+@@ -27,22 +38,43 @@
+ from TechVJ.bot import TechVJBot
+ from TechVJ.util.keepalive import ping_server
+ from TechVJ.bot.clients import initialize_clients
++from TechVJ.util.conversation import install as install_conversation, match_listener
+ 
+-loop = asyncio.get_event_loop()
++# Native ask()/listen() support (pyromod was never installed; see
++# TechVJ/util/conversation.py). Registered at the earliest handler group so a
++# pending conversation captures the reply before other handlers see it.
++_conversation_deliver = install_conversation()
++
++
++async def _conversation_router(client, message):
++    if await _conversation_deliver(message):
++        raise StopPropagation
++
++
++TechVJBot.add_handler(
++    MessageHandler(
++        _conversation_router,
++        filters.create(lambda _, __, m: match_listener(m) is not None),
++    ),
++    group=-1000,
++)
+ 
+ 
+ async def start():
+     print('\n')
+     print('Initalizing Your Bot')
+     await TechVJBot.start()
+-    bot_info = await TechVJBot.get_me()
++    me = await TechVJBot.get_me()
++    try:
++        await ensure_indexes()
++    except Exception as e:
++        logging.warning("Index setup skipped: %s", e)
+     await initialize_clients()
+     if ON_HEROKU:
+         asyncio.create_task(ping_server())
+     b_users, b_chats = await db.get_banned()
+     temp.BANNED_USERS = b_users
+     temp.BANNED_CHATS = b_chats
+-    me = await TechVJBot.get_me()
+     temp.BOT = TechVJBot
+     temp.ME = me.id
+     temp.U_NAME = me.username
+@@ -54,30 +86,36 @@
+     time = now.strftime("%H:%M:%S %p")
+     try:
+         await TechVJBot.send_message(chat_id=LOG_CHANNEL, text=script.RESTART_TXT.format(today, time))
+-    except:
+-        print("Make Your Bot Admin In Log Channel With Full Rights")
++    except (PeerIdInvalid, ChannelPrivate, ChatWriteForbidden) as e:
++        logging.error("Could not send restart notice to LOG_CHANNEL %s: %s. "
++                      "Make the bot an admin in the log channel with full rights.", LOG_CHANNEL, e)
+     for ch in CHANNELS:
+         try:
+             k = await TechVJBot.send_message(chat_id=ch, text="**Bot Restarted**")
+             await k.delete()
+-        except:
+-            print("Make Your Bot Admin In File Channels With Full Rights")
+-    try:
+-        k = await TechVJBot.send_message(chat_id=AUTH_CHANNEL, text="**Bot Restarted**")
+-        await k.delete()
+-    except:
+-        print("Make Your Bot Admin In Force Subscribe Channel With Full Rights")
++        except (PeerIdInvalid, ChannelPrivate, ChatAdminRequired, ChatWriteForbidden) as e:
++            logging.error("Could not post restart notice in file channel %s: %s. "
++                          "Make the bot an admin there with full rights.", ch, e)
++    if AUTH_CHANNEL is not None:
++        try:
++            k = await TechVJBot.send_message(chat_id=AUTH_CHANNEL, text="**Bot Restarted**")
++            await k.delete()
++        except (PeerIdInvalid, ChannelPrivate, ChatAdminRequired, ChatWriteForbidden) as e:
++            logging.error("Could not post restart notice in AUTH_CHANNEL %s: %s. "
++                          "Make the bot an admin there with full rights.", AUTH_CHANNEL, e)
+ 
+     app = web.AppRunner(await web_server())
+     await app.setup()
+     bind_address = "0.0.0.0"
+     await web.TCPSite(app, bind_address, PORT).start()
+-    await idle()
++    try:
++        await idle()
++    finally:
++        await close_http_session()
+ 
+ 
+ if __name__ == '__main__':
+     try:
+-        loop.run_until_complete(start())
++        asyncio.run(start())
+     except KeyboardInterrupt:
+         logging.info('Service Stopped Bye 👋')
+-
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/database/config_db.py moovidex-fixed/database/config_db.py
+--- moovidex-review/database/config_db.py	2026-09-26 15:31:25.064056513 +0000
++++ moovidex-fixed/database/config_db.py	2026-09-26 15:43:46.457350845 +0000
+@@ -67,11 +67,18 @@
+         }
+     
+     
++    async def _ensure_configuration(self):
++        # Atomically create the default config doc if none exists. The old
++        # read-then-insert raced and could duplicate the singleton doc.
++        await self.config_col.update_one(
++            {},
++            {'$setOnInsert': self.create_configuration_data()},
++            upsert=True,
++        )
++        return await self.config_col.find_one({})
++
+     async def update_advirtisment(self, ads_string=None, ads_name=None, expiry=None, impression=None):
+-        config = await self.config_col.find_one({})
+-        if not config:
+-            await self.config_col.insert_one(self.create_configuration_data())
+-            config = await self.config_col.find_one({})
++        config = await self._ensure_configuration()
+ 
+         advertisement = config.get('advertisement')
+ 
+@@ -92,10 +99,7 @@
+         await self.config_col.update_one({}, {'$set': {'advertisement.impression_count': impression}}, upsert=True)
+ 
+     async def get_advirtisment(self):
+-        configuration = await self.config_col.find_one({})
+-        if not configuration:
+-            await self.config_col.insert_one(self.create_configuration_data())
+-            configuration = await self.config_col.find_one({})
++        configuration = await self._ensure_configuration()
+         advertisement = configuration.get('advertisement', False)
+         if advertisement:
+             return advertisement.get('ads_string'), advertisement.get('ads_name'), advertisement.get('impression_count')
+@@ -120,10 +124,7 @@
+             print(f"An error occurred: {e}")
+ 
+     async def get_configuration_value(self, key):
+-        configuration = await self.config_col.find_one({})
+-        if not configuration:
+-            await self.config_col.insert_one(self.create_configuration_data())
+-            configuration = await self.config_col.find_one({})
++        configuration = await self._ensure_configuration()
+         return configuration.get(key, False)
+ 
+ 
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/database/connections_mdb.py moovidex-fixed/database/connections_mdb.py
+--- moovidex-review/database/connections_mdb.py	2026-09-26 15:31:25.064221621 +0000
++++ moovidex-fixed/database/connections_mdb.py	2026-09-26 15:42:08.118295061 +0000
+@@ -2,7 +2,7 @@
+ # Subscribe YouTube Channel For Amazing Bot @Tech_VJ
+ # Ask Doubt on telegram @KingVJ01
+ 
+-import pymongo
++import motor.motor_asyncio
+ 
+ from info import OTHER_DB_URI, DATABASE_NAME
+ 
+@@ -10,127 +10,129 @@
+ logger = logging.getLogger(__name__)
+ logger.setLevel(logging.ERROR)
+ 
+-myclient = pymongo.MongoClient(OTHER_DB_URI)
++# Motor (async) client: the old synchronous PyMongo client blocked the event
++# loop inside every `async def` here.
++myclient = motor.motor_asyncio.AsyncIOMotorClient(OTHER_DB_URI)
+ mydb = myclient[DATABASE_NAME]
+-mycol = mydb['CONNECTION'] 
++mycol = mydb['CONNECTION']
++
+ 
+ async def add_connection(group_id, user_id):
+-    query = mycol.find_one(
+-        { "_id": user_id },
+-        { "_id": 0, "active_group": 0 }
++    query = await mycol.find_one(
++        {"_id": user_id},
++        {"_id": 0, "active_group": 0}
+     )
+     if query is not None:
+-        group_ids = [x["group_id"] for x in query["group_details"]]
++        group_ids = [x["group_id"] for x in query.get("group_details", [])]
+         if group_id in group_ids:
+             return False
+ 
+     group_details = {
+-        "group_id" : group_id
++        "group_id": group_id
+     }
+ 
+     data = {
+         '_id': user_id,
+-        'group_details' : [group_details],
+-        'active_group' : group_id,
++        'group_details': [group_details],
++        'active_group': group_id,
+     }
+ 
+-    if mycol.count_documents( {"_id": user_id} ) == 0:
++    if await mycol.count_documents({"_id": user_id}) == 0:
+         try:
+-            mycol.insert_one(data)
++            await mycol.insert_one(data)
+             return True
+-        except:
+-            logger.exception('Some error occurred!', exc_info=True)
+-
++        except Exception:
++            logger.exception('Some error occurred!')
++            return False
+     else:
+         try:
+-            mycol.update_one(
++            await mycol.update_one(
+                 {'_id': user_id},
+                 {
+                     "$push": {"group_details": group_details},
+-                    "$set": {"active_group" : group_id}
++                    "$set": {"active_group": group_id}
+                 }
+             )
+             return True
+-        except:
+-            logger.exception('Some error occurred!', exc_info=True)
++        except Exception:
++            logger.exception('Some error occurred!')
++            return False
+ 
+-        
+-async def active_connection(user_id):
+ 
+-    query = mycol.find_one(
+-        { "_id": user_id },
+-        { "_id": 0, "group_details": 0 }
++async def active_connection(user_id):
++    query = await mycol.find_one(
++        {"_id": user_id},
++        {"_id": 0, "group_details": 0}
+     )
+     if not query:
+         return None
+ 
+-    group_id = query['active_group']
+-    return int(group_id) if group_id != None else None
++    group_id = query.get('active_group')
++    return int(group_id) if group_id is not None else None
+ 
+ 
+ async def all_connections(user_id):
+-    query = mycol.find_one(
+-        { "_id": user_id },
+-        { "_id": 0, "active_group": 0 }
++    query = await mycol.find_one(
++        {"_id": user_id},
++        {"_id": 0, "active_group": 0}
+     )
+     if query is not None:
+-        return [x["group_id"] for x in query["group_details"]]
++        return [x["group_id"] for x in query.get("group_details", [])]
+     else:
+         return None
+ 
+ 
+ async def if_active(user_id, group_id):
+-    query = mycol.find_one(
+-        { "_id": user_id },
+-        { "_id": 0, "group_details": 0 }
++    query = await mycol.find_one(
++        {"_id": user_id},
++        {"_id": 0, "group_details": 0}
+     )
+-    return query is not None and query['active_group'] == group_id
++    return query is not None and query.get('active_group') == group_id
+ 
+ 
+ async def make_active(user_id, group_id):
+-    update = mycol.update_one(
++    update = await mycol.update_one(
+         {'_id': user_id},
+-        {"$set": {"active_group" : group_id}}
++        {"$set": {"active_group": group_id}}
+     )
+     return update.modified_count != 0
+ 
+ 
+ async def make_inactive(user_id):
+-    update = mycol.update_one(
++    update = await mycol.update_one(
+         {'_id': user_id},
+-        {"$set": {"active_group" : None}}
++        {"$set": {"active_group": None}}
+     )
+     return update.modified_count != 0
+ 
+ 
+ async def delete_connection(user_id, group_id):
+-
+     try:
+-        update = mycol.update_one(
++        update = await mycol.update_one(
+             {"_id": user_id},
+-            {"$pull" : { "group_details" : {"group_id":group_id} } }
++            {"$pull": {"group_details": {"group_id": group_id}}}
+         )
+         if update.modified_count == 0:
+             return False
+-        query = mycol.find_one(
+-            { "_id": user_id },
+-            { "_id": 0 }
++        query = await mycol.find_one(
++            {"_id": user_id},
++            {"_id": 0}
+         )
+-        if len(query["group_details"]) >= 1:
+-            if query['active_group'] == group_id:
++        if query is None:
++            return False
++        if len(query.get("group_details", [])) >= 1:
++            if query.get('active_group') == group_id:
+                 prvs_group_id = query["group_details"][len(query["group_details"]) - 1]["group_id"]
+-
+-                mycol.update_one(
++                await mycol.update_one(
+                     {'_id': user_id},
+-                    {"$set": {"active_group" : prvs_group_id}}
++                    {"$set": {"active_group": prvs_group_id}}
+                 )
+         else:
+-            mycol.update_one(
++            await mycol.update_one(
+                 {'_id': user_id},
+-                {"$set": {"active_group" : None}}
++                {"$set": {"active_group": None}}
+             )
+         return True
+     except Exception as e:
+-        logger.exception(f'Some error occurred! {e}', exc_info=True)
++        logger.exception(f'Some error occurred! {e}')
+         return False
+-
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/database/filters_mdb.py moovidex-fixed/database/filters_mdb.py
+--- moovidex-review/database/filters_mdb.py	2026-09-26 15:31:25.064221621 +0000
++++ moovidex-fixed/database/filters_mdb.py	2026-09-26 15:42:08.118385216 +0000
+@@ -2,14 +2,16 @@
+ # Subscribe YouTube Channel For Amazing Bot @Tech_VJ
+ # Ask Doubt on telegram @KingVJ01
+ 
+-import pymongo
++import motor.motor_asyncio
+ from info import OTHER_DB_URI, DATABASE_NAME
+ from pyrogram import enums
+ import logging
+ logger = logging.getLogger(__name__)
+ logger.setLevel(logging.ERROR)
+ 
+-myclient = pymongo.MongoClient(OTHER_DB_URI)
++# Motor (async) client: the old synchronous PyMongo client blocked the event
++# loop inside every `async def` here.
++myclient = motor.motor_asyncio.AsyncIOMotorClient(OTHER_DB_URI)
+ mydb = myclient[DATABASE_NAME]
+ 
+ 
+@@ -19,59 +21,47 @@
+     # mycol.create_index([('text', 'text')])
+ 
+     data = {
+-        'text':str(text),
+-        'reply':str(reply_text),
+-        'btn':str(btn),
+-        'file':str(file),
+-        'alert':str(alert)
++        'text': str(text),
++        'reply': str(reply_text),
++        'btn': str(btn),
++        'file': str(file),
++        'alert': str(alert)
+     }
+ 
+     try:
+-        mycol.update_one({'text': str(text)},  {"$set": data}, upsert=True)
+-    except:
+-        logger.exception('Some error occured!', exc_info=True)
+-             
+-     
++        await mycol.update_one({'text': str(text)}, {"$set": data}, upsert=True)
++    except Exception:
++        logger.exception('Some error occured!')
++
++
+ async def find_filter(group_id, name):
+     mycol = mydb[str(group_id)]
+-    
+-    query = mycol.find( {"text":name})
+-    # query = mycol.find( { "$text": {"$search": name}})
+-    try:
+-        for file in query:
+-            reply_text = file['reply']
+-            btn = file['btn']
+-            fileid = file['file']
+-            try:
+-                alert = file['alert']
+-            except:
+-                alert = None
+-        return reply_text, btn, alert, fileid
+-    except:
++
++    doc = await mycol.find_one({"text": name})
++    if not doc:
+         return None, None, None, None
++    return doc.get('reply'), doc.get('btn'), doc.get('alert'), doc.get('file')
+ 
+ 
+ async def get_filters(group_id):
+     mycol = mydb[str(group_id)]
+ 
+     texts = []
+-    query = mycol.find()
+     try:
+-        for file in query:
+-            text = file['text']
+-            texts.append(text)
+-    except:
+-        pass
++        async for doc in mycol.find():
++            texts.append(doc['text'])
++    except Exception:
++        logger.exception('get_filters failed')
+     return texts
+ 
+ 
+ async def delete_filter(message, text, group_id):
+     mycol = mydb[str(group_id)]
+-    
+-    myquery = {'text':text }
+-    query = mycol.count_documents(myquery)
++
++    myquery = {'text': text}
++    query = await mycol.count_documents(myquery)
+     if query == 1:
+-        mycol.delete_one(myquery)
++        await mycol.delete_one(myquery)
+         await message.reply_text(
+             f"'`{text}`'  deleted. I'll not respond to that filter anymore.",
+             quote=True,
+@@ -82,15 +72,15 @@
+ 
+ 
+ async def del_all(message, group_id, title):
+-    if str(group_id) not in mydb.list_collection_names():
++    if str(group_id) not in await mydb.list_collection_names():
+         await message.edit_text(f"Nothing to remove in {title}!")
+         return
+ 
+     mycol = mydb[str(group_id)]
+     try:
+-        mycol.drop()
++        await mycol.drop()
+         await message.edit_text(f"All filters from {title} has been removed")
+-    except:
++    except Exception:
+         await message.edit_text("Couldn't remove all filters from group!")
+         return
+ 
+@@ -98,12 +88,12 @@
+ async def count_filters(group_id):
+     mycol = mydb[str(group_id)]
+ 
+-    count = mycol.count()
++    count = await mycol.count_documents({})
+     return False if count == 0 else count
+ 
+ 
+ async def filter_stats():
+-    collections = mydb.list_collection_names()
++    collections = await mydb.list_collection_names()
+ 
+     if "CONNECTION" in collections:
+         collections.remove("CONNECTION")
+@@ -111,7 +101,7 @@
+     totalcount = 0
+     for collection in collections:
+         mycol = mydb[collection]
+-        count = mycol.count()
++        count = await mycol.count_documents({})
+         totalcount += count
+ 
+     totalcollections = len(collections)
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/database/gfilters_mdb.py moovidex-fixed/database/gfilters_mdb.py
+--- moovidex-review/database/gfilters_mdb.py	2026-09-26 15:31:25.064329162 +0000
++++ moovidex-fixed/database/gfilters_mdb.py	2026-09-26 15:42:08.118436092 +0000
+@@ -3,14 +3,16 @@
+ # Ask Doubt on telegram @KingVJ01
+ 
+ 
+-import pymongo
++import motor.motor_asyncio
+ from info import OTHER_DB_URI, DATABASE_NAME
+ from pyrogram import enums
+ import logging
+ logger = logging.getLogger(__name__)
+ logger.setLevel(logging.ERROR)
+ 
+-myclient = pymongo.MongoClient(OTHER_DB_URI)
++# Motor (async) client: the old synchronous PyMongo client blocked the event
++# loop inside every `async def` here.
++myclient = motor.motor_asyncio.AsyncIOMotorClient(OTHER_DB_URI)
+ mydb = myclient[DATABASE_NAME]
+ 
+ 
+@@ -20,59 +22,47 @@
+     # mycol.create_index([('text', 'text')])
+ 
+     data = {
+-        'text':str(text),
+-        'reply':str(reply_text),
+-        'btn':str(btn),
+-        'file':str(file),
+-        'alert':str(alert)
++        'text': str(text),
++        'reply': str(reply_text),
++        'btn': str(btn),
++        'file': str(file),
++        'alert': str(alert)
+     }
+ 
+     try:
+-        mycol.update_one({'text': str(text)},  {"$set": data}, upsert=True)
+-    except:
+-        logger.exception('Some error occured!', exc_info=True)
+-             
+-     
++        await mycol.update_one({'text': str(text)}, {"$set": data}, upsert=True)
++    except Exception:
++        logger.exception('Some error occured!')
++
++
+ async def find_gfilter(gfilters, name):
+     mycol = mydb[str(gfilters)]
+-    
+-    query = mycol.find( {"text":name})
+-    # query = mycol.find( { "$text": {"$search": name}})
+-    try:
+-        for file in query:
+-            reply_text = file['reply']
+-            btn = file['btn']
+-            fileid = file['file']
+-            try:
+-                alert = file['alert']
+-            except:
+-                alert = None
+-        return reply_text, btn, alert, fileid
+-    except:
++
++    doc = await mycol.find_one({"text": name})
++    if not doc:
+         return None, None, None, None
++    return doc.get('reply'), doc.get('btn'), doc.get('alert'), doc.get('file')
+ 
+ 
+ async def get_gfilters(gfilters):
+     mycol = mydb[str(gfilters)]
+ 
+     texts = []
+-    query = mycol.find()
+     try:
+-        for file in query:
+-            text = file['text']
+-            texts.append(text)
+-    except:
+-        pass
++        async for doc in mycol.find():
++            texts.append(doc['text'])
++    except Exception:
++        logger.exception('get_gfilters failed')
+     return texts
+ 
+ 
+ async def delete_gfilter(message, text, gfilters):
+     mycol = mydb[str(gfilters)]
+-    
+-    myquery = {'text':text }
+-    query = mycol.count_documents(myquery)
++
++    myquery = {'text': text}
++    query = await mycol.count_documents(myquery)
+     if query == 1:
+-        mycol.delete_one(myquery)
++        await mycol.delete_one(myquery)
+         await message.reply_text(
+             f"'`{text}`'  deleted. I'll not respond to that gfilter anymore.",
+             quote=True,
+@@ -81,28 +71,30 @@
+     else:
+         await message.reply_text("Couldn't find that gfilter!", quote=True)
+ 
++
+ async def del_allg(message, gfilters):
+-    if str(gfilters) not in mydb.list_collection_names():
++    if str(gfilters) not in await mydb.list_collection_names():
+         await message.edit_text("Nothing to Remove !")
+         return
+ 
+     mycol = mydb[str(gfilters)]
+     try:
+-        mycol.drop()
++        await mycol.drop()
+         await message.edit_text(f"All gfilters has been removed !")
+-    except:
++    except Exception:
+         await message.edit_text("Couldn't remove all gfilters !")
+         return
+ 
++
+ async def count_gfilters(gfilters):
+     mycol = mydb[str(gfilters)]
+ 
+-    count = mycol.count()
++    count = await mycol.count_documents({})
+     return False if count == 0 else count
+ 
+ 
+ async def gfilter_stats():
+-    collections = mydb.list_collection_names()
++    collections = await mydb.list_collection_names()
+ 
+     if "CONNECTION" in collections:
+         collections.remove("CONNECTION")
+@@ -110,7 +102,7 @@
+     totalcount = 0
+     for collection in collections:
+         mycol = mydb[collection]
+-        count = mycol.count()
++        count = await mycol.count_documents({})
+         totalcount += count
+ 
+     totalcollections = len(collections)
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/database/ia_filterdb.py moovidex-fixed/database/ia_filterdb.py
+--- moovidex-review/database/ia_filterdb.py	2026-09-26 15:31:25.064384155 +0000
++++ moovidex-fixed/database/ia_filterdb.py	2026-09-26 15:59:54.853262639 +0000
+@@ -22,8 +22,23 @@
+     sec_db = sec_client[DATABASE_NAME]
+     sec_col = sec_db[COLLECTION_NAME]
+ else:
++    sec_db = None
+     sec_col = None
+ 
++async def ensure_indexes():
++    """Create helper indexes if missing. Non-unique on purpose: deployed data
++    is not guaranteed duplicate-free, so a unique index could fail and block
++    startup. Safe to call repeatedly (create_index is idempotent)."""
++    targets = [("primary", col)]
++    if MULTIPLE_DATABASE and sec_col is not None:
++        targets.append(("secondary", sec_col))
++    for label, collection in targets:
++        try:
++            await collection.create_index("file_id", name="file_id_1")
++            logger.info(f"Ensured file_id index on {label} file collection")
++        except Exception as e:
++            logger.warning(f"Could not ensure index on {label} file collection: {e}")
++
+ async def save_file(media):
+     """Save file in the database."""
+     
+@@ -53,7 +68,7 @@
+     except DuplicateKeyError:
+         return False, 0
+     except Exception as e:
+-        if MULTIPLE_DATABASE and sec_col:
++        if MULTIPLE_DATABASE and sec_col is not None:
+             try:
+                 await sec_col.insert_one(file)
+                 try:
+@@ -90,7 +105,7 @@
+     if await col.find_one(found1) or await col.find_one(found):
+         return True
+     
+-    if MULTIPLE_DATABASE and sec_col:
++    if MULTIPLE_DATABASE and sec_col is not None:
+         if await sec_col.find_one(found1) or await sec_col.find_one(found):
+             return True
+             
+@@ -120,70 +135,94 @@
+ 
+     projection = {'file_id': 1, 'file_name': 1, 'file_size': 1, 'caption': 1, '_id': 0}
+ 
+-    files = []
+-    cursor1 = col.find(filter_criteria, projection).sort('$natural', -1).skip(offset).limit(max_results)
+-    async for file in cursor1:
+-        files.append(file)
+-        
+-    if MULTIPLE_DATABASE and sec_col:
+-        # If we haven't filled max_results, check secondary
+-        if len(files) < max_results:
+-             # Adjust limit based on what we already have
+-             remaining_limit = max_results - len(files)
+-             # Note: Offset handling across two DBs is tricky. 
+-             # For simplicity/speed in this context, we just query secondary with same simple logic
+-             # Proper pagination across 2 DBs requires counting or complex logic.
+-             # Current logic: Append secondary results
+-             cursor2 = sec_col.find(filter_criteria, projection).sort('$natural', -1).skip(offset).limit(remaining_limit)
+-             async for file in cursor2:
+-                 files.append(file)
+-                 
+-    # Optimized Count: Use estimated_document_count if no filter (fast), else count_documents
++    # Count first: correct cross-DB pagination needs the primary match count so
++    # the secondary query can skip the right number of documents.
+     if not filter_criteria:
+-        total_results = await col.estimated_document_count()
+-        if MULTIPLE_DATABASE and sec_col:
+-            total_results += await sec_col.estimated_document_count()
++        primary_total = await col.estimated_document_count()
++    else:
++        primary_total = await col.count_documents(filter_criteria)
++
++    files = []
++    if not MULTIPLE_DATABASE or sec_col is None:
++        total_results = primary_total
++        cursor1 = col.find(filter_criteria, projection).sort('$natural', -1).skip(offset).limit(max_results)
++        async for file in cursor1:
++            files.append(file)
+     else:
+-        total_results = await col.count_documents(filter_criteria)
+-        if MULTIPLE_DATABASE and sec_col:
+-            total_results += await sec_col.count_documents(filter_criteria)
++        if not filter_criteria:
++            secondary_total = await sec_col.estimated_document_count()
++        else:
++            secondary_total = await sec_col.count_documents(filter_criteria)
++        total_results = primary_total + secondary_total
++
++        if offset < primary_total:
++            # Page starts in the primary DB; fill the rest from secondary.
++            cursor1 = col.find(filter_criteria, projection).sort('$natural', -1).skip(offset).limit(max_results)
++            async for file in cursor1:
++                files.append(file)
++            remaining = max_results - len(files)
++            if remaining > 0:
++                cursor2 = sec_col.find(filter_criteria, projection).sort('$natural', -1).skip(0).limit(remaining)
++                async for file in cursor2:
++                    files.append(file)
++        else:
++            # Page lies entirely in the secondary DB.
++            cursor2 = sec_col.find(filter_criteria, projection).sort('$natural', -1).skip(offset - primary_total).limit(max_results)
++            async for file in cursor2:
++                files.append(file)
+ 
+     next_offset = "" if (offset + max_results) >= total_results else (offset + max_results)
+ 
+     return files, next_offset, total_results
+ 
+-async def get_bad_files(query, file_type=None, use_filter=False):
++def bad_files_filter(query):
++    """Build the file_name/caption filter for admin mass-delete. The query is
++    regex-escaped: raw user input used to crash this with `re.error` (or match
++    far more than intended) when it contained regex metacharacters."""
+     query = query.strip()
+-    # Logic preserved but made async
+     if not query:
+         raw_pattern = '.'
+     elif ' ' not in query:
+-        raw_pattern = rf'(\b|[.+-_]){query}(\b|[.+-_])'
++        raw_pattern = rf'(\b|[.+-_]){re.escape(query)}(\b|[.+-_])'
+     else:
+-        raw_pattern = query.replace(' ', r'.*[s.+-_]')
+-        
++        raw_pattern = r'.*[s.+-_]'.join(re.escape(word) for word in query.split())
++
+     regex = {'$regex': raw_pattern, '$options': 'i'}
+     filter_criteria = {'file_name': regex}
+-    
++
+     if USE_CAPTION_FILTER:
+         filter_criteria = {'$or': [filter_criteria, {'caption': regex}]}
++    return filter_criteria
++
++
++async def get_bad_files(query, file_type=None, use_filter=False):
++    filter_criteria = bad_files_filter(query)
++    # Only the fields the delete flows need; full docs (with captions) used to
++    # be loaded for every match.
++    projection = {'file_id': 1, 'file_name': 1, '_id': 0}
+ 
+     files = []
+-    async for file in col.find(filter_criteria):
++    async for file in col.find(filter_criteria, projection):
+         files.append(file)
+-        
+-    total_results = len(files)
+-    
+-    if MULTIPLE_DATABASE and sec_col:
+-         async for file in sec_col.find(filter_criteria):
+-             files.append(file)
+-         total_results = len(files)
+ 
+-    return files, total_results
++    if MULTIPLE_DATABASE and sec_col is not None:
++        async for file in sec_col.find(filter_criteria, projection):
++            files.append(file)
++
++    return files, len(files)
++
++
++async def count_bad_files(query):
++    """Match count for `get_bad_files` without loading any documents."""
++    filter_criteria = bad_files_filter(query)
++    total = await col.count_documents(filter_criteria)
++    if MULTIPLE_DATABASE and sec_col is not None:
++        total += await sec_col.count_documents(filter_criteria)
++    return total
+ 
+ async def get_file_details(query):
+     file = await col.find_one({'file_id': query})
+-    if not file and MULTIPLE_DATABASE and sec_col:
++    if not file and MULTIPLE_DATABASE and sec_col is not None:
+         file = await sec_col.find_one({'file_id': query})
+     return file
+ 
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/database/join_reqs.py moovidex-fixed/database/join_reqs.py
+--- moovidex-review/database/join_reqs.py	2026-09-26 15:31:25.064495863 +0000
++++ moovidex-fixed/database/join_reqs.py	2026-09-26 15:43:39.085269884 +0000
+@@ -26,13 +26,13 @@
+             pass
+ 
+     async def get_user(self, user_id):
+-        return await self.col.find_one({"user_id": int(user_id)})
++        return await self.col.find_one({"_id": int(user_id)})
+ 
+     async def get_all_users(self):
+         return await self.col.find().to_list(None)
+ 
+     async def delete_user(self, user_id):
+-        await self.col.delete_one({"user_id": int(user_id)})
++        await self.col.delete_one({"_id": int(user_id)})
+ 
+     async def delete_all_users(self):
+         await self.col.delete_many({})
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/database/requests_db.py moovidex-fixed/database/requests_db.py
+--- moovidex-review/database/requests_db.py	2026-09-26 15:31:25.064628682 +0000
++++ moovidex-fixed/database/requests_db.py	2026-09-26 15:43:46.457639359 +0000
+@@ -41,12 +41,12 @@
+     async def update_request_status(self, request_id, status):
+         from bson.objectid import ObjectId
+         try:
+-             await self.col.update_one(
++            result = await self.col.update_one(
+                 {"_id": ObjectId(request_id)},
+                 {"$set": {"status": status}}
+             )
+-             return True
+-        except:
++            return result.matched_count > 0
++        except Exception:
+             return False
+     
+     async def get_request(self, request_id):
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/database/stats_db.py moovidex-fixed/database/stats_db.py
+--- moovidex-review/database/stats_db.py	2026-09-26 15:31:25.064733830 +0000
++++ moovidex-fixed/database/stats_db.py	2026-09-26 15:43:39.084627790 +0000
+@@ -2,7 +2,6 @@
+ import motor.motor_asyncio
+ import pytz
+ from info import DATABASE_URI, DATABASE_NAME, FILE_DB_URI, SEC_FILE_DB_URI, COLLECTION_NAME, MULTIPLE_DATABASE
+-from pymongo import MongoClient
+ 
+ IST = pytz.timezone('Asia/Kolkata')
+ 
+@@ -13,13 +12,13 @@
+         self.search_logs = self.db.search_logs
+         self.pm_search_logs = self.db.pm_search_logs
+         
+-        # File DB Connections for Stats
+-        self.file_client = MongoClient(FILE_DB_URI)
++        # File DB Connections for Stats (async: get_database_stats is a coroutine)
++        self.file_client = motor.motor_asyncio.AsyncIOMotorClient(FILE_DB_URI)
+         self.file_db = self.file_client[DATABASE_NAME]
+         self.file_col = self.file_db[COLLECTION_NAME]
+-        
++
+         if MULTIPLE_DATABASE:
+-            self.sec_file_client = MongoClient(SEC_FILE_DB_URI)
++            self.sec_file_client = motor.motor_asyncio.AsyncIOMotorClient(SEC_FILE_DB_URI)
+             self.sec_file_db = self.sec_file_client[DATABASE_NAME]
+             self.sec_file_col = self.sec_file_db[COLLECTION_NAME]
+ 
+@@ -218,9 +217,9 @@
+         
+         # Primary DB
+         try:
+-            p_count = self.file_col.count_documents({})
++            p_count = await self.file_col.count_documents({})
+             # dbStats returns size in bytes
+-            p_db_stats = self.file_db.command("dbStats")
++            p_db_stats = await self.file_db.command("dbStats")
+             p_size = p_db_stats.get("dataSize", 0) / (1024 * 1024) # MB
+             stats['primary'] = {"count": p_count, "size": round(p_size, 2)}
+         except Exception as e:
+@@ -229,8 +228,8 @@
+         # Secondary DB
+         if MULTIPLE_DATABASE:
+             try:
+-                s_count = self.sec_file_col.count_documents({})
+-                s_db_stats = self.sec_file_db.command("dbStats")
++                s_count = await self.sec_file_col.count_documents({})
++                s_db_stats = await self.sec_file_db.command("dbStats")
+                 s_size = s_db_stats.get("dataSize", 0) / (1024 * 1024) # MB
+                 stats['secondary'] = {"count": s_count, "size": round(s_size, 2)}
+                 stats['total_files'] = p_count + s_count
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/database/topdb.py moovidex-fixed/database/topdb.py
+--- moovidex-review/database/topdb.py	2026-09-26 15:31:25.064846259 +0000
++++ moovidex-fixed/database/topdb.py	2026-09-26 15:56:39.635110800 +0000
+@@ -30,27 +30,4 @@
+ 
+     async def clear_movie_series_names(self, group_id):
+         # Remove all movie and series names for the specified group from the database
+-        await self.collection.delete_many({"group_id": group_id})
+-
+-async def main():
+-    movie_series_db = JsTopDB(OTHER_DB_URI)
+-    while True:
+-        # Simulating a movie search
+-        search_input = input("Enter the movie/series name: ")
+-        group_id = input("Enter group ID: ")
+-        
+-        # Automatically set the movie/series name after search
+-        await movie_series_db.set_movie_series_names(search_input, group_id)
+-        print("Movie/Series name added automatically.")
+-        
+-        # Print the updated list of names after each search
+-        names = await movie_series_db.get_movie_series_names(group_id)
+-        print("Updated Movie/Series Names (Sorted by Search Count):")
+-        for name in names:
+-            print(name)
+-        
+-        # Option to clear names (for testing purposes)
+-        clear_input = input("Do you want to clear names for this group? (yes/no): ")
+-        if clear_input.lower() == "yes":
+-            await movie_series_db.clear_movie_series_names(group_id)
+-            print("Names cleared successfully.")
++        await self.collection.delete_many({"group_id": group_id})
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/database/users_chats_db.py moovidex-fixed/database/users_chats_db.py
+--- moovidex-review/database/users_chats_db.py	2026-09-26 15:31:25.064944326 +0000
++++ moovidex-fixed/database/users_chats_db.py	2026-09-26 15:42:36.484004354 +0000
+@@ -5,37 +5,38 @@
+ import re
+ from pymongo.errors import DuplicateKeyError
+ import motor.motor_asyncio
+-from pymongo import MongoClient
+ from info import DATABASE_NAME, USER_DB_URI, OTHER_DB_URI, CUSTOM_FILE_CAPTION, IMDB, IMDB_TEMPLATE, MELCOW_NEW_USERS, BUTTON_MODE, SPELL_CHECK_REPLY, PROTECT_CONTENT, AUTO_DELETE, MAX_BTN, AUTO_FFILTER, SHORTLINK_API, SHORTLINK_URL, SHORTLINK_MODE, TUTORIAL, IS_TUTORIAL
+ import time
+ import datetime
+ 
+-my_client = MongoClient(OTHER_DB_URI)
++# Motor (async) client: the old synchronous PyMongo client blocked the event
++# loop inside these `async def` helpers.
++my_client = motor.motor_asyncio.AsyncIOMotorClient(OTHER_DB_URI)
+ mydb = my_client["referal_user"]
+ 
+ async def referal_add_user(user_id, ref_user_id):
+     user_db = mydb[str(user_id)]
+     user = {'_id': ref_user_id}
+     try:
+-        user_db.insert_one(user)
++        await user_db.insert_one(user)
+         return True
+     except DuplicateKeyError:
+         return False
+-    
++
+ 
+ async def get_referal_all_users(user_id):
+     user_db = mydb[str(user_id)]
+-    return user_db.find()
+-    
++    return await user_db.find().to_list(length=None)
++
+ async def get_referal_users_count(user_id):
+     user_db = mydb[str(user_id)]
+-    count = user_db.count_documents({})
++    count = await user_db.count_documents({})
+     return count
+-    
++
+ 
+ async def delete_all_referal_users(user_id):
+     user_db = mydb[str(user_id)]
+-    user_db.delete_many({}) 
++    await user_db.delete_many({})
+ 
+ default_setgs = {
+     'button': BUTTON_MODE,
+@@ -95,13 +96,14 @@
+                 is_disabled=False,
+                 reason="",
+             ),
+-            settings=default_setgs
++            # copy: mutating one chat's settings must not affect the defaults
++            settings=dict(default_setgs)
+         )
+     
+     async def add_user(self, id, name):
+         user = self.new_user(id, name)
+         user['joined_date'] = datetime.date.today().isoformat()
+-        await self.col.insert_one(user)
++        await self.col.update_one({'id': id}, {'$setOnInsert': user}, upsert=True)
+     
+     async def is_user_exist(self, id):
+         user = await self.col.find_one({'id':int(id)})
+@@ -212,7 +214,7 @@
+ 
+     async def add_chat(self, chat, title):
+         chat = self.new_group(chat, title)
+-        await self.grp.insert_one(chat)
++        await self.grp.update_one({'id': chat['id']}, {'$setOnInsert': chat}, upsert=True)
+     
+ 
+     async def get_chat(self, chat):
+@@ -234,8 +236,13 @@
+     async def get_settings(self, id):
+         chat = await self.grp.find_one({'id':int(id)})
+         if chat:
+-            return chat.get('settings', default_setgs)
+-        return default_setgs
++            # Return a copy: utils.save_group_settings() mutates the returned
++            # dict, which used to corrupt the shared global `default_setgs`.
++            settings = chat.get('settings') or {}
++            merged = dict(default_setgs)
++            merged.update(settings)
++            return merged
++        return dict(default_setgs)
+     
+ 
+     async def disable_chat(self, chat, reason="No Reason"):
+@@ -285,7 +292,9 @@
+     
+     async def check_remaining_uasge(self, userid):
+         user_id = userid
+-        user_data = await self.get_user(user_id)        
++        user_data = await self.get_user(user_id)
++        if not user_data:
++            return datetime.timedelta(0)
+         expiry_time = user_data.get("expiry_time")
+         # Calculate remaining time
+         remaining_time = expiry_time - datetime.datetime.now()
+@@ -316,28 +325,28 @@
+ 
+     async def get_thumbnail(self, id):
+         user = await self.col.find_one({'id': int(id)})
+-        return user.get('file_id', None)
++        return (user or {}).get('file_id', None)
+ 
+     async def set_caption(self, id, caption):
+         await self.col.update_one({'id': int(id)}, {'$set': {'caption': caption}})
+ 
+     async def get_caption(self, id):
+         user = await self.col.find_one({'id': int(id)})
+-        return user.get('caption', None)
++        return (user or {}).get('caption', None)
+ 
+     async def set_msg_command(self, id, com):
+         await self.col.update_one({'id': int(id)}, {'$set': {'message_command': com}})
+ 
+     async def get_msg_command(self, id):
+         user = await self.col.find_one({'id': int(id)})
+-        return user.get('message_command', None)
++        return (user or {}).get('message_command', None)
+ 
+     async def set_save(self, id, save):
+         await self.col.update_one({'id': int(id)}, {'$set': {'save': save}})
+ 
+     async def get_save(self, id):
+         user = await self.col.find_one({'id': int(id)})
+-        return user.get('save', False) 
++        return (user or {}).get('save', False)
+     
+     async def add_posted_movie(self, movie_id):
+         await self.posted.update_one(
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/info.py moovidex-fixed/info.py
+--- moovidex-review/info.py	2026-09-26 15:31:25.065134041 +0000
++++ moovidex-fixed/info.py	2026-09-26 15:46:22.482722602 +0000
+@@ -7,7 +7,83 @@
+ from os import environ
+ from Script import script 
+ 
+-id_pattern = re.compile(r'^.\d+$')
++# Fixed: the old pattern `^.\d+$` matched any string containing digits
++# (e.g. 'abc123'), misclassifying usernames as numeric ids.
++id_pattern = re.compile(r'^-?\d+$')
++
++_TRUE_VALUES = {'1', 'true', 'yes', 'y', 'on', 't'}
++
++
++def _bool(name, default=False):
++    """Parse an on/off env var. The old code used ``bool(environ.get(...))``,
++    which treats the string "False" as True."""
++    raw = environ.get(name)
++    if raw is None:
++        return default
++    return str(raw).strip().lower() in _TRUE_VALUES
++
++
++def _int(name, default):
++    """Parse an integer env var; fall back to ``default`` if invalid."""
++    raw = environ.get(name)
++    if raw in (None, ''):
++        return default
++    try:
++        return int(str(raw).strip())
++    except (TypeError, ValueError):
++        print(f"[config] WARNING: {name}={raw!r} is not a valid integer; using default {default!r}.")
++        return default
++
++
++def _required(name):
++    """Return a mandatory env var, or abort startup with a clear message."""
++    value = (environ.get(name) or '').strip()
++    if not value:
++        raise SystemExit(
++            f"[config] ERROR: required environment variable {name!r} is not set. "
++            f"Set it before starting the bot."
++        )
++    return value
++
++
++def _required_int(name):
++    value = _required(name)
++    try:
++        return int(value)
++    except ValueError:
++        raise SystemExit(
++            f"[config] ERROR: environment variable {name!r} must be an integer, got {value!r}."
++        )
++
++
++def _id_list(name, allow_names=False):
++    """Parse a space-separated list of Telegram ids."""
++    items = []
++    for token in (environ.get(name, '') or '').split():
++        token = token.strip()
++        if not token:
++            continue
++        if id_pattern.search(token):
++            items.append(int(token))
++        elif allow_names:
++            items.append(token)
++        else:
++            raise SystemExit(
++                f"[config] ERROR: {name!r} contains an invalid Telegram id {token!r}. "
++                f"Use space-separated numeric ids."
++            )
++    return items
++
++
++def _optional_id(name):
++    raw = (environ.get(name, '') or '').strip()
++    if not raw:
++        return None
++    if not id_pattern.search(raw):
++        raise SystemExit(
++            f"[config] ERROR: {name!r} must be a numeric Telegram id, got {raw!r}."
++        )
++    return int(raw)
+ 
+ # Bot information
+ SESSION = environ.get('SESSION', 'TechVJBot')
+@@ -15,58 +91,61 @@
+     "is_on": False,
+     "reason": "No reason provided."
+ }
+-API_ID = int(environ.get('API_ID', ''))
+-API_HASH = environ.get('API_HASH', '')
+-BOT_TOKEN = environ.get('BOT_TOKEN', "")
+-ADMIN_USERNAME = environ.get('ADMIN_USERNAME', "admin")
+-ADMIN_PASSWORD = environ.get('ADMIN_PASSWORD', "admin")
+-TMDB_API_KEY = environ.get('TMDB_API_KEY', "b3d10dab8e82525e3a2ed8ed8bc38874") # Default key or empty
++API_ID = _required_int('API_ID')
++API_HASH = _required('API_HASH')
++BOT_TOKEN = _required('BOT_TOKEN')
++# No defaults: the old admin/admin default let anyone into the web dashboard.
++ADMIN_USERNAME = _required('ADMIN_USERNAME')
++ADMIN_PASSWORD = _required('ADMIN_PASSWORD')
++# Server-side key; must come from the environment. (The previously
++# hardcoded key was committed to git history and should be rotated.)
++TMDB_API_KEY = environ.get('TMDB_API_KEY', '') # Default key or empty
+ 
+ 
++# Keys must come from the environment (space- or comma-separated);
++# no keys are bundled anymore.
+ DEEPGRAM_API_KEYS = [
+-    "1dfd7f7ca928a4534a3f7df070b3ce7c5bf0b1f6",
+-    "175b011b58115ea354fe4d203a99a704b4d093d0"
++    key for key in environ.get('DEEPGRAM_API_KEYS', '').replace(',', ' ').split()
++    if key.strip()
+ ]
+ # This Pictures Is For Start Message Picture, You Can Add Multiple By Giving One Space Between Each.
+ PICS = (environ.get('PICS', 'https://graph.org/file/ce1723991756e48c35aa1.jpg')).split()
+ 
+ 
+ # Admins & Users
+-ADMINS = [int(admin) if id_pattern.search(admin) else admin for admin in environ.get('ADMINS', '').split()] # For Multiple Id Use One Space Between Each.
+-auth_users = [int(user) if id_pattern.search(user) else user for user in environ.get('AUTH_USERS', '').split()]  # For Multiple Id Use One Space Between Each.
+-AUTH_USERS = (auth_users + ADMINS) if auth_users else []
++ADMINS = _id_list('ADMINS', allow_names=True) # For Multiple Id Use One Space Between Each.
++auth_users = _id_list('AUTH_USERS', allow_names=True)  # For Multiple Id Use One Space Between Each.
++# Admins are always authorized, even when AUTH_USERS is unset/empty.
++AUTH_USERS = list(dict.fromkeys(auth_users + ADMINS))
+ 
+ # This Channel Is For When User Start Your Bot Then Bot Send That User Name And Id In This Log Channel, Same For Group Also.
+-LOG_CHANNEL = int(environ.get('LOG_CHANNEL', ''))
++LOG_CHANNEL = _required_int('LOG_CHANNEL')
+ 
+ # This Is File Channel Where You Upload Your File Then Bot Automatically Save It In Database 
+-CHANNELS = [int(ch) if id_pattern.search(ch) else ch for ch in environ.get('CHANNELS', '').split()]  # For Multiple Id Use One Space Between Each.
++CHANNELS = _id_list('CHANNELS', allow_names=True)  # For Multiple Id Use One Space Between Each.
+ 
+ # auth_channel means force subscribe channel.
+ # if REQUEST_TO_JOIN_MODE is true then force subscribe work like request to join fsub, else if false then work like normal fsub.
+-REQUEST_TO_JOIN_MODE = bool(environ.get('REQUEST_TO_JOIN_MODE', False)) # Set True Or False
+-TRY_AGAIN_BTN = bool(environ.get('TRY_AGAIN_BTN', False)) # Set True Or False (This try again button is only for request to join fsub not for normal fsub)
++REQUEST_TO_JOIN_MODE = _bool('REQUEST_TO_JOIN_MODE', False) # Set True Or False
++TRY_AGAIN_BTN = _bool('TRY_AGAIN_BTN', False) # Set True Or False (This try again button is only for request to join fsub not for normal fsub)
+ 
+ # This Is Force Subscribe Channel, also known as Auth Channel 
+-auth_channel = environ.get('AUTH_CHANNEL', '') # give your force subscribe channel id here else leave it blank
+-AUTH_CHANNEL = int(auth_channel) if auth_channel and id_pattern.search(auth_channel) else None
++AUTH_CHANNEL = _optional_id('AUTH_CHANNEL') # give your force subscribe channel id here else leave it blank
+ 
+ # This Channel Is For When User Request Any File Name With command or hashtag like - /request or #request
+-reqst_channel = environ.get('REQST_CHANNEL', '')
+-REQST_CHANNEL = int(reqst_channel) if reqst_channel and id_pattern.search(reqst_channel) else None
++REQST_CHANNEL = _optional_id('REQST_CHANNEL')
+ 
+ # This Channel Is For Index Request 
+-INDEX_REQ_CHANNEL = int(environ.get('INDEX_REQ_CHANNEL', LOG_CHANNEL))
++INDEX_REQ_CHANNEL = _int('INDEX_REQ_CHANNEL', LOG_CHANNEL)
+ 
+ # This Is Your Bot Support Group Id , Here Bot Will Not Give File Because This Is Support Group.
+-support_chat_id = environ.get('SUPPORT_CHAT_ID', '')
+-SUPPORT_CHAT_ID = int(support_chat_id) if support_chat_id and id_pattern.search(support_chat_id) else None
++SUPPORT_CHAT_ID = _optional_id('SUPPORT_CHAT_ID')
+ 
+ # This Channel Is For /batch command file store.
+-FILE_STORE_CHANNEL = [int(ch) for ch in (environ.get('FILE_STORE_CHANNEL', '')).split()]  # For Multiple Id Use One Space Between Each.
++FILE_STORE_CHANNEL = _id_list('FILE_STORE_CHANNEL')  # For Multiple Id Use One Space Between Each.
+ 
+ # This Channel Is For Delete Index File, Forward Your File In This Channel Which You Want To Delete Then Bot Automatically Delete That File From Database.
+-DELETE_CHANNELS = [int(dch) if id_pattern.search(dch) else dch for dch in environ.get('DELETE_CHANNELS', '0').split()]  # For Multiple Id Use One Space Between Each.
++DELETE_CHANNELS = _id_list('DELETE_CHANNELS', allow_names=True) or [0]  # For Multiple Id Use One Space Between Each.
+ 
+ 
+ # MongoDB information
+@@ -74,7 +153,7 @@
+ DATABASE_NAME = environ.get('DATABASE_NAME', "techvjclonefilterbot")
+ COLLECTION_NAME = environ.get('COLLECTION_NAME', 'vjcollection')
+ 
+-MULTIPLE_DATABASE = str(environ.get('MULTIPLE_DATABASE', 'False')).lower() == 'true' # Set True or False
++MULTIPLE_DATABASE = _bool('MULTIPLE_DATABASE', False) # Set True or False
+ 
+ # If Multiple Database Is True Then Fill All Three Below Database Uri Else You Will Get Error.
+ O_DB_URI = environ.get('O_DB_URI', "")   # This Db Is For Other Data Store
+@@ -83,13 +162,14 @@
+ 
+ 
+ # Premium And Referal Settings
+-PREMIUM_AND_REFERAL_MODE = bool(environ.get('PREMIUM_AND_REFERAL_MODE', False)) # Set Ture Or False
++PREMIUM_AND_REFERAL_MODE = _bool('PREMIUM_AND_REFERAL_MODE', False) # Set Ture Or False
+ 
+ # If PREMIUM_AND_REFERAL_MODE is True Then Fill Below Variable, If Flase Then No Need To Fill.
+-REFERAL_COUNT = int(environ.get('REFERAL_COUNT', '1')) # number of referal count
++REFERAL_COUNT = _int('REFERAL_COUNT', 1) # number of referal count
+ REFERAL_PREMEIUM_TIME = environ.get('REFERAL_PREMEIUM_TIME', '3months') # time in week, day, month.
+ PAYMENT_QR = environ.get('PAYMENT_QR', 'https://graph.org/file/2915157bfcbe94c56080c.jpg') # payment code picture url.
+-PAYMENT_TEXT = environ.get('PAYMENT_TEXT', '<b>- ᴀᴠᴀɪʟᴀʙʟᴇ ᴘʟᴀɴs - \n\n- 9ʀs - 1 ᴡᴇᴇᴋ\n-<strike>28ʀs</strike> 21ʀs - 1 ᴍᴏɴᴛʜs\n- 69ʀs - 3 ᴍᴏɴᴛʜs\n- 120ʀs - 6 ᴍᴏɴᴛʜs\n\n🎁 ᴘʀᴇᴍɪᴜᴍ ғᴇᴀᴛᴜʀᴇs 🎁\n\n○ ᴀʟʟ ᴀᴄᴄᴇss\n○ ɴᴏ ᴄʜᴀɴɴᴇʟ ᴊᴏɪɴ ɴᴇᴇᴅᴇᴅ\n○ ɴᴏ ɴᴇᴇᴅ ᴛᴏ ᴠᴇʀɪғʏ\n○ ɴᴏ ɴᴇᴇᴅ ᴛᴏ ᴏᴘᴇɴ ʟɪɴᴋ\n○ ᴅɪʀᴇᴄᴛ ғɪʟᴇs\n○ ᴀᴅ-ғʀᴇᴇ ᴇxᴘᴇʀɪᴇɴᴄᴇ\n○ ʜɪɢʜ-sᴘᴇᴇᴅ ᴅᴏᴡɴʟᴏᴀᴅ ʟɪɴᴋ\n○ ᴍᴜʟᴛɪ-ᴘʟᴀʏᴇʀ sᴛʀᴇᴀᴍɪɴɢ ʟɪɴᴋs\n○ ᴜɴʟɪᴍɪᴛᴇᴅ ᴍᴏᴠɪᴇs & sᴇʀɪᴇs\n○ ꜰᴜʟʟ ᴀᴅᴍɪɴ sᴜᴘᴘᴏʀᴛ\n○ ʀᴇǫᴜᴇsᴛ ᴡɪʟʟ ʙᴇ ᴄᴏᴍᴘʟᴇᴛᴇᴅ ɪɴ 1ʜ ɪꜰ ᴀᴠᴀɪʟᴀʙʟᴇ\n\n✨ 𝐔𝐏𝐈 𝐈𝐃 ➪ <code>hariskuttu21-1@okhdfcbank</code> \n\nᴄʟɪᴄᴋ ᴛᴏ ᴄʜᴇᴄᴋ ʏᴏᴜʀ ᴀᴄᴛɪᴠᴇ ᴘʟᴀɴ /myplan\n\n💢 ᴍᴜsᴛ sᴇɴᴅ sᴄʀᴇᴇɴsʜᴏᴛ ᴀғᴛᴇʀ ᴘᴀʏᴍᴇɴᴛ\n\n‼️ ᴀғᴛᴇʀ sᴇɴᴅɪɴɢ ᴀ sᴄʀᴇᴇɴsʜᴏᴛ ᴘʟᴇᴀsᴇ ɢɪᴠᴇ ᴜs sᴏᴍᴇ ᴛɪᴍᴇ ᴛᴏ ᴀᴅᴅ ʏᴏᴜ ɪɴ ᴛʜᴇ ᴘʀᴇᴍɪᴜᴍ</b>')
++PAYMENT_UPI_ID = environ.get('PAYMENT_UPI_ID', 'hariskuttu21-1@okhdfcbank') # UPI ID shown in the payment text.
++PAYMENT_TEXT = environ.get('PAYMENT_TEXT', '<b>- ᴀᴠᴀɪʟᴀʙʟᴇ ᴘʟᴀɴs - \n\n- 9ʀs - 1 ᴡᴇᴇᴋ\n-<strike>28ʀs</strike> 21ʀs - 1 ᴍᴏɴᴛʜs\n- 69ʀs - 3 ᴍᴏɴᴛʜs\n- 120ʀs - 6 ᴍᴏɴᴛʜs\n\n🎁 ᴘʀᴇᴍɪᴜᴍ ғᴇᴀᴛᴜʀᴇs 🎁\n\n○ ᴀʟʟ ᴀᴄᴄᴇss\n○ ɴᴏ ᴄʜᴀɴɴᴇʟ ᴊᴏɪɴ ɴᴇᴇᴅᴇᴅ\n○ ɴᴏ ɴᴇᴇᴅ ᴛᴏ ᴠᴇʀɪғʏ\n○ ɴᴏ ɴᴇᴇᴅ ᴛᴏ ᴏᴘᴇɴ ʟɪɴᴋ\n○ ᴅɪʀᴇᴄᴛ ғɪʟᴇs\n○ ᴀᴅ-ғʀᴇᴇ ᴇxᴘᴇʀɪᴇɴᴄᴇ\n○ ʜɪɢʜ-sᴘᴇᴇᴅ ᴅᴏᴡɴʟᴏᴀᴅ ʟɪɴᴋ\n○ ᴍᴜʟᴛɪ-ᴘʟᴀʏᴇʀ sᴛʀᴇᴀᴍɪɴɢ ʟɪɴᴋs\n○ ᴜɴʟɪᴍɪᴛᴇᴅ ᴍᴏᴠɪᴇs & sᴇʀɪᴇs\n○ ꜰᴜʟʟ ᴀᴅᴍɪɴ sᴜᴘᴘᴏʀᴛ\n○ ʀᴇǫᴜᴇsᴛ ᴡɪʟʟ ʙᴇ ᴄᴏᴍᴘʟᴇᴛᴇᴅ ɪɴ 1ʜ ɪꜰ ᴀᴠᴀɪʟᴀʙʟᴇ\n\n✨ 𝐔𝐏𝐈 𝐈𝐃 ➪ <code>' + PAYMENT_UPI_ID + '</code> \n\nᴄʟɪᴄᴋ ᴛᴏ ᴄʜᴇᴄᴋ ʏᴏᴜʀ ᴀᴄᴛɪᴠᴇ ᴘʟᴀɴ /myplan\n\n💢 ᴍᴜsᴛ sᴇɴᴅ sᴄʀᴇᴇɴsʜᴏᴛ ᴀғᴛᴇʀ ᴘᴀʏᴍᴇɴᴛ\n\n‼️ ᴀғᴛᴇʀ sᴇɴᴅɪɴɢ ᴀ sᴄʀᴇᴇɴsʜᴏᴛ ᴘʟᴇᴀsᴇ ɢɪᴠᴇ ᴜs sᴏᴍᴇ ᴛɪᴍᴇ ᴛᴏ ᴀᴅᴅ ʏᴏᴜ ɪɴ ᴛʜᴇ ᴘʀᴇᴍɪᴜᴍ</b>')
+ 
+ 
+ 
+@@ -102,47 +182,47 @@
+ OWNER_LNK = environ.get('OWNER_LNK', 'https://t.me/h21tg')
+ 
+ # True Or False
+-AI_SPELL_CHECK = bool(environ.get('AI_SPELL_CHECK', True))
+-PM_SEARCH = bool(environ.get('PM_SEARCH', True))
+-BUTTON_MODE = bool(environ.get('BUTTON_MODE', True))
+-MAX_BTN = bool(environ.get('MAX_BTN', True))
+-IS_TUTORIAL = bool(environ.get('IS_TUTORIAL', False))
+-IMDB = bool(environ.get('IMDB', False))
+-AUTO_FFILTER = bool(environ.get('AUTO_FFILTER', True))
+-AUTO_DELETE = bool(environ.get('AUTO_DELETE', True))
+-LONG_IMDB_DESCRIPTION = bool(environ.get("LONG_IMDB_DESCRIPTION", False))
+-SPELL_CHECK_REPLY = bool(environ.get("SPELL_CHECK_REPLY", True))
+-MELCOW_NEW_USERS = bool(environ.get('MELCOW_NEW_USERS', True))
+-PROTECT_CONTENT = bool(environ.get('PROTECT_CONTENT', False))
+-PUBLIC_FILE_STORE = bool(environ.get('PUBLIC_FILE_STORE', True))
+-NO_RESULTS_MSG = bool(environ.get("NO_RESULTS_MSG", False))
+-USE_CAPTION_FILTER = bool(environ.get('USE_CAPTION_FILTER', True))
++AI_SPELL_CHECK = _bool('AI_SPELL_CHECK', True)
++PM_SEARCH = _bool('PM_SEARCH', True)
++BUTTON_MODE = _bool('BUTTON_MODE', True)
++MAX_BTN = _bool('MAX_BTN', True)
++IS_TUTORIAL = _bool('IS_TUTORIAL', False)
++IMDB = _bool('IMDB', False)
++AUTO_FFILTER = _bool('AUTO_FFILTER', True)
++AUTO_DELETE = _bool('AUTO_DELETE', True)
++LONG_IMDB_DESCRIPTION = _bool('LONG_IMDB_DESCRIPTION', False)
++SPELL_CHECK_REPLY = _bool('SPELL_CHECK_REPLY', True)
++MELCOW_NEW_USERS = _bool('MELCOW_NEW_USERS', True)
++PROTECT_CONTENT = _bool('PROTECT_CONTENT', False)
++PUBLIC_FILE_STORE = _bool('PUBLIC_FILE_STORE', True)
++NO_RESULTS_MSG = _bool('NO_RESULTS_MSG', False)
++USE_CAPTION_FILTER = _bool('USE_CAPTION_FILTER', True)
+ 
+ 
+ # Token Verification Info :
+-VERIFY = bool(environ.get('VERIFY', False))
++VERIFY = _bool('VERIFY', False)
+ VERIFY_SHORTLINK_URL = environ.get('VERIFY_SHORTLINK_URL', '')
+ VERIFY_SHORTLINK_API = environ.get('VERIFY_SHORTLINK_API', '')
+ VERIFY_TUTORIAL = environ.get('VERIFY_TUTORIAL', '')
+ 
+ # If You Fill Second Shortner Then Bot Attach Both First And Second Shortner And Use It For Verify.
+-VERIFY_SECOND_SHORTNER = bool(environ.get('VERIFY_SECOND_SHORTNER', False))
++VERIFY_SECOND_SHORTNER = _bool('VERIFY_SECOND_SHORTNER', False)
+ # if verify second shortner is True then fill below url and api
+ VERIFY_SND_SHORTLINK_URL = environ.get('VERIFY_SND_SHORTLINK_URL', '')
+ VERIFY_SND_SHORTLINK_API = environ.get('VERIFY_SND_SHORTLINK_API', '')
+ 
+ 
+ # Shortlink Info
+-SHORTLINK_MODE = bool(environ.get('SHORTLINK_MODE', False)) # Set True Or False
++SHORTLINK_MODE = _bool('SHORTLINK_MODE', False) # Set True Or False
+ SHORTLINK_URL = environ.get('SHORTLINK_URL', '')
+ SHORTLINK_API = environ.get('SHORTLINK_API', '')
+ TUTORIAL = environ.get('TUTORIAL', '') # How Open Shortner Link Video Link , Channel Link Where You Upload Your Video.
+ 
+ 
+ # Others
+-CACHE_TIME = int(environ.get('CACHE_TIME', 1800))
+-MAX_B_TN = environ.get("MAX_B_TN", "5")
+-PORT = environ.get("PORT", "8080")
++CACHE_TIME = _int('CACHE_TIME', 1800)
++MAX_B_TN = _int('MAX_B_TN', 5)
++PORT = _int('PORT', 8080)
+ MSG_ALRT = environ.get('MSG_ALRT', '⏳ MOOVIDEX ENTERTAINMENTS™')
+ CUSTOM_FILE_CAPTION = environ.get("CUSTOM_FILE_CAPTION", f"{script.CAPTION}")
+ BATCH_FILE_CAPTION = environ.get("BATCH_FILE_CAPTION", CUSTOM_FILE_CAPTION)
+@@ -164,13 +244,13 @@
+ 
+ 
+ # Online Stream and Download
+-STREAM_MODE = bool(environ.get('STREAM_MODE', True)) # Set True or False
++STREAM_MODE = _bool('STREAM_MODE', True) # Set True or False
+ #Stream file store
+-STREAM_FILES_CHANNEL = int(environ.get('STREAM_FILES_CHANNEL', LOG_CHANNEL))
++STREAM_FILES_CHANNEL = _int('STREAM_FILES_CHANNEL', LOG_CHANNEL)
+ # If Stream Mode Is True Then Fill All Required Variable, If False Then Don't Fill.
+ MULTI_CLIENT = False
+-SLEEP_THRESHOLD = int(environ.get('SLEEP_THRESHOLD', '60'))
+-PING_INTERVAL = int(environ.get("PING_INTERVAL", "1200"))  # 20 minutes
++SLEEP_THRESHOLD = _int('SLEEP_THRESHOLD', 60)
++PING_INTERVAL = _int('PING_INTERVAL', 1200)  # 20 minutes
+ if 'DYNO' in environ:
+     ON_HEROKU = True
+ else:
+@@ -179,18 +259,18 @@
+ 
+ 
+ # Rename Info : If True Then Bot Rename File Else Not
+-RENAME_MODE = bool(environ.get('RENAME_MODE', False)) # Set True or False
++RENAME_MODE = _bool('RENAME_MODE', False) # Set True or False
+ 
+ 
+ # Auto Approve Info : If True Then Bot Approve New Upcoming Join Request Else Not
+-AUTO_APPROVE_MODE = bool(environ.get('AUTO_APPROVE_MODE', False)) # Set True or False
++AUTO_APPROVE_MODE = _bool('AUTO_APPROVE_MODE', False) # Set True or False
+ 
+ 
+ # Start Command Reactions
+ REACTIONS = ["🤝", "😇", "🤗", "😍", "👍", "🎅", "😐", "🥰", "🤩", "😱", "🤣", "😘", "👏", "😛", "😈", "🎉", "⚡️", "🫡", "🤓", "😎", "🏆", "🔥", "🤭", "🌚", "🆒", "👻", "😁"] #don't add any emoji because tg not support all emoji reactions
+ 
+ 
+-if MULTIPLE_DATABASE == False:
++if MULTIPLE_DATABASE is False:
+     USER_DB_URI = DATABASE_URI
+     OTHER_DB_URI = DATABASE_URI
+     FILE_DB_URI = DATABASE_URI
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/plugins/Extra/auto_approve/approve.py moovidex-fixed/plugins/Extra/auto_approve/approve.py
+--- moovidex-review/plugins/Extra/auto_approve/approve.py	2026-09-26 15:31:25.065785759 +0000
++++ moovidex-fixed/plugins/Extra/auto_approve/approve.py	2026-09-26 15:53:09.875213982 +0000
+@@ -43,8 +43,8 @@
+     if TRY_AGAIN_BTN == True:
+         return 
+     data = await db.get_msg_command(ap_user_id)
+-        
+-    if data.split("-", 1)[0] == "VJ":
++
++    if data and data.split("-", 1)[0] == "VJ":
+         user_id = int(data.split("-", 1)[1])
+         vj = await db.referal_add_user(user_id, message.from_user.id)
+         if vj and PREMIUM_AND_REFERAL_MODE == True:
+@@ -53,7 +53,7 @@
+             await client.send_message(chat_id = user_id, text = "<b>{} start the bot with your referral link\n\nTotal Referals - {}</b>".format(message.from_user.mention, num_referrals))
+             if num_referrals == REFERAL_COUNT:
+                 time = REFERAL_PREMEIUM_TIME       
+-                seconds = await get_seconds(time)
++                seconds = get_seconds(time)
+                 if seconds > 0:
+                     expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+                     user_data = {"id": user_id, "expiry_time": expiry_time} 
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/plugins/Extra/binged.py moovidex-fixed/plugins/Extra/binged.py
+--- moovidex-review/plugins/Extra/binged.py	2026-09-26 15:31:25.066923627 +0000
++++ moovidex-fixed/plugins/Extra/binged.py	2026-09-26 15:53:49.947851521 +0000
+@@ -1,4 +1,5 @@
+ import aiohttp
++import os
+ import re
+ import html
+ from datetime import datetime
+@@ -99,8 +100,19 @@
+     'Referer': 'https://www.binged.com/'
+ }
+ 
+-ADMIN_IDS = [1011394081, 7191327005]
+-UPDATE_CHANNEL_ID = -1001680629032
++def _env_ids(name, default):
++    ids = []
++    for part in os.environ.get(name, "").replace(",", " ").split():
++        try:
++            ids.append(int(part))
++        except ValueError:
++            pass
++    return ids or default
++
++# Were hardcoded personal IDs; now configurable via environment, defaulting
++# to the bot's configured ADMINS so the repo carries no personal IDs.
++ADMIN_IDS = _env_ids("BINGED_ADMIN_IDS", list(ADMINS))
++UPDATE_CHANNEL_ID = int(os.environ.get("UPDATE_CHANNEL_ID", "-1001680629032"))
+ 
+ # Init global vars just in case
+ if not hasattr(temp, 'BINGED_RESULTS'): temp.BINGED_RESULTS = {}
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/plugins/Extra/ott.py moovidex-fixed/plugins/Extra/ott.py
+--- moovidex-review/plugins/Extra/ott.py	2026-09-26 15:31:25.067566252 +0000
++++ moovidex-fixed/plugins/Extra/ott.py	2026-09-26 15:54:03.090360105 +0000
+@@ -120,8 +120,11 @@
+     if not cache or cache["user_id"] != user_id:
+         return await callback_query.answer("⚠️ Session expired. Send /ott again.", show_alert=True)
+ 
+-    index = int(callback_query.data.split("ott_platform_")[1])
+-    platform = cache['platforms'][index]
++    try:
++        index = int(callback_query.data.split("ott_platform_")[1])
++        platform = cache['platforms'][index]
++    except (ValueError, IndexError):
++        return await callback_query.answer("⚠️ Invalid selection.", show_alert=True)
+ 
+     cache['selected_platform'] = platform
+     cache['page'] = 0
+@@ -191,7 +194,7 @@
+     message_id = message.id
+ 
+     cache = OTT_USER_CACHE.get(message_id)
+-    if not cache:
++    if not cache or cache.get("user_id") != user_id:
+         return await callback_query.answer("⚠️ Session expired.", show_alert=True)
+ 
+     cache['page'] += 1
+@@ -210,7 +213,7 @@
+     message_id = message.id
+ 
+     cache = OTT_USER_CACHE.get(message_id)
+-    if not cache or cache['page'] <= 0:
++    if not cache or cache.get("user_id") != user_id or cache['page'] <= 0:
+         return await callback_query.answer("⚠️ Session expired or invalid page.", show_alert=True)
+ 
+     cache['page'] -= 1
+@@ -244,7 +247,13 @@
+ 
+ @Client.on_callback_query(filters.regex("ott_close"))
+ async def ott_close_handler(client, callback_query):
++    cache = OTT_USER_CACHE.get(callback_query.message.id)
++    if cache and cache.get("user_id") != callback_query.from_user.id:
++        return await callback_query.answer("⚠️ This menu isn't yours.", show_alert=True)
++    OTT_USER_CACHE.pop(callback_query.message.id, None)
+     try:
+         await callback_query.message.delete()
+-    except:
++    except Exception:
+         await callback_query.answer("⚠️ Unable to close.")
++    else:
++        await callback_query.answer()
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/plugins/Extra/paste.py moovidex-fixed/plugins/Extra/paste.py
+--- moovidex-review/plugins/Extra/paste.py	2026-09-26 15:31:25.067566252 +0000
++++ moovidex-fixed/plugins/Extra/paste.py	2026-09-26 15:53:01.075486683 +0000
+@@ -42,27 +42,33 @@
+ @Client.on_message(filters.command(["tgpaste", "pasty", "paste"]))
+ async def pasty(client, message):
+     pablo = await message.reply_text("`Please wait...`")
+-    tex_t = message.text
+     if ' ' in message.text:
+         message_s = message.text.split(" ", 1)[1]
+     elif message.reply_to_message:
+         message_s = message.reply_to_message.text
+     else:
+-        await message.reply("sorry no in put. please repy to a text or /paste with text")
+-    if not tex_t:
++        await pablo.edit("sorry no in put. please repy to a text or /paste with text")
++        return
++    if not message_s:
+         if not message.reply_to_message:
+             await pablo.edit("`Only text and documents are supported.`")
+             return
+         if not message.reply_to_message.text:
+             file = await message.reply_to_message.download()
+-            m_list = open(file, "r").read()
++            try:
++                with open(file, "r") as f:
++                    m_list = f.read()
++            finally:
++                os.remove(file)
+             message_s = m_list
+-            os.remove(file)
+-        elif message.reply_to_message.text:
++        else:
+             message_s = message.reply_to_message.text
+ 
+     ext = "py"
+     x = await p_paste(message_s, ext)
++    if "error" in x:
++        await pablo.edit(f"Failed to paste: {x['error']}")
++        return
+     p_link = x["url"]
+     p_raw = x["raw"]
+ 
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/plugins/Extra/rename/cb_data.py moovidex-fixed/plugins/Extra/rename/cb_data.py
+--- moovidex-review/plugins/Extra/rename/cb_data.py	2026-09-26 15:31:25.067856608 +0000
++++ moovidex-fixed/plugins/Extra/rename/cb_data.py	2026-09-26 15:52:44.910415977 +0000
+@@ -17,7 +17,7 @@
+ logger = logging.getLogger(__name__)
+ logging.getLogger("pyrogram").setLevel(logging.WARNING)
+ 
+-@Client.on_callback_query(filters.regex('cancel'))
++@Client.on_callback_query(filters.regex(r'^cancel$'))
+ async def cancel(bot,update):
+     try:
+         await update.message.delete()
+@@ -29,9 +29,19 @@
+     try:
+         type = update.data.split("_")[1]
+         new_name = update.message.text
+-        new_filename = new_name.split(":-")[1]
++        try:
++            new_filename = new_name.split(":-")[1].strip().strip("`").strip()
++        except IndexError:
++            await update.message.edit("Could not determine the new file name.")
++            return
++        # confine the rename target inside downloads/: drop any directory
++        # components (path traversal) and reject empty/degenerate names
++        new_filename = os.path.basename(new_filename)
++        if not new_filename or new_filename in (".", ".."):
++            await update.message.edit("Invalid file name.")
++            return
+         file = update.message.reply_to_message
+-        file_path = f"downloads/{new_filename}"
++        file_path = os.path.join("downloads", new_filename)
+         ms = await update.message.edit("⚠️__**Please wait...**__\n\n__Downloading file to my server...__")
+         c_time = time.time()
+         try:
+@@ -40,7 +50,7 @@
+                     progress=progress_for_pyrogram,
+                     progress_args=("**⚠️ Please wait VJ Hack is in processing**", ms, c_time))
+         except Exception as e:
+-            await ms.edit(e)
++            await ms.edit(str(e))
+             return 
+         splitpath = path.split("/downloads/")
+         dow_file_name = splitpath[1]
+@@ -74,7 +84,7 @@
+                ph_path = await bot.download_media(media.thumbs[0].file_id)
+             Image.open(ph_path).convert("RGB").save(ph_path)
+             img = Image.open(ph_path)
+-            img.resize((320, 320))
++            img = img.resize((320, 320))
+             img.save(ph_path, "JPEG")
+         await ms.edit("⚠️__**Please wait...**__\n\n__Processing file upload....__")
+         c_time = time.time() 
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/plugins/Extra/rename/filedetect.py moovidex-fixed/plugins/Extra/rename/filedetect.py
+--- moovidex-review/plugins/Extra/rename/filedetect.py	2026-09-26 15:31:25.067856608 +0000
++++ moovidex-fixed/plugins/Extra/rename/filedetect.py	2026-09-26 15:52:49.192880086 +0000
+@@ -7,50 +7,36 @@
+ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ForceReply
+ 
+ async def refunc(client, message, new_name, msg):
++    # NOTE: the original code referenced `out_filename` before it was ever
++    # assigned (NameError on every call), so the extension-stripping branch
++    # never ran. The name is now built first, then the picker is shown.
+     try:
+         file = getattr(msg, msg.media.value)
+         filename = file.file_name
+         types = file.mime_type.split("/")
+         mime = types[0]
+         try:
+-            if ".mp4" or ".mkv" in new_name:
+-                if ".mp4" in new_name:
+-                    new_name = new_name.replace(".mp4", "")  # Remove the dot from new_name
+-                if ".mkv" in new_name:
+-                    new_name = new_name.replace(".mkv", "")
+-            else:
+-                new_name = new_name
+-            if "." in new_name:
+-                new_name = new_name.replace(".", "")  
+-            if mime == "video":
+-                markup = InlineKeyboardMarkup([[
+-                    InlineKeyboardButton("📁 Document", callback_data="upload_document"),
+-                    InlineKeyboardButton("🎥 Video", callback_data="upload_video")]])
+-            elif mime == "audio":
+-                markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+-                    "📁 Document", callback_data="upload_document"), InlineKeyboardButton("🎵 audio", callback_data="upload_audio")]])
+-            else:
+-                markup = InlineKeyboardMarkup(
+-                    [[InlineKeyboardButton("📁 Document", callback_data="upload_document")]])
+-            await message.reply_text(f"**Select the output file type**\n**🎞New Name** :- ```{out_filename}```", reply_to_message_id=msg.id, reply_markup=markup)
+-
+-        except:
+-            try:
+-                out = filename.split(".")
+-                out_name = out[-1]
+-                out_filename = new_name + "." + out_name
+-            except:
+-                await message.reply_text("**Error** :  No  Extension in File, Not Supporting")
+-                return
+-            if mime == "video":
+-                markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+-                    "📁 Document", callback_data="upload_document"), InlineKeyboardButton("🎥 Video", callback_data="upload_video")]])
+-            elif mime == "audio":
+-                markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+-                    "📁 Document", callback_data="upload_document"), InlineKeyboardButton("🎵 audio", callback_data="upload_audio")]])
+-            else:
+-                markup = InlineKeyboardMarkup(
+-                    [[InlineKeyboardButton("📁 Document", callback_data="upload_document")]])
+-            await message.reply_text(f"**Select the output file type**\n**🎞New Name ->** :- {out_filename}", reply_to_message_id=msg.id, reply_markup=markup)
++            base = new_name
++            for ext in (".mp4", ".mkv"):
++                if ext in base:
++                    base = base.replace(ext, "")
++            if "." in base:
++                base = base.replace(".", "")
++            out_name = filename.split(".")[-1]
++            out_filename = base + "." + out_name
++        except Exception:
++            await message.reply_text("**Error** :  No  Extension in File, Not Supporting")
++            return
++        if mime == "video":
++            markup = InlineKeyboardMarkup([[
++                InlineKeyboardButton("📁 Document", callback_data="upload_document"),
++                InlineKeyboardButton("🎥 Video", callback_data="upload_video")]])
++        elif mime == "audio":
++            markup = InlineKeyboardMarkup([[InlineKeyboardButton(
++                "📁 Document", callback_data="upload_document"), InlineKeyboardButton("🎵 audio", callback_data="upload_audio")]])
++        else:
++            markup = InlineKeyboardMarkup(
++                [[InlineKeyboardButton("📁 Document", callback_data="upload_document")]])
++        await message.reply_text(f"**Select the output file type**\n**🎞New Name** :- ```{out_filename}```", reply_to_message_id=msg.id, reply_markup=markup)
+     except Exception as e:
+         print(f"error: {e}")
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/plugins/Extra/upcoming.py moovidex-fixed/plugins/Extra/upcoming.py
+--- moovidex-review/plugins/Extra/upcoming.py	2026-09-26 15:31:25.068960405 +0000
++++ moovidex-fixed/plugins/Extra/upcoming.py	2026-09-26 15:53:35.408654607 +0000
+@@ -219,8 +219,9 @@
+     buttons = [[InlineKeyboardButton(f"🔔 Notify Me", callback_data=f"notify_{data['safe_title']}_{data['r_date']}")]]
+     
+     if user_id in ADMIN_IDS:
++         # NOTE: the "Edit & Post" button was removed: its callback
++         # (upcoming_edit_post_...) had no handler, so it did nothing.
+          buttons.append([
+-             InlineKeyboardButton("✏️ Edit & Post", callback_data=f"upcoming_edit_post_{movie_id}"),
+              InlineKeyboardButton("📣 Post Default", callback_data=f"upcoming_post_{movie_id}")
+          ])
+     buttons.append([InlineKeyboardButton("❌ Close", callback_data="close_message")])
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/plugins/commands.py moovidex-fixed/plugins/commands.py
+--- moovidex-review/plugins/commands.py	2026-09-26 15:31:25.070225114 +0000
++++ moovidex-fixed/plugins/commands.py	2026-09-26 15:56:30.946865192 +0000
+@@ -3,12 +3,35 @@
+ # Ask Doubt on telegram @KingVJ01
+ 
+ import os, string, logging, random, asyncio, time, datetime, re, sys, json, base64
++
++_autodelete_tasks = set()
++
++async def _autodelete_after(delay, messages=(), notice=None, notice_text=None, notice_markup=None):
++    await asyncio.sleep(delay)
++    for m in messages:
++        try:
++            await m.delete()
++        except Exception:
++            pass
++    if notice is not None and notice_text is not None:
++        try:
++            await notice.edit_text(notice_text, reply_markup=notice_markup)
++        except Exception:
++            pass
++
++def schedule_autodelete(delay, messages=(), notice=None, notice_text=None, notice_markup=None):
++    # Run the delayed deletion in the background instead of blocking the
++    # handler with a long sleep.
++    task = asyncio.create_task(_autodelete_after(delay, tuple(messages), notice, notice_text, notice_markup))
++    _autodelete_tasks.add(task)
++    task.add_done_callback(_autodelete_tasks.discard)
++    return task
+ from Script import script
+ from pyrogram import Client, filters, enums
+ from pyrogram.errors import ChatAdminRequired, FloodWait
+ from pyrogram.types import *
+ from plugins.pm_filter import doo
+-from database.ia_filterdb import col, sec_col, get_file_details, unpack_new_file_id, get_bad_files
++from database.ia_filterdb import col, sec_col, get_file_details, unpack_new_file_id, get_bad_files, count_bad_files
+ from database.users_chats_db import db, delete_all_referal_users, get_referal_users_count, get_referal_all_users, referal_add_user
+ from database.join_reqs import JoinReqs
+ from database.requests_db import requests_db
+@@ -176,7 +199,7 @@
+             await client.send_message(chat_id = user_id, text = "<b>{} start the bot with your referral link\n\nTotal Referals - {}</b>".format(message.from_user.mention, num_referrals))
+             if num_referrals == REFERAL_COUNT:
+                 time = REFERAL_PREMEIUM_TIME       
+-                seconds = await get_seconds(time)
++                seconds = get_seconds(time)
+                 if seconds > 0:
+                     expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+                     user_data = {"id": user_id, "expiry_time": expiry_time} 
+@@ -283,10 +306,8 @@
+             await asyncio.sleep(1) 
+         await sts.delete()
+         k = await client.send_message(chat_id = message.from_user.id, text=f"<blockquote><b><u>❗️❗️❗️IMPORTANT❗️️❗️❗️</u></b>\n\nᴛʜɪs ᴍᴇssᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ɪɴ <b><u>10 mins</u> 🫥 <i></b>(ᴅᴜᴇ ᴛᴏ ᴄᴏᴘʏʀɪɢʜᴛ ɪssᴜᴇs)</i>.\n\n<b><i>ᴘʟᴇᴀsᴇ ғᴏʀᴡᴀʀᴅ ᴛʜɪs ᴍᴇssᴀɢᴇ ᴛᴏ ʏᴏᴜʀ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs ᴏʀ ᴀɴʏ ᴘʀɪᴠᴀᴛᴇ ᴄʜᴀᴛ.</i></b></blockquote>")
+-        await asyncio.sleep(600)
+-        for x in filesarr:
+-            await x.delete()
+-        await k.edit_text("<b>🗑 Your file is successfully deleted</b>")  
++        schedule_autodelete(600, messages=filesarr, notice=k,
++                            notice_text="<b>🗑 Your file is successfully deleted</b>")
+         return
+     
+     elif data.split("_", 1)[0] == "Search":
+@@ -361,10 +382,8 @@
+             await asyncio.sleep(1)
+         await sts.delete()
+         k = await client.send_message(chat_id = message.from_user.id, text=f"<blockquote><b><u>❗️❗️❗️IMPORTANT❗️️❗️❗️</u></b>\n\nᴛʜɪs ᴍᴇssᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ɪɴ <b><u>10 mins</u> 🫥 <i></b>(ᴅᴜᴇ ᴛᴏ ᴄᴏᴘʏʀɪɢʜᴛ ɪssᴜᴇs)</i>.\n\n<b><i>ᴘʟᴇᴀsᴇ ғᴏʀᴡᴀʀᴅ ᴛʜɪs ᴍᴇssᴀɢᴇ ᴛᴏ ʏᴏᴜʀ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs ᴏʀ ᴀɴʏ ᴘʀɪᴠᴀᴛᴇ ᴄʜᴀᴛ.</i></b></blockquote>")
+-        await asyncio.sleep(600)
+-        for x in filesarr:
+-            await x.delete()
+-        await k.edit_text("<b>🗑 Your file is successfully deleted</b>")
++        schedule_autodelete(600, messages=filesarr, notice=k,
++                            notice_text="<b>🗑 Your file is successfully deleted</b>")
+         return
+ 
+     elif data.split("-", 1)[0] == "verify":
+@@ -397,8 +416,8 @@
+         if PREMIUM_AND_REFERAL_MODE == True:
+             text += "<b>ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴅɪʀᴇᴄᴛ ғɪʟᴇꜱ ᴡɪᴛʜᴏᴜᴛ ᴀɴʏ ᴏᴘᴇɴɪɴɢ ʟɪɴᴋ ᴀɴᴅ ᴡᴀᴛᴄʜɪɴɢ ᴀᴅs ᴛʜᴇɴ ʙᴜʏ ʙᴏᴛ ꜱᴜʙꜱᴄʀɪᴘᴛɪᴏɴ ☺️\n\n💶 ꜱᴇɴᴅ /plan ᴛᴏ ʙᴜʏ ꜱᴜʙꜱᴄʀɪᴘᴛɪᴏɴ</b>"
+         k = await client.send_message(chat_id=message.from_user.id, text=text, reply_markup=InlineKeyboardMarkup(btn))
+-        await asyncio.sleep(300)
+-        await k.edit("<b>🗑 Your file is successfully deleted</b>")
++        schedule_autodelete(300, notice=k,
++                            notice_text="<b>🗑 Your file is successfully deleted</b>")
+         return
+         
+     
+@@ -417,8 +436,8 @@
+         if PREMIUM_AND_REFERAL_MODE == True:
+             text += "<b>ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴅɪʀᴇᴄᴛ ғɪʟᴇꜱ ᴡɪᴛʜᴏᴜᴛ ᴀɴʏ ᴏᴘᴇɴɪɴɢ ʟɪɴᴋ ᴀɴᴅ ᴡᴀᴛᴄʜɪɴɢ ᴀᴅs ᴛʜᴇɴ ʙᴜʏ ʙᴏᴛ ꜱᴜʙꜱᴄʀɪᴘᴛɪᴏɴ ☺️\n\n💶 ꜱᴇɴᴅ /plan ᴛᴏ ʙᴜʏ ꜱᴜʙꜱᴄʀɪᴘᴛɪᴏɴ</b>"
+         k = await client.send_message(chat_id=user, text=text, reply_markup=InlineKeyboardMarkup(btn))
+-        await asyncio.sleep(1200)
+-        await k.edit("<b>🗑 Your file is successfully deleted</b>")
++        schedule_autodelete(1200, notice=k,
++                            notice_text="<b>🗑 Your file is successfully deleted</b>")
+         return
+         
+     elif data.startswith("all"):
+@@ -469,10 +488,8 @@
+             )
+             filesarr.append(msg)
+         k = await client.send_message(chat_id = message.from_user.id, text=f"<blockquote><b><u>❗️❗️❗️IMPORTANT❗️️❗️❗️</u></b>\n\nᴛʜɪs ᴍᴇssᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ɪɴ <b><u>10 mins</u> 🫥 <i></b>(ᴅᴜᴇ ᴛᴏ ᴄᴏᴘʏʀɪɢʜᴛ ɪssᴜᴇs)</i>.\n\n<b><i>ᴘʟᴇᴀsᴇ ғᴏʀᴡᴀʀᴅ ᴛʜɪs ᴍᴇssᴀɢᴇ ᴛᴏ ʏᴏᴜʀ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs ᴏʀ ᴀɴʏ ᴘʀɪᴠᴀᴛᴇ ᴄʜᴀᴛ.</i></b></blockquote>")
+-        await asyncio.sleep(600)
+-        for x in filesarr:
+-            await x.delete()
+-        await k.edit_text("<b>🗑 Your file is successfully deleted</b>")
++        schedule_autodelete(600, messages=filesarr, notice=k,
++                            notice_text="<b>🗑 Your file is successfully deleted</b>")
+         return    
+         
+     elif data.startswith("files"):
+@@ -494,8 +511,8 @@
+             if PREMIUM_AND_REFERAL_MODE == True:
+                 text += "<b>ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴅɪʀᴇᴄᴛ ғɪʟᴇꜱ ᴡɪᴛʜᴏᴜᴛ ᴀɴʏ ᴏᴘᴇɴɪɴɢ ʟɪɴᴋ ᴀɴᴅ ᴡᴀᴛᴄʜɪɴɢ ᴀᴅs ᴛʜᴇɴ ʙᴜʏ ʙᴏᴛ ꜱᴜʙꜱᴄʀɪᴘᴛɪᴏɴ ☺️\n\n💶 ꜱᴇɴᴅ /plan ᴛᴏ ʙᴜʏ ꜱᴜʙꜱᴄʀɪᴘᴛɪᴏɴ</b>"
+             k = await client.send_message(chat_id=message.from_user.id, text=text, reply_markup=InlineKeyboardMarkup(btn))
+-            await asyncio.sleep(1200)
+-            await k.edit("<b>🗑 Your file is successfully deleted</b>")
++            schedule_autodelete(1200, notice=k,
++                                notice_text="<b>🗑 Your file is successfully deleted</b>")
+             return
+     user = message.from_user.id
+     files_ = await get_file_details(file_id)           
+@@ -542,9 +559,9 @@
+             await msg.edit_caption(caption=f_caption)
+             btn = [[InlineKeyboardButton("♻️ Get File Again ♻️", callback_data=f'del#{file_id}')]]
+             k = await msg.reply(text=f"<blockquote><b><u>❗️❗️❗️IMPORTANT❗️️❗️❗️</u></b>\n\nᴛʜɪs ᴍᴇssᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ɪɴ <b><u>10 mins</u> 🫥 <i></b>(ᴅᴜᴇ ᴛᴏ ᴄᴏᴘʏʀɪɢʜᴛ ɪssᴜᴇs)</i>.\n\n<b><i>ᴘʟᴇᴀsᴇ ғᴏʀᴡᴀʀᴅ ᴛʜɪs ᴍᴇssᴀɢᴇ ᴛᴏ ʏᴏᴜʀ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs ᴏʀ ᴀɴʏ ᴘʀɪᴠᴀᴛᴇ ᴄʜᴀᴛ.</i></b></blockquote>")
+-            await asyncio.sleep(600)
+-            await msg.delete()
+-            await k.edit_text("<b>🗑 Your file is successfully deleted ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴀɢᴀɪɴ ᴛʜᴇɴ ᴄʟɪᴄᴋ ᴏɴ ʙᴇʟᴏᴡ ʙᴜᴛᴛᴏɴ</b>",reply_markup=InlineKeyboardMarkup(btn))
++            schedule_autodelete(600, messages=[msg], notice=k,
++                                notice_text="<b>🗑 Your file is successfully deleted ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴀɢᴀɪɴ ᴛʜᴇɴ ᴄʟɪᴄᴋ ᴏɴ ʙᴇʟᴏᴡ ʙᴜᴛᴛᴏɴ</b>",
++                                notice_markup=InlineKeyboardMarkup(btn))
+             return
+         except:
+             pass
+@@ -590,9 +607,9 @@
+     )
+     btn = [[InlineKeyboardButton("♻️ Get File Again ♻️", callback_data=f'del#{file_id}')]]
+     k = await msg.reply(text=f"<blockquote><b><u>❗️❗️❗️IMPORTANT❗️️❗️❗️</u></b>\n\nᴛʜɪs ᴍᴇssᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ɪɴ <b><u>10 mins</u> 🫥 <i></b>(ᴅᴜᴇ ᴛᴏ ᴄᴏᴘʏʀɪɢʜᴛ ɪssᴜᴇs)</i>.\n\n<b><i>ᴘʟᴇᴀsᴇ ғᴏʀᴡᴀʀᴅ ᴛʜɪs ᴍᴇssᴀɢᴇ ᴛᴏ ʏᴏᴜʀ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs ᴏʀ ᴀɴʏ ᴘʀɪᴠᴀᴛᴇ ᴄʜᴀᴛ.</i></b></blockquote>")
+-    await asyncio.sleep(600)
+-    await msg.delete()
+-    await k.edit_text("<b>🗑 Your file is successfully deleted ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴀɢᴀɪɴ ᴛʜᴇɴ ᴄʟɪᴄᴋ ᴏɴ ʙᴇʟᴏᴡ ʙᴜᴛᴛᴏɴ</b>",reply_markup=InlineKeyboardMarkup(btn))
++    schedule_autodelete(600, messages=[msg], notice=k,
++                        notice_text="<b>🗑 Your file is successfully deleted ɪғ ʏᴏᴜ ᴡᴀɴᴛ ᴀɢᴀɪɴ ᴛʜᴇɴ ᴄʟɪᴄᴋ ᴏɴ ʙᴇʟᴏᴡ ʙᴜᴛᴛᴏɴ</b>",
++                        notice_markup=InlineKeyboardMarkup(btn))
+     return   
+ 
+ @Client.on_message(filters.command('channel') & filters.user(ADMINS))
+@@ -694,13 +711,13 @@
+         await msg.edit('This is not supported file format')
+         return
+     
+-    file_id, file_ref = unpack_new_file_id(media.file_id)
++    file_id = unpack_new_file_id(media.file_id)
+ 
+-    result = col.delete_one({
++    result = await col.delete_one({
+         'file_id': file_id,
+     })
+-    if not result.deleted_count:
+-        result = sec_col.delete_one({
++    if not result.deleted_count and sec_col is not None:
++        result = await sec_col.delete_one({
+             'file_id': file_id,
+         })
+     if result.deleted_count:
+@@ -712,12 +729,12 @@
+             file_name = file_name.replace(char, '')
+         file_name = ' '.join(filter(lambda x: not x.startswith('@'), file_name.split()))
+     
+-        result = col.delete_many({
++        result = await col.delete_many({
+             'file_name': file_name,
+             'file_size': media.file_size
+         })
+-        if not result.deleted_count:
+-            result = sec_col.delete_many({
++        if not result.deleted_count and sec_col is not None:
++            result = await sec_col.delete_many({
+                 'file_name': file_name,
+                 'file_size': media.file_size
+             })
+@@ -726,12 +743,12 @@
+         else:
+             # files indexed before https://github.com/EvamariaTG/EvaMaria/commit/f3d2a1bcb155faf44178e5d7a685a1b533e714bf#diff-86b613edf1748372103e94cacff3b578b36b698ef9c16817bb98fe9ef22fb669R39 
+             # have original file name.
+-            result = col.delete_many({
++            result = await col.delete_many({
+                 'file_name': media.file_name,
+                 'file_size': media.file_size
+             })
+-            if not result.deleted_count:
+-                result = sec_col.delete_many({
++            if not result.deleted_count and sec_col is not None:
++                result = await sec_col.delete_many({
+                     'file_name': media.file_name,
+                     'file_size': media.file_size
+                 })
+@@ -758,8 +775,9 @@
+ 
+ @Client.on_callback_query(filters.regex(r'^autofilter_delete'))
+ async def delete_all_index_confirm(bot, query):
+-    col.drop()
+-    sec_col.drop()
++    await col.drop()
++    if sec_col is not None:
++        await sec_col.drop()
+     await query.answer('Piracy Is Crime')
+     await query.message.edit('Succesfully Deleted All The Indexed Files.')
+ 
+@@ -1103,7 +1121,7 @@
+     except:
+         return await message.reply_text(f"<b>Hey {message.from_user.mention}, Give me a keyword along with the command to delete files.</b>")
+     k = await bot.send_message(chat_id=message.chat.id, text=f"<b>Fetching Files for your query {keyword} on DB... Please wait...</b>")
+-    files, total = await get_bad_files(keyword)
++    total = await count_bad_files(keyword)
+     await k.delete()
+     #await k.edit_text(f"<b>Found {total} files for your query {keyword} !\n\nFile deletion process will start in 5 seconds !</b>")
+     #await asyncio.sleep(5)
+@@ -1362,7 +1380,7 @@
+     if len(message.command) == 3:
+         user_id = int(message.command[1])  # Convert the user_id to integer
+         time = message.command[2]        
+-        seconds = await get_seconds(time)
++        seconds = get_seconds(time)
+         if seconds > 0:
+             expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+             user_data = {"id": user_id, "expiry_time": expiry_time} 
+@@ -1389,7 +1407,7 @@
+         user_id = int(message.command[1])  # Convert the user_id to integer
+       #  time = message.command[2]
+         time = "1s"
+-        seconds = await get_seconds(time)
++        seconds = get_seconds(time)
+         if seconds > 0:
+             expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+             user_data = {"id": user_id, "expiry_time": expiry_time}  # Using "id" instead of "user_id"
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/plugins/dashboard.py moovidex-fixed/plugins/dashboard.py
+--- moovidex-review/plugins/dashboard.py	2026-09-26 15:31:25.071005155 +0000
++++ moovidex-fixed/plugins/dashboard.py	2026-09-26 15:55:00.493134277 +0000
+@@ -1,4 +1,5 @@
+ import logging
++import secrets
+ import jinja2
+ import datetime
+ import psutil
+@@ -6,6 +7,7 @@
+ import sys
+ import platform
+ from aiohttp import web
++from pyrogram.errors import FloodWait
+ from info import ADMIN_USERNAME, ADMIN_PASSWORD
+ from database.users_chats_db import db
+ from database.stats_db import stats_db
+@@ -23,15 +25,42 @@
+ 
+ # Jinja2 environment setup
+ template_loader = jinja2.FileSystemLoader(searchpath="./TechVJ/template/dashboard/")
+-template_env = jinja2.Environment(loader=template_loader)
++# autoescape: templates render untrusted data (usernames, request text,
++# search queries). No template uses |safe, so this is behavior-preserving
++# except that HTML metacharacters are now escaped.
++template_env = jinja2.Environment(
++    loader=template_loader,
++    autoescape=jinja2.select_jinja_autoescape(['html', 'htm', 'xml']),
++)
+ 
+ def render_template(name, **kwargs):
+     template = template_env.get_template(name)
+     return template.render(**kwargs)
+ 
++# Server-side session store: token -> expiry timestamp. The old code set a
++# client-side cookie `admin_auth=true` after login, which anyone could forge
++# to gain full admin access. Sessions now live server-side only.
++_active_sessions = {}
++
++def _new_session():
++    token = secrets.token_urlsafe(32)
++    _active_sessions[token] = time.time() + 3600 * 24
++    return token
++
++def _drop_session(token):
++    _active_sessions.pop(token, None)
++
+ def check_auth(request):
+-    auth_cookie = request.cookies.get('admin_auth')
+-    return auth_cookie == "true"
++    token = request.cookies.get('admin_auth')
++    if not token:
++        return False
++    expiry = _active_sessions.get(token)
++    if not expiry:
++        return False
++    if expiry < time.time():
++        _drop_session(token)
++        return False
++    return True
+ 
+ @routes.get("/admin/login")
+ async def login_page(request):
+@@ -45,13 +74,15 @@
+     
+     if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+         response = web.HTTPFound('/admin')
+-        response.set_cookie('admin_auth', 'true', max_age=3600*24)
++        response.set_cookie('admin_auth', _new_session(), max_age=3600*24,
++                            httponly=True, samesite='Lax')
+         return response
+     else:
+         return web.Response(text=render_template("login.html", error="Invalid credentials"), content_type='text/html')
+ 
+ @routes.get("/admin/logout")
+ async def logout_handler(request):
++    _drop_session(request.cookies.get('admin_auth'))
+     response = web.HTTPFound('/admin/login')
+     response.del_cookie('admin_auth')
+     return response
+@@ -110,9 +141,9 @@
+                                                  no_result_chart_labels=chart_labels,
+                                                  no_result_chart_data=chart_data,
+                                                  status="Online"), content_type='text/html')
+-    except Exception as e:
+-        import traceback
+-        return web.Response(text=f"Error: {e}\n\n{traceback.format_exc()}", status=500)
++    except Exception:
++        logging.exception("Dashboard home failed")
++        return web.Response(text="Internal Server Error", status=500)
+ 
+ @routes.get("/admin/users")
+ async def users_page(request):
+@@ -210,21 +241,38 @@
+ # --- NEW FEATURES ---
+ 
+ # Broadcast
++async def _broadcast_send(chat_id, text, pin):
++    # Bounded FloodWait retries per recipient instead of counting the
++    # recipient as failed on the first rate limit.
++    for attempt in range(4):
++        try:
++            msg = await TechVJBot.send_message(chat_id=chat_id, text=text)
++            if pin:
++                try:
++                    await msg.pin()
++                except Exception:
++                    pass
++            return True
++        except FloodWait as e:
++            wait = min(e.value, 300)
++            logging.warning("Broadcast FloodWait %ss for %s (attempt %d)", e.value, chat_id, attempt + 1)
++            await asyncio.sleep(wait)
++        except Exception:
++            logging.exception("Broadcast send failed for %s", chat_id)
++            return False
++    return False
++
+ async def run_broadcast(target, text, pin):
+     total = 0
+     success = 0
+     failed = 0
+-    
++
+     if target == 'users':
+         users = await db.get_all_users()
+         async for user in users:
+-            try:
+-                msg = await TechVJBot.send_message(chat_id=int(user['id']), text=text)
+-                if pin:
+-                    try: await msg.pin()
+-                    except: pass
++            if await _broadcast_send(int(user['id']), text, pin):
+                 success += 1
+-            except Exception as e:
++            else:
+                 failed += 1
+             total += 1
+             # Rate limiting / yielding
+@@ -232,17 +280,13 @@
+     else:
+         groups = await db.get_all_chats()
+         async for group in groups:
+-            try:
+-                msg = await TechVJBot.send_message(chat_id=int(group['id']), text=text)
+-                if pin:
+-                    try: await msg.pin()
+-                    except: pass
++            if await _broadcast_send(int(group['id']), text, pin):
+                 success += 1
+-            except:
++            else:
+                 failed += 1
+             total += 1
+             if total % 50 == 0: await asyncio.sleep(0.5)
+-            
++
+     logging.info(f"Broadcast Finished. Total: {total}, Success: {success}, Failed: {failed}")
+ 
+ @routes.get("/admin/broadcast")
+@@ -344,8 +388,9 @@
+     
+     if file_id:
+         try:
+-            col.delete_one({'file_id': file_id})
+-            sec_col.delete_one({'file_id': file_id})
++            await col.delete_one({'file_id': file_id})
++            if sec_col is not None:
++                await sec_col.delete_one({'file_id': file_id})
+         except Exception:
+             pass
+             
+@@ -567,4 +612,5 @@
+         except Exception as e:
+             msg_result += f" Failed to notify: {e}"
+ 
+-    return web.HTTPFound(f'/admin/requests?message={msg_result}')
++    from urllib.parse import quote_plus
++    return web.HTTPFound(f'/admin/requests?message={quote_plus(msg_result)}')
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/plugins/files_delete.py moovidex-fixed/plugins/files_delete.py
+--- moovidex-review/plugins/files_delete.py	2026-09-26 15:31:25.071085796 +0000
++++ moovidex-fixed/plugins/files_delete.py	2026-09-26 15:56:30.947560556 +0000
+@@ -21,14 +21,14 @@
+     else:
+         return
+ 
+-    file_id, file_ref = unpack_new_file_id(media.file_id)
++    file_id = unpack_new_file_id(media.file_id)
+ 
+ 
+-    result = col.delete_one({
++    result = await col.delete_one({
+         'file_id': file_id,
+     })
+-    if not result.deleted_count:
+-        result = sec_col.delete_one({
++    if not result.deleted_count and sec_col is not None:
++        result = await sec_col.delete_one({
+             'file_id': file_id,
+         })
+     if result.deleted_count:
+@@ -40,24 +40,24 @@
+             file_name = file_name.replace(char, '')
+         file_name = ' '.join(filter(lambda x: not x.startswith('@'), file_name.split()))
+     
+-        result = col.delete_many({
++        result = await col.delete_many({
+             'file_name': file_name,
+             'file_size': media.file_size
+         })
+-        if not result.deleted_count:
+-            result = sec_col.delete_many({
++        if not result.deleted_count and sec_col is not None:
++            result = await sec_col.delete_many({
+                 'file_name': file_name,
+                 'file_size': media.file_size
+             })
+         if result.deleted_count:
+             logger.info('File is successfully deleted from database.')
+         else:
+-            result = col.delete_many({
++            result = await col.delete_many({
+                 'file_name': media.file_name,
+                 'file_size': media.file_size
+             })
+-            if not result.deleted_count:
+-                result = sec_col.delete_many({
++            if not result.deleted_count and sec_col is not None:
++                result = await sec_col.delete_many({
+                     'file_name': media.file_name,
+                     'file_size': media.file_size
+                 })
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/plugins/index.py moovidex-fixed/plugins/index.py
+--- moovidex-review/plugins/index.py	2026-09-26 15:31:25.071650063 +0000
++++ moovidex-fixed/plugins/index.py	2026-09-26 15:58:44.503622827 +0000
+@@ -62,7 +62,7 @@
+         last_msg_id = vj.forward_from_message_id
+         chat_id = vj.forward_from_chat.username or vj.forward_from_chat.id
+     elif vj.text:
+-        regex = re.compile("(https://)?(t\.me/|telegram\.me/|telegram\.dog/)(c/)?(\d+|[a-zA-Z_0-9]+)/(\d+)$")
++        regex = re.compile(r"(https://)?(t\.me/|telegram\.me/|telegram\.dog/)(c/)?(\d+|[a-zA-Z_0-9]+)/(\d+)$")
+         match = regex.match(vj.text)
+         if not match:
+             return await vj.reply('Invalid link\n\nTry again by /index')
+@@ -149,54 +149,72 @@
+         try:
+             current = temp.CURRENT
+             temp.CANCEL = False
++            floodwaits = 0
+             
+-            async for message in bot.iter_messages(chat, lst_msg_id, temp.CURRENT):
+-                if temp.CANCEL:
+-                    break
++            while True:
++                try:
++                    async for message in bot.iter_messages(chat, lst_msg_id, current):
++                        if temp.CANCEL:
++                            break
++
++                        current += 1
++                
++                    # Progress Update (less frequent)
++                    if current % 100 == 0:
++                        can = [[InlineKeyboardButton('Cancel', callback_data='index_cancel')]]
++                        reply = InlineKeyboardMarkup(can)
++                        try:
++                            await msg.edit_text(
++                                text=f"Total messages fetched: <code>{current}</code>\nTotal messages saved: <code>{total_files}</code>\nDuplicate Files Skipped: <code>{duplicate}</code>\nDeleted Messages Skipped: <code>{deleted}</code>\nNon-Media messages skipped: <code>{no_media + unsupported}</code>(Unsupported Media - `{unsupported}` )\nErrors Occurred: <code>{errors}</code>",
++                                reply_markup=reply
++                            )
++                        except MessageNotModified:
++                            pass
++                
++                    if message.empty:
++                        deleted += 1
++                        continue
++                    elif not message.media:
++                        no_media += 1
++                        continue
++                    elif message.media not in [enums.MessageMediaType.VIDEO, enums.MessageMediaType.AUDIO, enums.MessageMediaType.DOCUMENT]:
++                        unsupported += 1
++                        continue
++                
++                    media = getattr(message, message.media.value, None)
++                    if not media:
++                        unsupported += 1
++                        continue
+                 
+-                current += 1
++                    media.caption = message.caption
+                 
+-                # Progress Update (less frequent)
+-                if current % 100 == 0:
+-                    can = [[InlineKeyboardButton('Cancel', callback_data='index_cancel')]]
+-                    reply = InlineKeyboardMarkup(can)
+                     try:
+-                        await msg.edit_text(
+-                            text=f"Total messages fetched: <code>{current}</code>\nTotal messages saved: <code>{total_files}</code>\nDuplicate Files Skipped: <code>{duplicate}</code>\nDeleted Messages Skipped: <code>{deleted}</code>\nNon-Media messages skipped: <code>{no_media + unsupported}</code>(Unsupported Media - `{unsupported}` )\nErrors Occurred: <code>{errors}</code>",
+-                            reply_markup=reply
+-                        )
+-                    except MessageNotModified:
+-                        pass
+-                
+-                if message.empty:
+-                    deleted += 1
+-                    continue
+-                elif not message.media:
+-                    no_media += 1
+-                    continue
+-                elif message.media not in [enums.MessageMediaType.VIDEO, enums.MessageMediaType.AUDIO, enums.MessageMediaType.DOCUMENT]:
+-                    unsupported += 1
+-                    continue
+-                
+-                media = getattr(message, message.media.value, None)
+-                if not media:
+-                    unsupported += 1
+-                    continue
+-                
+-                media.caption = message.caption
+-                
+-                try:
+-                    aynav, vnay = await save_file(media)
+-                    if aynav:
+-                        total_files += 1
+-                    elif vnay == 0:
+-                        duplicate += 1
+-                    elif vnay == 2:
++                        aynav, vnay = await save_file(media)
++                        if aynav:
++                            total_files += 1
++                        elif vnay == 0:
++                            duplicate += 1
++                        elif vnay == 2:
++                            errors += 1
++                    except FloodWait:
++                        raise
++                    except Exception as e:
+                         errors += 1
+-                except Exception as e:
+-                    errors += 1
+-                    logger.error(f"Error saving file: {e}")
++                        logger.error(f"Error saving file: {e}")
+             
++                except FloodWait as e:
++                    floodwaits += 1
++                    if floodwaits > 10:
++                        logger.error("Indexing aborted after 10 consecutive FloodWaits")
++                        await msg.edit("Indexing aborted: Telegram is rate-limiting too aggressively. Try again later.")
++                        return
++                    wait = min(e.value, 300)
++                    logger.warning("Indexing FloodWait (%ss); sleeping then resuming at offset %s", e.value, current)
++                    await asyncio.sleep(wait)
++                    continue
++                floodwaits = 0
++                break
++
+             if temp.CANCEL:
+                 await msg.edit(f"Successfully Cancelled!!\n\nSaved <code>{total_files}</code> files to dataBase!\nDuplicate Files Skipped: <code>{duplicate}</code>\nDeleted Messages Skipped: <code>{deleted}</code>\nNon-Media messages skipped: <code>{no_media + unsupported}</code>(Unsupported Media - `{unsupported}` )\nErrors Occurred: <code>{errors}</code>")
+                 return
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/plugins/pm_filter.py moovidex-fixed/plugins/pm_filter.py
+--- moovidex-review/plugins/pm_filter.py	2026-09-26 15:31:25.073019830 +0000
++++ moovidex-fixed/plugins/pm_filter.py	2026-09-26 15:56:30.948453887 +0000
+@@ -609,8 +609,7 @@
+         cur_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
+         time_difference = timedelta(hours=cur_time.hour, minutes=cur_time.minute, seconds=(cur_time.second+(cur_time.microsecond/1000000))) - timedelta(hours=curr_time.hour, minutes=curr_time.minute, seconds=(curr_time.second+(curr_time.microsecond/1000000)))
+         remaining_seconds = "{:.2f}".format(time_difference.total_seconds())
+-        btntext = extract_shortdetails(file['file_name'], file['file_size'])
+-        cap = await get_cap(settings, remaining_seconds, files, query, total, btntext, search)
++        cap = await get_cap(settings, remaining_seconds, files, query, total, search)
+         try:
+             await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
+         except MessageNotModified:
+@@ -628,19 +627,27 @@
+ 
+ @Client.on_callback_query(filters.regex(r"^spol"))
+ async def advantage_spoll_choker(bot, query):
+-    _, user_id, movie_index = query.data.split('#')
+-    movies = SPELL_CHECK.get(query.message.reply_to_message.id)
++    try:
++        _, user_id, movie_index = query.data.split('#')
++        user_id = int(user_id)
++    except (ValueError, AttributeError):
++        return await query.answer("Invalid request.", show_alert=True)
++    reply = query.message.reply_to_message
++    movies = SPELL_CHECK.get(reply.id) if reply else None
+ 
+     if not movies:
+         return await query.answer(script.OLD_ALRT_TXT.format(query.from_user.first_name), show_alert=True)
+-    
+-    if int(user_id) != 0 and query.from_user.id != int(user_id):
++
++    if user_id != 0 and query.from_user.id != user_id:
+         return await query.answer(script.ALRT_TXT.format(query.from_user.first_name), show_alert=True)
+-    
++
+     if movie_index == "close_spellcheck":
+         return await query.message.delete()
+-    
+-    movie = movies[int(movie_index)]
++
++    try:
++        movie = movies[int(movie_index)]
++    except (ValueError, IndexError):
++        return await query.answer("Invalid selection.", show_alert=True)
+     
+     # Logic: Extract Year, Search Title, Sort by Year
+     year_match = re.search(r'\s(\d{4})$', movie)
+@@ -767,30 +774,41 @@
+     )
+ 
+ @Client.on_callback_query(filters.regex(r"^fl#"))
+-async def filter_languages_cb_handler(client: Client, query: CallbackQuery):
+-    _, lang, key = query.data.split("#")
++async def filter_fl_cb_handler(client: Client, query: CallbackQuery):
++    # Single handler for "fl#" (filter) callbacks. This used to be two
++    # handlers (filter_languages_cb_handler + filter_qualities_cb_handler)
++    # registered on the same ^fl# pattern, so BOTH fired on every tap; the
++    # quality one also crashed on the undefined name `lang` and never
++    # answered the callback (hanging spinner).
++    try:
++        _, value, key = query.data.split("#")
++    except ValueError:
++        await query.answer("Invalid request.", show_alert=True)
++        return
+     curr_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
+-    search = FRESH.get(key)
+-    search = search.replace("_", " ")
+-    baal = lang in search
+-    if baal:
+-        search = search.replace(lang, "")
+-    else:
+-        search = search
++    base_search = FRESH.get(key)
++    if not base_search:
++        await query.answer("Search expired.", show_alert=True)
++        return
++    search = base_search.replace("_", " ")
+     req = query.from_user.id
+     chat_id = query.message.chat.id
+     message = query.message
+     try:
+         if int(req) not in [query.message.reply_to_message.from_user.id, 0]:
+             return await query.answer(
+-                f"⚠️ Hello {query.from_user.first_name},\n🎬 Only the person who requested this can change languages.",
++                f"⚠️ Hello {query.from_user.first_name},\n🎬 Only the person who requested this can change filters.",
+                 show_alert=True,
+             )
+     except:
+         pass
+-    if lang != "homepage":
+-        full_lang = LANG_MAP.get(lang.lower(), lang)
+-        search = f"{search} {full_lang}" 
++    if value != "homepage":
++        # Quality buttons send e.g. "1080p"; anything else is a language key.
++        term = value if value.lower() in QUALITY_MAP else LANG_MAP.get(value.lower(), value)
++        if term in search:
++            search = search.replace(term, "")
++        else:
++            search = f"{search} {term}"
+     BUTTONS[key] = search
+ 
+     files, offset, total_results = await get_search_results(chat_id, search, offset=0, filter=True)
+@@ -805,7 +823,7 @@
+     btn = [
+         [
+             InlineKeyboardButton(f"🗂 Files: {total_results_str}" , 'total'),
+-            
++
+            # InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
+             InlineKeyboardButton("🎧 Languages", callback_data=f"languages#{key}")
+           #  InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
+@@ -839,7 +857,7 @@
+         ])
+ 
+     # Add BACK button only if filtered
+-    if lang and lang != "homepage":
++    if value and value != "homepage":
+         btn.append([
+             InlineKeyboardButton("◀ Back To Files", callback_data=f"fl#homepage#{key}")
+         ])
+@@ -878,6 +896,7 @@
+     await query.answer()
+ 
+ 
++
+ @Client.on_callback_query(filters.regex(r"^seasons#"))
+ async def seasons_cb_handler(client: Client, query: CallbackQuery):
+ 
+@@ -1102,126 +1121,6 @@
+     await query.edit_message_reply_markup(InlineKeyboardMarkup(btn))
+     
+ 
+-@Client.on_callback_query(filters.regex(r"^fl#"))
+-async def filter_qualities_cb_handler(client: Client, query: CallbackQuery):
+-    _, qual, key = query.data.split("#")
+-    search = FRESH.get(key)
+-    try:
+-        search = search.replace(' ', '_')
+-    except:
+-        pass
+-    baal = qual in search
+-    if baal:
+-        search = search.replace(qual, "")
+-    else:
+-        search = search
+-    req = query.from_user.id
+-    chat_id = query.message.chat.id
+-    message = query.message
+-    try:
+-        if int(req) not in [query.message.reply_to_message.from_user.id, 0]:
+-            return await query.answer(
+-                f"⚠️ Hello {query.from_user.first_name},\n🎬 Only the person who requested this can change quality.",
+-                show_alert=False,
+-            )
+-    except:
+-        pass
+-    searchagain = search
+-    if lang != "homepage":
+-        search = f"{search} {qual}" 
+-    BUTTONS[key] = search
+-
+-    files, offset, total_results = await get_search_results(chat_id, search, offset=0, filter=True)
+-    # files = [file for file in files if re.search(lang, file["file_name"], re.IGNORECASE)]
+-    if not files:
+-        await query.answer("🚫 𝗡𝗼 𝗙𝗶𝗹𝗲 𝗪𝗲𝗿𝗲 𝗙𝗼𝘂𝗻𝗱 🚫", show_alert=1)
+-        return
+-    temp.GETALL[key] = files
+-    total_results_str = len(files)
+-    settings = await get_settings(message.chat.id)
+-    pre = 'filep' if settings['file_secure'] else 'file'
+-    if settings["button"]:
+-        btn = [
+-            [
+-                InlineKeyboardButton(
+-                    text=extract_shortdetails(file['file_name'], file['file_size']),
+-                    callback_data=f"{pre}#{file['file_id']}"
+-                ),
+-            ]
+-            for file in files
+-        ]
+-        btn.insert(0, 
+-            [
+-                InlineKeyboardButton(f'🎚 Quality', callback_data=f"qualities#{key}"),
+-                InlineKeyboardButton('ℹ Info', url='https://t.me/moovidex/11'),
+-               # InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
+-                InlineKeyboardButton("🗃 Seasons",  callback_data=f"seasons#{key}")
+-            ]
+-        )
+-        btn.insert(0, [
+-            InlineKeyboardButton(f"🗂 Files: {total_results_str}" , 'total'),
+-           # InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
+-            InlineKeyboardButton("🎧 Languages", callback_data=f"languages#{key}")
+-           # InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
+-        ])
+-    else:
+-        btn = []
+-        btn.insert(0, 
+-            [
+-                InlineKeyboardButton(f'🎚 Quality', callback_data=f"qualities#{key}"),
+-                InlineKeyboardButton('ℹ Info', url='https://t.me/moovidex/11'),
+-              #  InlineKeyboardButton("📺 ᴇᴘɪsᴏᴅᴇs", callback_data=f"episodes#{key}"),
+-                InlineKeyboardButton("🗃 Seasons",  callback_data=f"seasons#{key}")
+-            ]
+-        )
+-        btn.insert(0, [
+-            InlineKeyboardButton(f"🗂 Files: {total_results_str}" , 'total'),
+-           # InlineKeyboardButton("🔮 sᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}"),
+-            InlineKeyboardButton("🎧 Languages", callback_data=f"languages#{key}")
+-          #  InlineKeyboardButton("🗓️ ʏᴇᴀʀs", callback_data=f"years#{key}")
+-        ])
+-
+-    if offset != "":
+-        try:
+-            if settings['max_btn']:
+-                btn.append(
+-                    [InlineKeyboardButton("ᴘᴀɢᴇ", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/10)}",callback_data="pages"), InlineKeyboardButton(text="ɴᴇxᴛ ⇛",callback_data=f"next_{req}_{key}_{offset}")]
+-                )
+-    
+-            else:
+-                btn.append(
+-                    [InlineKeyboardButton("ᴘᴀɢᴇ", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/int(MAX_B_TN))}",callback_data="pages"), InlineKeyboardButton(text="ɴᴇxᴛ ⇛",callback_data=f"next_{req}_{key}_{offset}")]
+-                )
+-        except KeyError:
+-            await save_group_settings(query.message.chat.id, 'max_btn', True)
+-            btn.append(
+-                [InlineKeyboardButton("ᴘᴀɢᴇ", callback_data="pages"), InlineKeyboardButton(text=f"1/{math.ceil(int(total_results)/10)}",callback_data="pages"), InlineKeyboardButton(text="ɴᴇxᴛ ⇛",callback_data=f"next_{req}_{key}_{offset}")]
+-            )
+-    else:
+-        btn.append(
+-            [InlineKeyboardButton(text="⛔ NO MORE PAGES AVAILABLE ⛔",callback_data="pages")]
+-        )
+-    if lang != "homepage":
+-        req = query.from_user.id
+-        offset = 0
+-        btn.append([InlineKeyboardButton(text="◀ Back To Files", callback_data=f"next_{req}_{key}_{offset}")])
+-    
+-    if not settings["button"]:
+-        cur_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
+-        time_difference = timedelta(hours=cur_time.hour, minutes=cur_time.minute, seconds=(cur_time.second+(cur_time.microsecond/1000000))) - timedelta(hours=curr_time.hour, minutes=curr_time.minute, seconds=(curr_time.second+(curr_time.microsecond/1000000)))
+-        remaining_seconds = "{:.2f}".format(time_difference.total_seconds())
+-        total_results = len(files)
+-        cap = await get_cap(settings, remaining_seconds, files, query, total_results, search)
+-        try:
+-            await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True)
+-        except MessageNotModified:
+-            pass
+-    else:
+-        try:
+-            await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(btn))
+-        except MessageNotModified:
+-            pass
+-
+ # --- Smart Filter Callbacks (Moved before cb_handler) ---
+ 
+ @Client.on_callback_query(filters.regex(r"^smart_lang"))
+@@ -1741,16 +1640,6 @@
+                 title = ttl.title
+                 active = await if_active(str(userid), str(groupid))
+                 act = " - ACTIVE" if active else ""
+-                if len(languages) > 1:
+-                    btn = [
+-                        [
+-                            InlineKeyboardButton(
+-                                text=f"🔊 {lang.title()}",
+-                                callback_data=f"lang#{lang}#{key}"
+-                            ),
+-                        ]
+-                        for lang in languages
+-                    ]
+                 buttons.append(
+                     [
+                         InlineKeyboardButton(
+@@ -1767,23 +1656,35 @@
+             )
+     elif "gfilteralert" in query.data:
+         grp_id = query.message.chat.id
+-        i = query.data.split(":")[1]
+-        keyword = query.data.split(":")[2]
++        try:
++            i = int(query.data.split(":")[1])
++            keyword = query.data.split(":")[2]
++        except (ValueError, IndexError):
++            return await query.answer("Invalid request.", show_alert=True)
+         reply_text, btn, alerts, fileid = await find_gfilter('gfilters', keyword)
+         if alerts is not None:
+-            alerts = ast.literal_eval(alerts)
+-            alert = alerts[int(i)]
++            try:
++                alerts = ast.literal_eval(alerts)
++                alert = alerts[i]
++            except (ValueError, SyntaxError, IndexError, TypeError):
++                return await query.answer("Alert not available.", show_alert=True)
+             alert = alert.replace("\\n", "\n").replace("\\t", "\t")
+             await query.answer(alert, show_alert=True)
+     
+     elif "alertmessage" in query.data:
+         grp_id = query.message.chat.id
+-        i = query.data.split(":")[1]
+-        keyword = query.data.split(":")[2]
++        try:
++            i = int(query.data.split(":")[1])
++            keyword = query.data.split(":")[2]
++        except (ValueError, IndexError):
++            return await query.answer("Invalid request.", show_alert=True)
+         reply_text, btn, alerts, fileid = await find_filter(grp_id, keyword)
+         if alerts is not None:
+-            alerts = ast.literal_eval(alerts)
+-            alert = alerts[int(i)]
++            try:
++                alerts = ast.literal_eval(alerts)
++                alert = alerts[i]
++            except (ValueError, SyntaxError, IndexError, TypeError):
++                return await query.answer("Alert not available.", show_alert=True)
+             alert = alert.replace("\\n", "\n").replace("\\t", "\t")
+             await query.answer(alert, show_alert=True)
+         
+@@ -1920,7 +1821,7 @@
+     
+     elif query.data.startswith("send_fsall"):
+         temp_var, ident, key, offset = query.data.split("#")
+-        search = BUTTON0.get(key)
++        search = BUTTONS0.get(key)
+      #   if not search:
+       #      await query.answer(script.OLD_ALRT_TXT.format(query.from_user.first_name),show_alert=True)
+       #      return
+@@ -1959,7 +1860,7 @@
+                     result = await col.delete_one({
+                         'file_id': file_ids,
+                     })
+-                    if not result.deleted_count:
++                    if not result.deleted_count and sec_col is not None:
+                         result = await sec_col.delete_one({
+                             'file_id': file_ids,
+                         })
+@@ -2781,13 +2682,17 @@
+         total_users = await db.total_users_count()
+         totl_chats = await db.total_chat_count()
+         filesp = await col.count_documents({})
+-        totalsec = await sec_col.count_documents({})
++        totalsec = await sec_col.count_documents({}) if sec_col is not None else 0
+         stats = await vjdb.command('dbStats')
+         used_dbSize = (stats['dataSize']/(1024*1024))+(stats['indexSize']/(1024*1024))
+         free_dbSize = 512-used_dbSize
+-        stats2 = await sec_db.command('dbStats')
+-        used_dbSize2 = (stats2['dataSize']/(1024*1024))+(stats2['indexSize']/(1024*1024))
+-        free_dbSize2 = 512-used_dbSize2
++        if sec_db is not None:
++            stats2 = await sec_db.command('dbStats')
++            used_dbSize2 = (stats2['dataSize']/(1024*1024))+(stats2['indexSize']/(1024*1024))
++            free_dbSize2 = 512-used_dbSize2
++        else:
++            used_dbSize2 = 0
++            free_dbSize2 = 0
+         stats3 = await mydb.command('dbStats')
+         used_dbSize3 = (stats3['dataSize']/(1024*1024))+(stats3['indexSize']/(1024*1024))
+         free_dbSize3 = 512-used_dbSize3
+@@ -2811,13 +2716,17 @@
+         total_users = await db.total_users_count()
+         totl_chats = await db.total_chat_count()
+         filesp = await col.count_documents({})
+-        totalsec = await sec_col.count_documents({})
++        totalsec = await sec_col.count_documents({}) if sec_col is not None else 0
+         stats = await vjdb.command('dbStats')
+         used_dbSize = (stats['dataSize']/(1024*1024))+(stats['indexSize']/(1024*1024))
+         free_dbSize = 512-used_dbSize
+-        stats2 = await sec_db.command('dbStats')
+-        used_dbSize2 = (stats2['dataSize']/(1024*1024))+(stats2['indexSize']/(1024*1024))
+-        free_dbSize2 = 512-used_dbSize2
++        if sec_db is not None:
++            stats2 = await sec_db.command('dbStats')
++            used_dbSize2 = (stats2['dataSize']/(1024*1024))+(stats2['indexSize']/(1024*1024))
++            free_dbSize2 = 512-used_dbSize2
++        else:
++            used_dbSize2 = 0
++            free_dbSize2 = 0
+         stats3 = await mydb.command('dbStats')
+         used_dbSize3 = (stats3['dataSize']/(1024*1024))+(stats3['indexSize']/(1024*1024))
+         free_dbSize3 = 512-used_dbSize3
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/plugins/route.py moovidex-fixed/plugins/route.py
+--- moovidex-review/plugins/route.py	2026-09-26 15:31:25.073019830 +0000
++++ moovidex-fixed/plugins/route.py	2026-09-26 15:56:30.949471585 +0000
+@@ -3,6 +3,7 @@
+ # Ask Doubt on telegram @KingVJ01
+ 
+ import re, math, logging, secrets, mimetypes, time
++import info
+ from info import *
+ from aiohttp import web
+ from aiohttp.http_exceptions import BadStatusLine
+@@ -42,7 +43,7 @@
+         raise web.HTTPInternalServerError(text=str(e))
+ 
+ @routes.get(r"/{path:\S+}", allow_head=True)
+-async def stream_handler(request: web.Request):
++async def download_handler(request: web.Request):
+     try:
+         path = request.match_info["path"]
+         match = re.search(r"^([a-zA-Z0-9_-]{6})(\d+)$", path)
+@@ -71,7 +72,7 @@
+     index = min(work_loads, key=work_loads.get)
+     faster_client = multi_clients[index]
+     
+-    if MULTI_CLIENT:
++    if info.MULTI_CLIENT:
+         logging.info(f"Client {index} is now serving {request.remote}")
+ 
+     if faster_client in class_cache:
+@@ -136,6 +137,10 @@
+             mime_type = "application/octet-stream"
+             file_name = f"{secrets.token_hex(2)}.unknown"
+ 
++    # file_name is untrusted: strip characters that could break out of the
++    # quoted header value (header injection).
++    safe_name = re.sub(r'[\r\n"]', '', file_name or 'file').strip() or 'file'
++
+     return web.Response(
+         status=206 if range_header else 200,
+         body=body,
+@@ -143,7 +148,7 @@
+             "Content-Type": f"{mime_type}",
+             "Content-Range": f"bytes {from_bytes}-{until_bytes}/{file_size}",
+             "Content-Length": str(req_length),
+-            "Content-Disposition": f'{disposition}; filename="{file_name}"',
++            "Content-Disposition": f'{disposition}; filename="{safe_name}"',
+             "Accept-Ranges": "bytes",
+         },
+     )
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/requirements.txt moovidex-fixed/requirements.txt
+--- moovidex-review/requirements.txt	2026-09-26 15:31:25.073234763 +0000
++++ moovidex-fixed/requirements.txt	2026-09-26 15:57:58.569579488 +0000
+@@ -1,31 +1,20 @@
+-pyrofork==2.3.45
+-tgcrypto 
+-requests 
+-bs4 
+-shortzy 
+-pytz 
+-aiohttp
+-jinja2
+-apscheduler
+-pyshorteners
+-colorama
+-NumPy 
+-wheel 
+-ujson 
+-wget
+-aiofiles
+-hachoir
+-python-decouple 
+-pymongo[srv]==3.12.3 
+-motor==2.5.1 
+-marshmallow==3.14.1 
+-umongo==3.0.1 
+-PyLeaves==1.0.2
+-googletrans==4.0.0rc1
+-python-dotenv==0.21.1 
+-speedtest==0.0.1 
+-humanize==4.6.0 
+-Pillow==9.4.0 
+-psutil==5.9.4 
+-dnspython==2.3.0
+-
++# MoovidexFilterBot — pinned runtime dependencies (audited 2026-09-26).
++# Removed (verified unused anywhere in the codebase): bs4 (stub, replaced by
++# beautifulsoup4), googletrans, speedtest (wrong package), PyLeaves, NumPy,
++# pyshorteners, python-dotenv, umongo, marshmallow, apscheduler, colorama,
++# wheel, wget, ujson, python-decouple.
++pyrofork==2.3.69
++tgcrypto==1.2.5
++requests==2.34.2
++beautifulsoup4==4.15.0
++shortzy==0.0.8
++pytz==2026.4
++aiohttp==3.14.3
++jinja2==3.1.6
++hachoir==3.4.0
++pymongo[srv]==4.18.2
++motor==3.7.1
++humanize==4.16.0
++Pillow==12.3.0
++psutil==7.2.2
++dnspython==2.8.0
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/runtime.txt moovidex-fixed/runtime.txt
+--- moovidex-review/runtime.txt	2026-09-26 15:31:25.073234763 +0000
++++ moovidex-fixed/runtime.txt	2026-09-26 15:37:41.315331409 +0000
+@@ -1 +1 @@
+-python-3.10.8
++python-3.12.9
+diff -ruN '--exclude=.git' '--exclude=__pycache__' moovidex-review/utils.py moovidex-fixed/utils.py
+--- moovidex-review/utils.py	2026-09-26 15:31:25.073578378 +0000
++++ moovidex-fixed/utils.py	2026-09-26 15:47:21.824098443 +0000
+@@ -2,14 +2,14 @@
+ # Subscribe YouTube Channel For Amazing Bot @Tech_VJ
+ # Ask Doubt on telegram @KingVJ01
+ 
+-import logging, asyncio, os, re, random, pytz, aiohttp, requests, string, json, http.client
++import logging, asyncio, os, re, random, pytz, aiohttp, string
+ from info import *
+ 
+ from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
+ from pyrogram import enums
+ from urllib.parse import quote_plus
+ from pyrogram.errors import *
+-from typing import Union
++from typing import Union, Tuple, Optional
+ from Script import script
+ from datetime import datetime, date
+ from typing import List
+@@ -17,7 +17,6 @@
+ from database.join_reqs import JoinReqs
+ from bs4 import BeautifulSoup
+ from shortzy import Shortzy
+-from urllib.parse import quote   
+ 
+ logger = logging.getLogger(__name__)
+ logger.setLevel(logging.INFO)
+@@ -33,6 +32,38 @@
+ SMART_CLOSE = '”'
+ START_CHAR = ('\'', '"', SMART_OPEN)
+ IMDB_CACHE = {}
++IMDB_CACHE_MAX = 500  # bound the process-local cache; oldest entries evicted
++
++
++def _imdb_cache_set(key, value):
++    if key not in IMDB_CACHE and len(IMDB_CACHE) >= IMDB_CACHE_MAX:
++        IMDB_CACHE.pop(next(iter(IMDB_CACHE)))
++    IMDB_CACHE[key] = value
++
++
++_http_session = None
++
++
++async def _get_http_session():
++    """Shared aiohttp session for IMDb lookups (created lazily, reused)."""
++    global _http_session
++    if _http_session is None or _http_session.closed:
++        timeout = aiohttp.ClientTimeout(total=4)
++        connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
++        _http_session = aiohttp.ClientSession(
++            timeout=timeout,
++            connector=connector,
++            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
++        )
++    return _http_session
++
++
++async def close_http_session():
++    """Close the shared HTTP session; called on bot shutdown."""
++    global _http_session
++    if _http_session is not None and not _http_session.closed:
++        await _http_session.close()
++        _http_session = None
+ 
+ # temp db for banned 
+ class temp(object):
+@@ -40,7 +71,10 @@
+     BANNED_CHATS = []
+     ME = None
+     BOT = None
+-    CURRENT=int(os.environ.get("SKIP", 2))
++    try:
++        CURRENT = int(os.environ.get("SKIP", 2))
++    except (TypeError, ValueError):
++        CURRENT = 2
+     CANCEL = False
+     MELCOW = {}
+     U_NAME = None
+@@ -48,7 +82,6 @@
+     GETALL = {}
+     SHORT = {}
+     SETTINGS = {}
+-    SETTINGS = {}
+     IMDB_CAP = {}
+     FILTERED = {}
+     BACK_CB = {}
+@@ -56,16 +89,16 @@
+ 
+ async def pub_is_subscribed(bot, query, channel):
+     btn = []
+-    for id in channel:
+-        chat = await bot.get_chat(int(id))
++    for channel_id in channel:
++        chat = await bot.get_chat(int(channel_id))
+         try:
+-            await bot.get_chat_member(id, query.from_user.id)
++            await bot.get_chat_member(channel_id, query.from_user.id)
+         except UserNotParticipant:
+             btn.append(
+                 [InlineKeyboardButton(f'Join {chat.title}', url=chat.invite_link)]
+             )
+         except Exception as e:
+-            pass
++            logger.exception("pub_is_subscribed failed for channel %s", channel_id)
+     return btn
+ 
+ async def is_subscribed(bot, query):
+@@ -101,17 +134,6 @@
+ 
+ 
+ 
+-def list_to_str(items):
+-    """Convert list to comma-separated string safely."""
+-    if not items:
+-        return None
+-    if isinstance(items, str):
+-        return items.strip() or None
+-    if isinstance(items, list):
+-        filtered_items = [str(i).strip() for i in items if i and str(i).strip()]
+-        return ", ".join(filtered_items) if filtered_items else None
+-    return str(items).strip() or None
+-
+ def format_runtime(runtime_str=None, seconds=None):
+     """Format runtime from ISO string or seconds."""
+     try:
+@@ -149,45 +171,38 @@
+     # Proper URL encoding for special characters
+     encoded_title = quote_plus(title)
+     api_url = f"https://imdblinkz.s1mallufiles.workers.dev/?q={encoded_title}"
+-    
++
+     try:
+-        timeout = aiohttp.ClientTimeout(total=4)
+-        connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
+-        
+-        async with aiohttp.ClientSession(
+-            timeout=timeout, 
+-            connector=connector,
+-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+-        ) as session:
+-            async with session.get(api_url) as response:
+-                if response.status != 200:
+-                    return None
+-                
+-                data = await response.json()
+-                
+-                if not isinstance(data, dict):
+-                    return None
+-                
+-                results = data.get("results", [])
+-                if not isinstance(results, list):
+-                    return None
+-                
+-                # Try to find exact match first, then partial match
+-                for result in results:
+-                    if isinstance(result, dict) and result.get("type") == "title":
+-                        result_title = result.get("title", "").lower()
+-                        imdb_id = result.get("id")
+-                        
+-                        if imdb_id and isinstance(imdb_id, str):
+-                            # Cache and return first valid result
+-                            IMDB_CACHE[title] = imdb_id
+-                            return imdb_id
+-                            
++        session = await _get_http_session()
++        async with session.get(api_url) as response:
++            if response.status != 200:
++                return None
++
++            data = await response.json()
++
++            if not isinstance(data, dict):
++                return None
++
++            results = data.get("results", [])
++            if not isinstance(results, list):
++                return None
++
++            # Try to find exact match first, then partial match
++            for result in results:
++                if isinstance(result, dict) and result.get("type") == "title":
++                    result_title = result.get("title", "").lower()
++                    imdb_id = result.get("id")
++
++                    if imdb_id and isinstance(imdb_id, str):
++                        # Cache and return first valid result
++                        _imdb_cache_set(title, imdb_id)
++                        return imdb_id
++
+     except asyncio.TimeoutError:
+         logger.warning(f"Timeout looking up: {title}")
+     except Exception as e:
+         logger.warning(f"Lookup failed for {title}: {str(e)[:100]}")
+-    
++
+     return None
+ 
+ async def fetch_json(imdb_id):
+@@ -196,28 +211,21 @@
+         return None
+     
+     url = f"https://imdb.iamidiotareyoutoo.com/search?tt={imdb_id}"
+-    
++
+     try:
+-        timeout = aiohttp.ClientTimeout(total=4)
+-        connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
+-        
+-        async with aiohttp.ClientSession(
+-            timeout=timeout, 
+-            connector=connector,
+-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+-        ) as session:
+-            async with session.get(url) as response:
+-                if response.status != 200:
+-                    return None
+-                
+-                data = await response.json()
+-                return data if isinstance(data, dict) else None
+-                
++        session = await _get_http_session()
++        async with session.get(url) as response:
++            if response.status != 200:
++                return None
++
++            data = await response.json()
++            return data if isinstance(data, dict) else None
++
+     except asyncio.TimeoutError:
+         logger.warning(f"Timeout fetching: {imdb_id}")
+     except Exception as e:
+         logger.warning(f"Fetch failed for {imdb_id}: {str(e)[:100]}")
+-    
++
+     return None
+ 
+ def safe_get(data, *keys, default=None):
+@@ -428,54 +436,74 @@
+         logger.error(f"Error in get_poster for '{query}': {str(e)[:100]}")
+         return None
+ 
++# Maximum FloodWait sleeps before giving up on one recipient (iterative retry;
++# the old code recursed with no bound and could hit RecursionError).
++_MAX_FLOOD_RETRIES = 5
++
++
++async def _sleep_floodwait(e, attempt, target):
++    if attempt >= _MAX_FLOOD_RETRIES:
++        logging.warning("Giving up on broadcast to %s after %s FloodWaits", target, attempt)
++        return False
++    await asyncio.sleep(e.value)
++    return True
++
++
+ async def broadcast_messages(user_id, message):
+-    try:
+-        await message.copy(chat_id=user_id)
+-        return True, "Success"
+-    except FloodWait as e:
+-        await asyncio.sleep(e.x)
+-        return await broadcast_messages(user_id, message)
+-    except InputUserDeactivated:
+-        await db.delete_user(int(user_id))
+-        logging.info(f"{user_id}-Removed from Database, since deleted account.")
+-        return False, "Deleted"
+-    except UserIsBlocked:
+-        await db.delete_user(int(user_id))
+-        logging.info(f"{user_id} -Blocked the bot.")
+-        return False, "Blocked"
+-    except PeerIdInvalid:
+-        await db.delete_user(int(user_id))
+-        logging.info(f"{user_id} - PeerIdInvalid")
+-        return False, "Error"
+-    except Exception as e:
+-        return False, "Error"
++    attempt = 0
++    while True:
++        try:
++            await message.copy(chat_id=user_id)
++            return True, "Success"
++        except FloodWait as e:
++            attempt += 1
++            if not await _sleep_floodwait(e, attempt, user_id):
++                return False, "Error"
++        except InputUserDeactivated:
++            await db.delete_user(int(user_id))
++            logging.info(f"{user_id}-Removed from Database, since deleted account.")
++            return False, "Deleted"
++        except UserIsBlocked:
++            await db.delete_user(int(user_id))
++            logging.info(f"{user_id} -Blocked the bot.")
++            return False, "Blocked"
++        except PeerIdInvalid:
++            await db.delete_user(int(user_id))
++            logging.info(f"{user_id} - PeerIdInvalid")
++            return False, "Error"
++        except Exception:
++            logging.exception("broadcast_messages failed for %s", user_id)
++            return False, "Error"
+ 
+ async def broadcast_messages_group(chat_id, message):
+-    try:
+-        kd = await message.copy(chat_id=chat_id)
++    attempt = 0
++    while True:
+         try:
+-            await kd.pin()
+-        except:
+-            pass
+-        return True, "Success"
+-    except FloodWait as e:
+-        await asyncio.sleep(e.x)
+-        return await broadcast_messages_group(chat_id, message)
+-    except Exception as e:
+-        return False, "Error"
++            kd = await message.copy(chat_id=chat_id)
++            try:
++                await kd.pin()
++            except Exception as e:
++                logger.debug("Could not pin broadcast in %s: %s", chat_id, e)
++            return True, "Success"
++        except FloodWait as e:
++            attempt += 1
++            if not await _sleep_floodwait(e, attempt, chat_id):
++                return False, "Error"
++        except Exception:
++            logging.exception("broadcast_messages_group failed for %s", chat_id)
++            return False, "Error"
+     
+ 
+ async def search_gagala(text):
+-    usr_agent = {
+-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+-                      'Chrome/61.0.3163.100 Safari/537.36'
+-    }
+-    text = text.replace(" ", '+')
++    # Blocking requests.get() in async code stalled the whole event loop;
++    # use the shared aiohttp session instead.
++    text = quote_plus(text)
+     url = f'https://imdb.iamidiotareyoutoo.com/search?q={text}'
+-    
+-    response = requests.get(url, headers=usr_agent)
+-    response.raise_for_status()
+-    data = response.json()
++
++    session = await _get_http_session()
++    async with session.get(url) as response:
++        response.raise_for_status()
++        data = await response.json()
+ 
+     # Extract title and year from the response and assign to the 'titles' variable
+     titles = [f"{item['#TITLE']} ({item['#YEAR']})" for item in data.get("description", [])]
+@@ -492,6 +520,8 @@
+     await db.update_settings(group_id, current)
+     
+ def get_size(size):
++    if size is None:
++        return ""
+     units = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB"]
+     size = float(size)
+     i = 0
+@@ -521,7 +551,7 @@
+                 setattr(obj, "message_type", message_type)
+                 return obj
+ 
+-def extract_user(message: Message) -> Union[int, str]:
++def extract_user(message: Message) -> Tuple[int, Optional[str]]:
+     user_id = None
+     user_first_name = None
+     if message.reply_to_message:
+@@ -551,15 +581,22 @@
+     return (user_id, user_first_name)
+ 
+ def list_to_str(k):
++    """Format an IMDb list field for display. Empty -> "N/A" (as deployed);
++    plain strings are returned as-is instead of being split into characters;
++    lists are comma-joined with no trailing comma, honoring MAX_LIST_ELM."""
+     if not k:
+         return "N/A"
+-    elif len(k) == 1:
+-        return str(k[0])
+-    elif MAX_LIST_ELM:
+-        k = k[:int(MAX_LIST_ELM)]
+-        return ' '.join(f'{elem}, ' for elem in k)
+-    else:
+-        return ' '.join(f'{elem}, ' for elem in k)
++    if isinstance(k, str):
++        return k.strip() or "N/A"
++    items = [str(elem).strip() for elem in k if str(elem).strip()]
++    if not items:
++        return "N/A"
++    if MAX_LIST_ELM:
++        try:
++            items = items[:int(MAX_LIST_ELM)]
++        except (TypeError, ValueError):
++            pass
++    return ", ".join(items)
+ 
+ def last_online(from_user):
+     time = ""
+@@ -600,7 +637,7 @@
+         key = text[0] + text[0]
+     return list(filter(None, [key, rest]))
+ 
+-def gfilterparser(text, keyword):
++def _button_parser(text, keyword, alert_prefix):
+     if "buttonalert" in text:
+         text = (text.replace("\n", "\\n").replace("\t", "\\t"))
+     buttons = []
+@@ -625,12 +662,12 @@
+                 if bool(match.group(5)) and buttons:
+                     buttons[-1].append(InlineKeyboardButton(
+                         text=match.group(2),
+-                        callback_data=f"gfilteralert:{i}:{keyword}"
++                        callback_data=f"{alert_prefix}:{i}:{keyword}"
+                     ))
+                 else:
+                     buttons.append([InlineKeyboardButton(
+                         text=match.group(2),
+-                        callback_data=f"gfilteralert:{i}:{keyword}"
++                        callback_data=f"{alert_prefix}:{i}:{keyword}"
+                     )])
+                 i += 1
+                 alerts.append(match.group(4))
+@@ -651,66 +688,18 @@
+     else:
+         note_data += text[prev:]
+ 
+-    try:
+-        return note_data, buttons, alerts
+-    except:
+-        return note_data, buttons, None
++    return note_data, buttons, alerts
++
+ 
+ def parser(text, keyword):
+-    if "buttonalert" in text:
+-        text = (text.replace("\n", "\\n").replace("\t", "\\t"))
+-    buttons = []
+-    note_data = ""
+-    prev = 0
+-    i = 0
+-    alerts = []
+-    for match in BTN_URL_REGEX.finditer(text):
+-        # Check if btnurl is escaped
+-        n_escapes = 0
+-        to_check = match.start(1) - 1
+-        while to_check > 0 and text[to_check] == "\\":
+-            n_escapes += 1
+-            to_check -= 1
++    """Parse filter text buttons; alert buttons use the "alertmessage" prefix."""
++    return _button_parser(text, keyword, "alertmessage")
+ 
+-        # if even, not escaped -> create button
+-        if n_escapes % 2 == 0:
+-            note_data += text[prev:match.start(1)]
+-            prev = match.end(1)
+-            if match.group(3) == "buttonalert":
+-                # create a thruple with button label, url, and newline status
+-                if bool(match.group(5)) and buttons:
+-                    buttons[-1].append(InlineKeyboardButton(
+-                        text=match.group(2),
+-                        callback_data=f"alertmessage:{i}:{keyword}"
+-                    ))
+-                else:
+-                    buttons.append([InlineKeyboardButton(
+-                        text=match.group(2),
+-                        callback_data=f"alertmessage:{i}:{keyword}"
+-                    )])
+-                i += 1
+-                alerts.append(match.group(4))
+-            elif bool(match.group(5)) and buttons:
+-                buttons[-1].append(InlineKeyboardButton(
+-                    text=match.group(2),
+-                    url=match.group(4).replace(" ", "")
+-                ))
+-            else:
+-                buttons.append([InlineKeyboardButton(
+-                    text=match.group(2),
+-                    url=match.group(4).replace(" ", "")
+-                )])
+ 
+-        else:
+-            note_data += text[prev:to_check]
+-            prev = match.start(1) - 1
+-    else:
+-        note_data += text[prev:]
++def gfilterparser(text, keyword):
++    """Parse global-filter text buttons; alert buttons use the "gfilteralert" prefix."""
++    return _button_parser(text, keyword, "gfilteralert")
+ 
+-    try:
+-        return note_data, buttons, alerts
+-    except:
+-        return note_data, buttons, None
+ 
+ def remove_escapes(text: str) -> str:
+     res = ""
+@@ -738,10 +727,28 @@
+ 
+ 
+ 
+-async def get_clone_shortlink(link, url, api):
++async def _shorten_link(link, url, api):
++    """Shorten one link via the shareus easy API or any shortzy-compatible site.
++
++    A fresh session is used per call because shorteners are called rarely
++    (per file/link), unlike the hot IMDb lookup path.
++    """
++    if url == "api.shareus.io":
++        api_url = f'https://{url}/easy_api'
++        params = {"key": api, "link": link}
++        try:
++            async with aiohttp.ClientSession() as session:
++                async with session.get(api_url, params=params, raise_for_status=True) as response:
++                    return await response.text()
++        except Exception as e:
++            logger.error(e)
++            return link
+     shortzy = Shortzy(api_key=api, base_site=url)
+-    link = await shortzy.convert(link)
+-    return link
++    return await shortzy.convert(link)
++
++
++async def get_clone_shortlink(link, url, api):
++    return await _shorten_link(link, url, api)
+                            
+ async def get_shortlink(chat_id, link):
+     settings = await get_settings(chat_id) #fetching settings for group
+@@ -754,51 +761,15 @@
+     if URL.startswith("shorturllink") or URL.startswith("terabox.in") or URL.startswith("urlshorten.in"):
+         URL = SHORTLINK_URL
+         API = SHORTLINK_API
+-    if URL == "api.shareus.io":
+-        url = f'https://{URL}/easy_api'
+-        params = {
+-            "key": API,
+-            "link": link,
+-        }
+-        try:
+-            async with aiohttp.ClientSession() as session:
+-                async with session.get(url, params=params, raise_for_status=True, ssl=False) as response:
+-                    data = await response.text()
+-                    return data
+-        except Exception as e:
+-            logger.error(e)
+-            return link
+-    else:
+-        shortzy = Shortzy(api_key=API, base_site=URL)
+-        link = await shortzy.convert(link)
+-        return link
+-    
++    return await _shorten_link(link, URL, API)
++
+ async def get_tutorial(chat_id):
+     settings = await get_settings(chat_id) #fetching settings for group
+     return settings['tutorial']
+         
+ async def get_verify_shorted_link(link, url, api):
+-    API = api
+-    URL = url
+-    if URL == "api.shareus.io":
+-        url = f'https://{URL}/easy_api'
+-        params = {
+-            "key": API,
+-            "link": link,
+-        }
+-        try:
+-            async with aiohttp.ClientSession() as session:
+-                async with session.get(url, params=params, raise_for_status=True, ssl=False) as response:
+-                    data = await response.text()
+-                    return data
+-        except Exception as e:
+-            logger.error(e)
+-            return link
+-    else:
+-        shortzy = Shortzy(api_key=API, base_site=URL)
+-        link = await shortzy.convert(link)
+-        return link
+-        
++    return await _shorten_link(link, url, api)
++
+ async def check_token(bot, userid, token):
+     user = await bot.get_users(userid)
+     if not await db.is_user_exist(user.id):
+@@ -845,71 +816,94 @@
+     if not await db.is_user_exist(user.id):
+         await db.add_user(user.id, user.first_name)
+         await bot.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(user.id, user.mention))
+-    tz = pytz.timezone('Asia/Kolkata')
+     today = date.today()
+     if user.id in VERIFIED.keys():
+         EXP = VERIFIED[user.id]
+-        years, month, day = EXP.split('-')
+-        comp = date(int(years), int(month), int(day))
+-        if comp<today:
++        try:
++            years, month, day = EXP.split('-')
++            comp = date(int(years), int(month), int(day))
++        except (ValueError, TypeError, AttributeError):
++            logger.warning("Dropping malformed verification date for user %s: %r", user.id, EXP)
++            VERIFIED.pop(user.id, None)
++            return False
++        if comp < today:
+             return False
+         else:
+             return True
+     else:
+-        return False  
++        return False
+     
++async def _send_with_floodwait(send_coro_factory, max_retries=5):
++    """Await ``send_coro_factory()`` (a zero-arg callable returning a coroutine),
++    sleeping through FloodWait instead of aborting the whole batch."""
++    for attempt in range(max_retries + 1):
++        try:
++            return await send_coro_factory()
++        except FloodWait as e:
++            if attempt >= max_retries:
++                raise
++            await asyncio.sleep(e.value)
++
++
+ async def send_all(bot, userid, files, ident, chat_id, user_name, query):
+     settings = await get_settings(chat_id)
+     if 'is_shortlink' in settings.keys():
+         ENABLE_SHORTLINK = settings['is_shortlink']
+     else:
+-        await save_group_settings(message.chat.id, 'is_shortlink', False)
++        await save_group_settings(chat_id, 'is_shortlink', False)
+         ENABLE_SHORTLINK = False
++    # Premium users always get the files directly; shortlinks are only for
++    # non-premium users when both the group setting and global mode are on.
++    # (Previously premium users received nothing at all in shortlink mode.)
++    has_premium = await db.has_premium_access(userid)
++    use_shortlink = bool(ENABLE_SHORTLINK and SHORTLINK_MODE and not has_premium)
+     try:
+-        if ENABLE_SHORTLINK:
+-            for file in files:
+-                title = file["file_name"]
+-                size = get_size(file["file_size"])
+-                if not await db.has_premium_access(userid) and SHORTLINK_MODE == True:
+-                    await bot.send_message(chat_id=userid, text=f"<b>Hᴇʏ ᴛʜᴇʀᴇ {user_name} 👋🏽 \n\n✅ Sᴇᴄᴜʀᴇ ʟɪɴᴋ ᴛᴏ ʏᴏᴜʀ ғɪʟᴇ ʜᴀs sᴜᴄᴄᴇssғᴜʟʟʏ ʙᴇᴇɴ ɢᴇɴᴇʀᴀᴛᴇᴅ ᴘʟᴇᴀsᴇ ᴄʟɪᴄᴋ ᴅᴏᴡɴʟᴏᴀᴅ ʙᴜᴛᴛᴏɴ\n\n🗃️ Fɪʟᴇ Nᴀᴍᴇ : {title}\n🔖 Fɪʟᴇ Sɪᴢᴇ : {size}</b>", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📤 Dᴏᴡɴʟᴏᴀᴅ 📥", url=await get_shortlink(chat_id, f"https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}"))]]))
+-        else:
+-            for file in files:
+-                f_caption = file["caption"]
+-                title = file["file_name"]
+-                size = get_size(file["file_size"])
+-                if CUSTOM_FILE_CAPTION:
+-                    try:
+-                        f_caption = CUSTOM_FILE_CAPTION.format(
+-                            file_name='' if title is None else title,
+-                            file_size='' if size is None else size,
+-                            file_caption='' if f_caption is None else f_caption
+-                        )
+-                    except Exception as e:
+-                        print(e)
+-                        f_caption = f_caption
+-                if f_caption is None:
+-                    f_caption = f"{title}"
+-                await bot.send_cached_media(
+-                    chat_id=userid,
+-                    file_id=file["file_id"],
+-                    caption=f_caption,
+-                    protect_content=True if ident == "filep" else False,
+-                    reply_markup=InlineKeyboardMarkup(
+-                        [[
+-                            InlineKeyboardButton('Sᴜᴘᴘᴏʀᴛ Gʀᴏᴜᴘ', url=GRP_LNK),
+-                            InlineKeyboardButton('Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ', url=CHNL_LNK)
+-                        ],[
+-                            InlineKeyboardButton("Bᴏᴛ Oᴡɴᴇʀ", url=OWNER_LNK)
+-                        ]]
++        for file in files:
++            title = file["file_name"]
++            size = get_size(file["file_size"])
++            if use_shortlink:
++                short_url = await get_shortlink(chat_id, f"https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}")
++                text = (f"<b>Hᴇʏ ᴛʜᴇʀᴇ {user_name} 👋🏽 \n\n✅ Sᴇᴄᴜʀᴇ ʟɪɴᴋ ᴛᴏ ʏᴏᴜʀ ғɪʟᴇ ʜᴀs sᴜᴄᴄᴇssғᴜʟʟʏ ʙᴇᴇɴ ɢᴇɴᴇʀᴀᴛᴇᴅ ᴘʟᴇᴀsᴇ ᴄʟɪᴄᴋ ᴅᴏᴡɴʟᴏᴀᴅ ʙᴜᴛᴛᴏɴ\n\n🗃️ Fɪʟᴇ Nᴀᴍᴇ : {title}\n🔖 Fɪʟᴇ Sɪᴢᴇ : {size}</b>")
++                markup = InlineKeyboardMarkup([[InlineKeyboardButton("📤 Dᴏᴡɴʟᴏᴀᴅ 📥", url=short_url)]])
++                await _send_with_floodwait(lambda: bot.send_message(chat_id=userid, text=text, reply_markup=markup))
++                continue
++            f_caption = file["caption"]
++            if CUSTOM_FILE_CAPTION:
++                try:
++                    f_caption = CUSTOM_FILE_CAPTION.format(
++                        file_name='' if title is None else title,
++                        file_size='' if size is None else size,
++                        file_caption='' if f_caption is None else f_caption
+                     )
+-                )
++                except Exception:
++                    logger.exception("CUSTOM_FILE_CAPTION format failed")
++                    # fall through with the raw caption
++            if f_caption is None:
++                f_caption = f"{title}"
++            markup = InlineKeyboardMarkup(
++                [[
++                    InlineKeyboardButton('Sᴜᴘᴘᴏʀᴛ Gʀᴏᴜᴘ', url=GRP_LNK),
++                    InlineKeyboardButton('Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ', url=CHNL_LNK)
++                ],[
++                    InlineKeyboardButton("Bᴏᴛ Oᴡɴᴇʀ", url=OWNER_LNK)
++                ]]
++            )
++            await _send_with_floodwait(lambda: bot.send_cached_media(
++                chat_id=userid,
++                file_id=file["file_id"],
++                caption=f_caption,
++                protect_content=True if ident == "filep" else False,
++                reply_markup=markup
++            ))
+     except UserIsBlocked:
+         await query.answer('Uɴʙʟᴏᴄᴋ ᴛʜᴇ ʙᴏᴛ ᴍᴀʜɴ !', show_alert=True)
+     except PeerIdInvalid:
+         await query.answer('Hᴇʏ, Sᴛᴀʀᴛ Bᴏᴛ Fɪʀsᴛ Aɴᴅ Cʟɪᴄᴋ Sᴇɴᴅ Aʟʟ', show_alert=True)
+-    except Exception as e:
++    except Exception:
++        logger.exception("send_all failed for user %s", userid)
+         await query.answer('Hᴇʏ, Sᴛᴀʀᴛ Bᴏᴛ Fɪʀsᴛ Aɴᴅ Cʟɪᴄᴋ Sᴇɴᴅ Aʟʟ', show_alert=True)
+-        
++
++
+ async def get_cap(settings, remaining_seconds, files, query, total_results, search):
+     if settings["imdb"]:
+         IMDB_CAP = temp.IMDB_CAP.get(query.from_user.id)
+@@ -951,6 +945,9 @@
+                     plot=imdb['plot'],
+                     rating=imdb['rating'],
+                     url=imdb['url'],
++                    # `message` kept for custom templates that still use
++                    # {message.from_user.mention}; the default template uses {query...}.
++                    message=query,
+                     **locals()
+                 )
+               #  cap+="<b>\n\n<u>🍿 Your Movie Files 👇</u></b>\n\n"
+@@ -972,18 +969,17 @@
+ 
+     
+ def get_wish():
+-    tz = pytz.timezone('Asia/Colombo')
+-    time = datetime.now(tz)
+-    now = time.strftime("%H")
+-    if now < "12":
++    tz = pytz.timezone('Asia/Kolkata')
++    hour = datetime.now(tz).hour
++    if hour < 12:
+         status = "Good Morning 🌞"
+-    elif now < "18":
++    elif hour < 18:
+         status = "Good Afternoon 🌗"
+     else:
+         status = "Good Evening 🌘"
+     return status
+ 
+-async def get_seconds(time_string):
++def get_seconds(time_string):
+     def extract_value_and_unit(ts):
+         value = ""
+         unit = ""
+@@ -1014,9 +1010,13 @@
+ async def is_check_admin(bot, chat_id, user_id):
+     try:
+         member = await bot.get_chat_member(chat_id, user_id)
+-        return member.status in [enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER]
+-    except:
++    except (UserNotParticipant, PeerIdInvalid, ChannelPrivate) as e:
++        logger.debug("is_check_admin: %s not admin-ish in %s (%s)", user_id, chat_id, e)
++        return False
++    except Exception:
++        logger.exception("is_check_admin failed for user %s in chat %s", user_id, chat_id)
+         return False
++    return member.status in (enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER)
+ 
+ 
+ 

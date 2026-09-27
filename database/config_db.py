@@ -67,11 +67,18 @@ class Database:
         }
     
     
+    async def _ensure_configuration(self):
+        # Atomically create the default config doc if none exists. The old
+        # read-then-insert raced and could duplicate the singleton doc.
+        await self.config_col.update_one(
+            {},
+            {'$setOnInsert': self.create_configuration_data()},
+            upsert=True,
+        )
+        return await self.config_col.find_one({})
+
     async def update_advirtisment(self, ads_string=None, ads_name=None, expiry=None, impression=None):
-        config = await self.config_col.find_one({})
-        if not config:
-            await self.config_col.insert_one(self.create_configuration_data())
-            config = await self.config_col.find_one({})
+        config = await self._ensure_configuration()
 
         advertisement = config.get('advertisement')
 
@@ -92,10 +99,7 @@ class Database:
         await self.config_col.update_one({}, {'$set': {'advertisement.impression_count': impression}}, upsert=True)
 
     async def get_advirtisment(self):
-        configuration = await self.config_col.find_one({})
-        if not configuration:
-            await self.config_col.insert_one(self.create_configuration_data())
-            configuration = await self.config_col.find_one({})
+        configuration = await self._ensure_configuration()
         advertisement = configuration.get('advertisement', False)
         if advertisement:
             return advertisement.get('ads_string'), advertisement.get('ads_name'), advertisement.get('impression_count')
@@ -120,10 +124,7 @@ class Database:
             print(f"An error occurred: {e}")
 
     async def get_configuration_value(self, key):
-        configuration = await self.config_col.find_one({})
-        if not configuration:
-            await self.config_col.insert_one(self.create_configuration_data())
-            configuration = await self.config_col.find_one({})
+        configuration = await self._ensure_configuration()
         return configuration.get(key, False)
 
 

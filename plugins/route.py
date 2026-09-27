@@ -3,6 +3,7 @@
 # Ask Doubt on telegram @KingVJ01
 
 import re, math, logging, secrets, mimetypes, time
+import info
 from info import *
 from aiohttp import web
 from aiohttp.http_exceptions import BadStatusLine
@@ -36,13 +37,13 @@ async def stream_handler(request: web.Request):
     except FIleNotFound as e:
         raise web.HTTPNotFound(text=e.message)
     except (AttributeError, BadStatusLine, ConnectionResetError):
-        pass
+        return web.Response(status=204)
     except Exception as e:
         logging.critical(e.with_traceback(None))
         raise web.HTTPInternalServerError(text=str(e))
 
 @routes.get(r"/{path:\S+}", allow_head=True)
-async def stream_handler(request: web.Request):
+async def download_handler(request: web.Request):
     try:
         path = request.match_info["path"]
         match = re.search(r"^([a-zA-Z0-9_-]{6})(\d+)$", path)
@@ -58,7 +59,7 @@ async def stream_handler(request: web.Request):
     except FIleNotFound as e:
         raise web.HTTPNotFound(text=e.message)
     except (AttributeError, BadStatusLine, ConnectionResetError):
-        pass
+        return web.Response(status=204)
     except Exception as e:
         logging.critical(e.with_traceback(None))
         raise web.HTTPInternalServerError(text=str(e))
@@ -71,7 +72,7 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
     index = min(work_loads, key=work_loads.get)
     faster_client = multi_clients[index]
     
-    if MULTI_CLIENT:
+    if info.MULTI_CLIENT:
         logging.info(f"Client {index} is now serving {request.remote}")
 
     if faster_client in class_cache:
@@ -136,6 +137,10 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
             mime_type = "application/octet-stream"
             file_name = f"{secrets.token_hex(2)}.unknown"
 
+    # file_name is untrusted: strip characters that could break out of the
+    # quoted header value (header injection).
+    safe_name = re.sub(r'[\r\n"]', '', file_name or 'file').strip() or 'file'
+
     return web.Response(
         status=206 if range_header else 200,
         body=body,
@@ -143,7 +148,7 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
             "Content-Type": f"{mime_type}",
             "Content-Range": f"bytes {from_bytes}-{until_bytes}/{file_size}",
             "Content-Length": str(req_length),
-            "Content-Disposition": f'{disposition}; filename="{file_name}"',
+            "Content-Disposition": f'{disposition}; filename="{safe_name}"',
             "Accept-Ranges": "bytes",
         },
     )

@@ -21,14 +21,14 @@ async def deletemultiplemedia(bot, message):
     else:
         return
 
-    file_id, file_ref = unpack_new_file_id(media.file_id)
+    file_id = unpack_new_file_id(media.file_id)
 
 
-    result = col.delete_one({
+    result = await col.delete_one({
         'file_id': file_id,
     })
-    if not result.deleted_count:
-        result = sec_col.delete_one({
+    if not result.deleted_count and sec_col is not None:
+        result = await sec_col.delete_one({
             'file_id': file_id,
         })
     if result.deleted_count:
@@ -40,24 +40,24 @@ async def deletemultiplemedia(bot, message):
             file_name = file_name.replace(char, '')
         file_name = ' '.join(filter(lambda x: not x.startswith('@'), file_name.split()))
     
-        result = col.delete_many({
+        result = await col.delete_many({
             'file_name': file_name,
             'file_size': media.file_size
         })
-        if not result.deleted_count:
-            result = sec_col.delete_many({
+        if not result.deleted_count and sec_col is not None:
+            result = await sec_col.delete_many({
                 'file_name': file_name,
                 'file_size': media.file_size
             })
         if result.deleted_count:
             logger.info('File is successfully deleted from database.')
         else:
-            result = col.delete_many({
+            result = await col.delete_many({
                 'file_name': media.file_name,
                 'file_size': media.file_size
             })
-            if not result.deleted_count:
-                result = sec_col.delete_many({
+            if not result.deleted_count and sec_col is not None:
+                result = await sec_col.delete_many({
                     'file_name': media.file_name,
                     'file_size': media.file_size
                 })

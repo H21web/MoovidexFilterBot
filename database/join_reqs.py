@@ -26,13 +26,13 @@ class JoinReqs:
             pass
 
     async def get_user(self, user_id):
-        return await self.col.find_one({"user_id": int(user_id)})
+        return await self.col.find_one({"_id": int(user_id)})
 
     async def get_all_users(self):
         return await self.col.find().to_list(None)
 
     async def delete_user(self, user_id):
-        await self.col.delete_one({"user_id": int(user_id)})
+        await self.col.delete_one({"_id": int(user_id)})
 
     async def delete_all_users(self):
         await self.col.delete_many({})

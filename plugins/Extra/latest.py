@@ -1,4 +1,4 @@
-import requests
+import aiohttp
 import html
 import asyncio
 from pyrogram import Client, filters
@@ -16,7 +16,7 @@ def clean_text(text):
     return text.strip()
 
 # Fetch movie page
-def fetch_movies_page(page=1):
+async def fetch_movies_page(page=1):
     url = f"https://www.binged.com/wp-json/binged-api/v1/movies?page={page}"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
@@ -25,10 +25,12 @@ def fetch_movies_page(page=1):
     }
 
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        return data.get("data", []), data.get("pagination", {}).get("total_pages", 1)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, timeout=10) as response:
+                if response.status != 200:
+                     return [], 1
+                data = await response.json()
+                return data.get("data", []), data.get("pagination", {}).get("total_pages", 1)
     except Exception as e:
         print("Error while fetching page:", e)
         return [], 1
@@ -42,7 +44,7 @@ async def latest_movies_command(client, message):
     user_id = message.from_user.id
     page = 1
 
-    movies, total_pages = fetch_movies_page(page)
+    movies, total_pages = await fetch_movies_page(page)
     if not movies:
         await message.reply_text("⚠️ Failed to fetch movies.")
         return
@@ -105,7 +107,7 @@ async def paginate_movies(client, message):
     else:
         return
 
-    movies, _ = fetch_movies_page(new_page)
+    movies, _ = await fetch_movies_page(new_page)
     if not movies:
         await message.reply_text("⚠️ Failed to fetch movies.")
         return

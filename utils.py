@@ -2,14 +2,14 @@
 # Subscribe YouTube Channel For Amazing Bot @Tech_VJ
 # Ask Doubt on telegram @KingVJ01
 
-import logging, asyncio, os, re, random, pytz, aiohttp, requests, string, json, http.client
+import logging, asyncio, os, re, random, pytz, aiohttp, string
 from info import *
 
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram import enums
 from urllib.parse import quote_plus
 from pyrogram.errors import *
-from typing import Union
+from typing import Union, Tuple, Optional
 from Script import script
 from datetime import datetime, date
 from typing import List
@@ -17,7 +17,6 @@ from database.users_chats_db import db
 from database.join_reqs import JoinReqs
 from bs4 import BeautifulSoup
 from shortzy import Shortzy
-from urllib.parse import quote   
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -33,6 +32,38 @@ SMART_OPEN = '“'
 SMART_CLOSE = '”'
 START_CHAR = ('\'', '"', SMART_OPEN)
 IMDB_CACHE = {}
+IMDB_CACHE_MAX = 500  # bound the process-local cache; oldest entries evicted
+
+
+def _imdb_cache_set(key, value):
+    if key not in IMDB_CACHE and len(IMDB_CACHE) >= IMDB_CACHE_MAX:
+        IMDB_CACHE.pop(next(iter(IMDB_CACHE)))
+    IMDB_CACHE[key] = value
+
+
+_http_session = None
+
+
+async def _get_http_session():
+    """Shared aiohttp session for IMDb lookups (created lazily, reused)."""
+    global _http_session
+    if _http_session is None or _http_session.closed:
+        timeout = aiohttp.ClientTimeout(total=4)
+        connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
+        _http_session = aiohttp.ClientSession(
+            timeout=timeout,
+            connector=connector,
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
+        )
+    return _http_session
+
+
+async def close_http_session():
+    """Close the shared HTTP session; called on bot shutdown."""
+    global _http_session
+    if _http_session is not None and not _http_session.closed:
+        await _http_session.close()
+        _http_session = None
 
 # temp db for banned 
 class temp(object):
@@ -40,14 +71,16 @@ class temp(object):
     BANNED_CHATS = []
     ME = None
     BOT = None
-    CURRENT=int(os.environ.get("SKIP", 2))
+    try:
+        CURRENT = int(os.environ.get("SKIP", 2))
+    except (TypeError, ValueError):
+        CURRENT = 2
     CANCEL = False
     MELCOW = {}
     U_NAME = None
     B_NAME = None
     GETALL = {}
     SHORT = {}
-    SETTINGS = {}
     SETTINGS = {}
     IMDB_CAP = {}
     FILTERED = {}
@@ -56,16 +89,16 @@ class temp(object):
 
 async def pub_is_subscribed(bot, query, channel):
     btn = []
-    for id in channel:
-        chat = await bot.get_chat(int(id))
+    for channel_id in channel:
+        chat = await bot.get_chat(int(channel_id))
         try:
-            await bot.get_chat_member(id, query.from_user.id)
+            await bot.get_chat_member(channel_id, query.from_user.id)
         except UserNotParticipant:
             btn.append(
                 [InlineKeyboardButton(f'Join {chat.title}', url=chat.invite_link)]
             )
         except Exception as e:
-            pass
+            logger.exception("pub_is_subscribed failed for channel %s", channel_id)
     return btn
 
 async def is_subscribed(bot, query):
@@ -100,17 +133,6 @@ async def is_subscribed(bot, query):
         return False
 
 
-
-def list_to_str(items):
-    """Convert list to comma-separated string safely."""
-    if not items:
-        return None
-    if isinstance(items, str):
-        return items.strip() or None
-    if isinstance(items, list):
-        filtered_items = [str(i).strip() for i in items if i and str(i).strip()]
-        return ", ".join(filtered_items) if filtered_items else None
-    return str(items).strip() or None
 
 def format_runtime(runtime_str=None, seconds=None):
     """Format runtime from ISO string or seconds."""
@@ -149,45 +171,38 @@ async def lookup_imdb_id(title):
     # Proper URL encoding for special characters
     encoded_title = quote_plus(title)
     api_url = f"https://imdblinkz.s1mallufiles.workers.dev/?q={encoded_title}"
-    
+
     try:
-        timeout = aiohttp.ClientTimeout(total=4)
-        connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
-        
-        async with aiohttp.ClientSession(
-            timeout=timeout, 
-            connector=connector,
-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        ) as session:
-            async with session.get(api_url) as response:
-                if response.status != 200:
-                    return None
-                
-                data = await response.json()
-                
-                if not isinstance(data, dict):
-                    return None
-                
-                results = data.get("results", [])
-                if not isinstance(results, list):
-                    return None
-                
-                # Try to find exact match first, then partial match
-                for result in results:
-                    if isinstance(result, dict) and result.get("type") == "title":
-                        result_title = result.get("title", "").lower()
-                        imdb_id = result.get("id")
-                        
-                        if imdb_id and isinstance(imdb_id, str):
-                            # Cache and return first valid result
-                            IMDB_CACHE[title] = imdb_id
-                            return imdb_id
-                            
+        session = await _get_http_session()
+        async with session.get(api_url) as response:
+            if response.status != 200:
+                return None
+
+            data = await response.json()
+
+            if not isinstance(data, dict):
+                return None
+
+            results = data.get("results", [])
+            if not isinstance(results, list):
+                return None
+
+            # Try to find exact match first, then partial match
+            for result in results:
+                if isinstance(result, dict) and result.get("type") == "title":
+                    result_title = result.get("title", "").lower()
+                    imdb_id = result.get("id")
+
+                    if imdb_id and isinstance(imdb_id, str):
+                        # Cache and return first valid result
+                        _imdb_cache_set(title, imdb_id)
+                        return imdb_id
+
     except asyncio.TimeoutError:
         logger.warning(f"Timeout looking up: {title}")
     except Exception as e:
         logger.warning(f"Lookup failed for {title}: {str(e)[:100]}")
-    
+
     return None
 
 async def fetch_json(imdb_id):
@@ -196,28 +211,21 @@ async def fetch_json(imdb_id):
         return None
     
     url = f"https://imdb.iamidiotareyoutoo.com/search?tt={imdb_id}"
-    
+
     try:
-        timeout = aiohttp.ClientTimeout(total=4)
-        connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
-        
-        async with aiohttp.ClientSession(
-            timeout=timeout, 
-            connector=connector,
-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        ) as session:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    return None
-                
-                data = await response.json()
-                return data if isinstance(data, dict) else None
-                
+        session = await _get_http_session()
+        async with session.get(url) as response:
+            if response.status != 200:
+                return None
+
+            data = await response.json()
+            return data if isinstance(data, dict) else None
+
     except asyncio.TimeoutError:
         logger.warning(f"Timeout fetching: {imdb_id}")
     except Exception as e:
         logger.warning(f"Fetch failed for {imdb_id}: {str(e)[:100]}")
-    
+
     return None
 
 def safe_get(data, *keys, default=None):
@@ -428,54 +436,74 @@ async def get_poster(query, bulk=False, id=False, file=None):
         logger.error(f"Error in get_poster for '{query}': {str(e)[:100]}")
         return None
 
+# Maximum FloodWait sleeps before giving up on one recipient (iterative retry;
+# the old code recursed with no bound and could hit RecursionError).
+_MAX_FLOOD_RETRIES = 5
+
+
+async def _sleep_floodwait(e, attempt, target):
+    if attempt >= _MAX_FLOOD_RETRIES:
+        logging.warning("Giving up on broadcast to %s after %s FloodWaits", target, attempt)
+        return False
+    await asyncio.sleep(e.value)
+    return True
+
+
 async def broadcast_messages(user_id, message):
-    try:
-        await message.copy(chat_id=user_id)
-        return True, "Success"
-    except FloodWait as e:
-        await asyncio.sleep(e.x)
-        return await broadcast_messages(user_id, message)
-    except InputUserDeactivated:
-        await db.delete_user(int(user_id))
-        logging.info(f"{user_id}-Removed from Database, since deleted account.")
-        return False, "Deleted"
-    except UserIsBlocked:
-        await db.delete_user(int(user_id))
-        logging.info(f"{user_id} -Blocked the bot.")
-        return False, "Blocked"
-    except PeerIdInvalid:
-        await db.delete_user(int(user_id))
-        logging.info(f"{user_id} - PeerIdInvalid")
-        return False, "Error"
-    except Exception as e:
-        return False, "Error"
+    attempt = 0
+    while True:
+        try:
+            await message.copy(chat_id=user_id)
+            return True, "Success"
+        except FloodWait as e:
+            attempt += 1
+            if not await _sleep_floodwait(e, attempt, user_id):
+                return False, "Error"
+        except InputUserDeactivated:
+            await db.delete_user(int(user_id))
+            logging.info(f"{user_id}-Removed from Database, since deleted account.")
+            return False, "Deleted"
+        except UserIsBlocked:
+            await db.delete_user(int(user_id))
+            logging.info(f"{user_id} -Blocked the bot.")
+            return False, "Blocked"
+        except PeerIdInvalid:
+            await db.delete_user(int(user_id))
+            logging.info(f"{user_id} - PeerIdInvalid")
+            return False, "Error"
+        except Exception:
+            logging.exception("broadcast_messages failed for %s", user_id)
+            return False, "Error"
 
 async def broadcast_messages_group(chat_id, message):
-    try:
-        kd = await message.copy(chat_id=chat_id)
+    attempt = 0
+    while True:
         try:
-            await kd.pin()
-        except:
-            pass
-        return True, "Success"
-    except FloodWait as e:
-        await asyncio.sleep(e.x)
-        return await broadcast_messages_group(chat_id, message)
-    except Exception as e:
-        return False, "Error"
+            kd = await message.copy(chat_id=chat_id)
+            try:
+                await kd.pin()
+            except Exception as e:
+                logger.debug("Could not pin broadcast in %s: %s", chat_id, e)
+            return True, "Success"
+        except FloodWait as e:
+            attempt += 1
+            if not await _sleep_floodwait(e, attempt, chat_id):
+                return False, "Error"
+        except Exception:
+            logging.exception("broadcast_messages_group failed for %s", chat_id)
+            return False, "Error"
     
 
 async def search_gagala(text):
-    usr_agent = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
-                      'Chrome/61.0.3163.100 Safari/537.36'
-    }
-    text = text.replace(" ", '+')
+    # Blocking requests.get() in async code stalled the whole event loop;
+    # use the shared aiohttp session instead.
+    text = quote_plus(text)
     url = f'https://imdb.iamidiotareyoutoo.com/search?q={text}'
-    
-    response = requests.get(url, headers=usr_agent)
-    response.raise_for_status()
-    data = response.json()
+
+    session = await _get_http_session()
+    async with session.get(url) as response:
+        response.raise_for_status()
+        data = await response.json()
 
     # Extract title and year from the response and assign to the 'titles' variable
     titles = [f"{item['#TITLE']} ({item['#YEAR']})" for item in data.get("description", [])]
@@ -492,6 +520,8 @@ async def save_group_settings(group_id, key, value):
     await db.update_settings(group_id, current)
     
 def get_size(size):
+    if size is None:
+        return ""
     units = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB"]
     size = float(size)
     i = 0
@@ -521,7 +551,7 @@ def get_file_id(msg: Message):
                 setattr(obj, "message_type", message_type)
                 return obj
 
-def extract_user(message: Message) -> Union[int, str]:
+def extract_user(message: Message) -> Tuple[int, Optional[str]]:
     user_id = None
     user_first_name = None
     if message.reply_to_message:
@@ -551,15 +581,22 @@ def extract_user(message: Message) -> Union[int, str]:
     return (user_id, user_first_name)
 
 def list_to_str(k):
+    """Format an IMDb list field for display. Empty -> "N/A" (as deployed);
+    plain strings are returned as-is instead of being split into characters;
+    lists are comma-joined with no trailing comma, honoring MAX_LIST_ELM."""
     if not k:
         return "N/A"
-    elif len(k) == 1:
-        return str(k[0])
-    elif MAX_LIST_ELM:
-        k = k[:int(MAX_LIST_ELM)]
-        return ' '.join(f'{elem}, ' for elem in k)
-    else:
-        return ' '.join(f'{elem}, ' for elem in k)
+    if isinstance(k, str):
+        return k.strip() or "N/A"
+    items = [str(elem).strip() for elem in k if str(elem).strip()]
+    if not items:
+        return "N/A"
+    if MAX_LIST_ELM:
+        try:
+            items = items[:int(MAX_LIST_ELM)]
+        except (TypeError, ValueError):
+            pass
+    return ", ".join(items)
 
 def last_online(from_user):
     time = ""
@@ -600,7 +637,7 @@ def split_quotes(text: str) -> List:
         key = text[0] + text[0]
     return list(filter(None, [key, rest]))
 
-def gfilterparser(text, keyword):
+def _button_parser(text, keyword, alert_prefix):
     if "buttonalert" in text:
         text = (text.replace("\n", "\\n").replace("\t", "\\t"))
     buttons = []
@@ -625,12 +662,12 @@ def gfilterparser(text, keyword):
                 if bool(match.group(5)) and buttons:
                     buttons[-1].append(InlineKeyboardButton(
                         text=match.group(2),
-                        callback_data=f"gfilteralert:{i}:{keyword}"
+                        callback_data=f"{alert_prefix}:{i}:{keyword}"
                     ))
                 else:
                     buttons.append([InlineKeyboardButton(
                         text=match.group(2),
-                        callback_data=f"gfilteralert:{i}:{keyword}"
+                        callback_data=f"{alert_prefix}:{i}:{keyword}"
                     )])
                 i += 1
                 alerts.append(match.group(4))
@@ -651,66 +688,18 @@ def gfilterparser(text, keyword):
     else:
         note_data += text[prev:]
 
-    try:
-        return note_data, buttons, alerts
-    except:
-        return note_data, buttons, None
+    return note_data, buttons, alerts
+
 
 def parser(text, keyword):
-    if "buttonalert" in text:
-        text = (text.replace("\n", "\\n").replace("\t", "\\t"))
-    buttons = []
-    note_data = ""
-    prev = 0
-    i = 0
-    alerts = []
-    for match in BTN_URL_REGEX.finditer(text):
-        # Check if btnurl is escaped
-        n_escapes = 0
-        to_check = match.start(1) - 1
-        while to_check > 0 and text[to_check] == "\\":
-            n_escapes += 1
-            to_check -= 1
+    """Parse filter text buttons; alert buttons use the "alertmessage" prefix."""
+    return _button_parser(text, keyword, "alertmessage")
 
-        # if even, not escaped -> create button
-        if n_escapes % 2 == 0:
-            note_data += text[prev:match.start(1)]
-            prev = match.end(1)
-            if match.group(3) == "buttonalert":
-                # create a thruple with button label, url, and newline status
-                if bool(match.group(5)) and buttons:
-                    buttons[-1].append(InlineKeyboardButton(
-                        text=match.group(2),
-                        callback_data=f"alertmessage:{i}:{keyword}"
-                    ))
-                else:
-                    buttons.append([InlineKeyboardButton(
-                        text=match.group(2),
-                        callback_data=f"alertmessage:{i}:{keyword}"
-                    )])
-                i += 1
-                alerts.append(match.group(4))
-            elif bool(match.group(5)) and buttons:
-                buttons[-1].append(InlineKeyboardButton(
-                    text=match.group(2),
-                    url=match.group(4).replace(" ", "")
-                ))
-            else:
-                buttons.append([InlineKeyboardButton(
-                    text=match.group(2),
-                    url=match.group(4).replace(" ", "")
-                )])
 
-        else:
-            note_data += text[prev:to_check]
-            prev = match.start(1) - 1
-    else:
-        note_data += text[prev:]
+def gfilterparser(text, keyword):
+    """Parse global-filter text buttons; alert buttons use the "gfilteralert" prefix."""
+    return _button_parser(text, keyword, "gfilteralert")
 
-    try:
-        return note_data, buttons, alerts
-    except:
-        return note_data, buttons, None
 
 def remove_escapes(text: str) -> str:
     res = ""
@@ -738,10 +727,28 @@ def humanbytes(size):
 
 
 
-async def get_clone_shortlink(link, url, api):
+async def _shorten_link(link, url, api):
+    """Shorten one link via the shareus easy API or any shortzy-compatible site.
+
+    A fresh session is used per call because shorteners are called rarely
+    (per file/link), unlike the hot IMDb lookup path.
+    """
+    if url == "api.shareus.io":
+        api_url = f'https://{url}/easy_api'
+        params = {"key": api, "link": link}
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(api_url, params=params, raise_for_status=True) as response:
+                    return await response.text()
+        except Exception as e:
+            logger.error(e)
+            return link
     shortzy = Shortzy(api_key=api, base_site=url)
-    link = await shortzy.convert(link)
-    return link
+    return await shortzy.convert(link)
+
+
+async def get_clone_shortlink(link, url, api):
+    return await _shorten_link(link, url, api)
                            
 async def get_shortlink(chat_id, link):
     settings = await get_settings(chat_id) #fetching settings for group
@@ -754,51 +761,15 @@ async def get_shortlink(chat_id, link):
     if URL.startswith("shorturllink") or URL.startswith("terabox.in") or URL.startswith("urlshorten.in"):
         URL = SHORTLINK_URL
         API = SHORTLINK_API
-    if URL == "api.shareus.io":
-        url = f'https://{URL}/easy_api'
-        params = {
-            "key": API,
-            "link": link,
-        }
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, raise_for_status=True, ssl=False) as response:
-                    data = await response.text()
-                    return data
-        except Exception as e:
-            logger.error(e)
-            return link
-    else:
-        shortzy = Shortzy(api_key=API, base_site=URL)
-        link = await shortzy.convert(link)
-        return link
-    
+    return await _shorten_link(link, URL, API)
+
 async def get_tutorial(chat_id):
     settings = await get_settings(chat_id) #fetching settings for group
     return settings['tutorial']
         
 async def get_verify_shorted_link(link, url, api):
-    API = api
-    URL = url
-    if URL == "api.shareus.io":
-        url = f'https://{URL}/easy_api'
-        params = {
-            "key": API,
-            "link": link,
-        }
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, raise_for_status=True, ssl=False) as response:
-                    data = await response.text()
-                    return data
-        except Exception as e:
-            logger.error(e)
-            return link
-    else:
-        shortzy = Shortzy(api_key=API, base_site=URL)
-        link = await shortzy.convert(link)
-        return link
-        
+    return await _shorten_link(link, url, api)
+
 async def check_token(bot, userid, token):
     user = await bot.get_users(userid)
     if not await db.is_user_exist(user.id):
@@ -845,71 +816,94 @@ async def check_verification(bot, userid):
     if not await db.is_user_exist(user.id):
         await db.add_user(user.id, user.first_name)
         await bot.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(user.id, user.mention))
-    tz = pytz.timezone('Asia/Kolkata')
     today = date.today()
     if user.id in VERIFIED.keys():
         EXP = VERIFIED[user.id]
-        years, month, day = EXP.split('-')
-        comp = date(int(years), int(month), int(day))
-        if comp<today:
+        try:
+            years, month, day = EXP.split('-')
+            comp = date(int(years), int(month), int(day))
+        except (ValueError, TypeError, AttributeError):
+            logger.warning("Dropping malformed verification date for user %s: %r", user.id, EXP)
+            VERIFIED.pop(user.id, None)
+            return False
+        if comp < today:
             return False
         else:
             return True
     else:
-        return False  
+        return False
     
+async def _send_with_floodwait(send_coro_factory, max_retries=5):
+    """Await ``send_coro_factory()`` (a zero-arg callable returning a coroutine),
+    sleeping through FloodWait instead of aborting the whole batch."""
+    for attempt in range(max_retries + 1):
+        try:
+            return await send_coro_factory()
+        except FloodWait as e:
+            if attempt >= max_retries:
+                raise
+            await asyncio.sleep(e.value)
+
+
 async def send_all(bot, userid, files, ident, chat_id, user_name, query):
     settings = await get_settings(chat_id)
     if 'is_shortlink' in settings.keys():
         ENABLE_SHORTLINK = settings['is_shortlink']
     else:
-        await save_group_settings(message.chat.id, 'is_shortlink', False)
+        await save_group_settings(chat_id, 'is_shortlink', False)
         ENABLE_SHORTLINK = False
+    # Premium users always get the files directly; shortlinks are only for
+    # non-premium users when both the group setting and global mode are on.
+    # (Previously premium users received nothing at all in shortlink mode.)
+    has_premium = await db.has_premium_access(userid)
+    use_shortlink = bool(ENABLE_SHORTLINK and SHORTLINK_MODE and not has_premium)
     try:
-        if ENABLE_SHORTLINK:
-            for file in files:
-                title = file["file_name"]
-                size = get_size(file["file_size"])
-                if not await db.has_premium_access(userid) and SHORTLINK_MODE == True:
-                    await bot.send_message(chat_id=userid, text=f"<b>Hᴇʏ ᴛʜᴇʀᴇ {user_name} 👋🏽 \n\n✅ Sᴇᴄᴜʀᴇ ʟɪɴᴋ ᴛᴏ ʏᴏᴜʀ ғɪʟᴇ ʜᴀs sᴜᴄᴄᴇssғᴜʟʟʏ ʙᴇᴇɴ ɢᴇɴᴇʀᴀᴛᴇᴅ ᴘʟᴇᴀsᴇ ᴄʟɪᴄᴋ ᴅᴏᴡɴʟᴏᴀᴅ ʙᴜᴛᴛᴏɴ\n\n🗃️ Fɪʟᴇ Nᴀᴍᴇ : {title}\n🔖 Fɪʟᴇ Sɪᴢᴇ : {size}</b>", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📤 Dᴏᴡɴʟᴏᴀᴅ 📥", url=await get_shortlink(chat_id, f"https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}"))]]))
-        else:
-            for file in files:
-                f_caption = file["caption"]
-                title = file["file_name"]
-                size = get_size(file["file_size"])
-                if CUSTOM_FILE_CAPTION:
-                    try:
-                        f_caption = CUSTOM_FILE_CAPTION.format(
-                            file_name='' if title is None else title,
-                            file_size='' if size is None else size,
-                            file_caption='' if f_caption is None else f_caption
-                        )
-                    except Exception as e:
-                        print(e)
-                        f_caption = f_caption
-                if f_caption is None:
-                    f_caption = f"{title}"
-                await bot.send_cached_media(
-                    chat_id=userid,
-                    file_id=file["file_id"],
-                    caption=f_caption,
-                    protect_content=True if ident == "filep" else False,
-                    reply_markup=InlineKeyboardMarkup(
-                        [[
-                            InlineKeyboardButton('Sᴜᴘᴘᴏʀᴛ Gʀᴏᴜᴘ', url=GRP_LNK),
-                            InlineKeyboardButton('Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ', url=CHNL_LNK)
-                        ],[
-                            InlineKeyboardButton("Bᴏᴛ Oᴡɴᴇʀ", url=OWNER_LNK)
-                        ]]
+        for file in files:
+            title = file["file_name"]
+            size = get_size(file["file_size"])
+            if use_shortlink:
+                short_url = await get_shortlink(chat_id, f"https://telegram.me/{temp.U_NAME}?start=files_{file['file_id']}")
+                text = (f"<b>Hᴇʏ ᴛʜᴇʀᴇ {user_name} 👋🏽 \n\n✅ Sᴇᴄᴜʀᴇ ʟɪɴᴋ ᴛᴏ ʏᴏᴜʀ ғɪʟᴇ ʜᴀs sᴜᴄᴄᴇssғᴜʟʟʏ ʙᴇᴇɴ ɢᴇɴᴇʀᴀᴛᴇᴅ ᴘʟᴇᴀsᴇ ᴄʟɪᴄᴋ ᴅᴏᴡɴʟᴏᴀᴅ ʙᴜᴛᴛᴏɴ\n\n🗃️ Fɪʟᴇ Nᴀᴍᴇ : {title}\n🔖 Fɪʟᴇ Sɪᴢᴇ : {size}</b>")
+                markup = InlineKeyboardMarkup([[InlineKeyboardButton("📤 Dᴏᴡɴʟᴏᴀᴅ 📥", url=short_url)]])
+                await _send_with_floodwait(lambda: bot.send_message(chat_id=userid, text=text, reply_markup=markup))
+                continue
+            f_caption = file["caption"]
+            if CUSTOM_FILE_CAPTION:
+                try:
+                    f_caption = CUSTOM_FILE_CAPTION.format(
+                        file_name='' if title is None else title,
+                        file_size='' if size is None else size,
+                        file_caption='' if f_caption is None else f_caption
                     )
-                )
+                except Exception:
+                    logger.exception("CUSTOM_FILE_CAPTION format failed")
+                    # fall through with the raw caption
+            if f_caption is None:
+                f_caption = f"{title}"
+            markup = InlineKeyboardMarkup(
+                [[
+                    InlineKeyboardButton('Sᴜᴘᴘᴏʀᴛ Gʀᴏᴜᴘ', url=GRP_LNK),
+                    InlineKeyboardButton('Uᴘᴅᴀᴛᴇs Cʜᴀɴɴᴇʟ', url=CHNL_LNK)
+                ],[
+                    InlineKeyboardButton("Bᴏᴛ Oᴡɴᴇʀ", url=OWNER_LNK)
+                ]]
+            )
+            await _send_with_floodwait(lambda: bot.send_cached_media(
+                chat_id=userid,
+                file_id=file["file_id"],
+                caption=f_caption,
+                protect_content=True if ident == "filep" else False,
+                reply_markup=markup
+            ))
     except UserIsBlocked:
         await query.answer('Uɴʙʟᴏᴄᴋ ᴛʜᴇ ʙᴏᴛ ᴍᴀʜɴ !', show_alert=True)
     except PeerIdInvalid:
         await query.answer('Hᴇʏ, Sᴛᴀʀᴛ Bᴏᴛ Fɪʀsᴛ Aɴᴅ Cʟɪᴄᴋ Sᴇɴᴅ Aʟʟ', show_alert=True)
-    except Exception as e:
+    except Exception:
+        logger.exception("send_all failed for user %s", userid)
         await query.answer('Hᴇʏ, Sᴛᴀʀᴛ Bᴏᴛ Fɪʀsᴛ Aɴᴅ Cʟɪᴄᴋ Sᴇɴᴅ Aʟʟ', show_alert=True)
-        
+
+
 async def get_cap(settings, remaining_seconds, files, query, total_results, search):
     if settings["imdb"]:
         IMDB_CAP = temp.IMDB_CAP.get(query.from_user.id)
@@ -951,6 +945,9 @@ async def get_cap(settings, remaining_seconds, files, query, total_results, sear
                     plot=imdb['plot'],
                     rating=imdb['rating'],
                     url=imdb['url'],
+                    # `message` kept for custom templates that still use
+                    # {message.from_user.mention}; the default template uses {query...}.
+                    message=query,
                     **locals()
                 )
               #  cap+="<b>\n\n<u>🍿 Your Movie Files 👇</u></b>\n\n"
@@ -972,18 +969,17 @@ async def get_cap(settings, remaining_seconds, files, query, total_results, sear
 
     
 def get_wish():
-    tz = pytz.timezone('Asia/Colombo')
-    time = datetime.now(tz)
-    now = time.strftime("%H")
-    if now < "12":
+    tz = pytz.timezone('Asia/Kolkata')
+    hour = datetime.now(tz).hour
+    if hour < 12:
         status = "Good Morning 🌞"
-    elif now < "18":
+    elif hour < 18:
         status = "Good Afternoon 🌗"
     else:
         status = "Good Evening 🌘"
     return status
 
-async def get_seconds(time_string):
+def get_seconds(time_string):
     def extract_value_and_unit(ts):
         value = ""
         unit = ""
@@ -1014,9 +1010,13 @@ async def get_seconds(time_string):
 async def is_check_admin(bot, chat_id, user_id):
     try:
         member = await bot.get_chat_member(chat_id, user_id)
-        return member.status in [enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER]
-    except:
+    except (UserNotParticipant, PeerIdInvalid, ChannelPrivate) as e:
+        logger.debug("is_check_admin: %s not admin-ish in %s (%s)", user_id, chat_id, e)
         return False
+    except Exception:
+        logger.exception("is_check_admin failed for user %s in chat %s", user_id, chat_id)
+        return False
+    return member.status in (enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER)
 
 
 

@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 import motor.motor_asyncio
 import pytz
 from info import DATABASE_URI, DATABASE_NAME, FILE_DB_URI, SEC_FILE_DB_URI, COLLECTION_NAME, MULTIPLE_DATABASE
-from pymongo import MongoClient
 
 IST = pytz.timezone('Asia/Kolkata')
 
@@ -13,13 +12,13 @@ class StatsDB:
         self.search_logs = self.db.search_logs
         self.pm_search_logs = self.db.pm_search_logs
         
-        # File DB Connections for Stats
-        self.file_client = MongoClient(FILE_DB_URI)
+        # File DB Connections for Stats (async: get_database_stats is a coroutine)
+        self.file_client = motor.motor_asyncio.AsyncIOMotorClient(FILE_DB_URI)
         self.file_db = self.file_client[DATABASE_NAME]
         self.file_col = self.file_db[COLLECTION_NAME]
-        
+
         if MULTIPLE_DATABASE:
-            self.sec_file_client = MongoClient(SEC_FILE_DB_URI)
+            self.sec_file_client = motor.motor_asyncio.AsyncIOMotorClient(SEC_FILE_DB_URI)
             self.sec_file_db = self.sec_file_client[DATABASE_NAME]
             self.sec_file_col = self.sec_file_db[COLLECTION_NAME]
 
@@ -179,10 +178,7 @@ class StatsDB:
             {
                 "$match": {
                     "results_count": 0,
-                "$match": {
-                    "results_count": 0,
                     "timestamp": {"$gte": datetime.now(IST) - timedelta(days=days)}
-                }
                 }
             },
             {
@@ -193,6 +189,7 @@ class StatsDB:
             },
             {"$sort": {"_id": 1}}
         ]
+        cursor = self.search_logs.aggregate(pipeline)
         return await cursor.to_list(length=days)
 
     async def get_today_success_ratio(self):
@@ -220,9 +217,9 @@ class StatsDB:
         
         # Primary DB
         try:
-            p_count = self.file_col.count_documents({})
+            p_count = await self.file_col.count_documents({})
             # dbStats returns size in bytes
-            p_db_stats = self.file_db.command("dbStats")
+            p_db_stats = await self.file_db.command("dbStats")
             p_size = p_db_stats.get("dataSize", 0) / (1024 * 1024) # MB
             stats['primary'] = {"count": p_count, "size": round(p_size, 2)}
         except Exception as e:
@@ -231,8 +228,8 @@ class StatsDB:
         # Secondary DB
         if MULTIPLE_DATABASE:
             try:
-                s_count = self.sec_file_col.count_documents({})
-                s_db_stats = self.sec_file_db.command("dbStats")
+                s_count = await self.sec_file_col.count_documents({})
+                s_db_stats = await self.sec_file_db.command("dbStats")
                 s_size = s_db_stats.get("dataSize", 0) / (1024 * 1024) # MB
                 stats['secondary'] = {"count": s_count, "size": round(s_size, 2)}
                 stats['total_files'] = p_count + s_count

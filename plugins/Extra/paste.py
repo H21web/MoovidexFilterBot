@@ -6,7 +6,6 @@ import os
 import re
 import json
 import aiohttp
-import requests
 from pyrogram import Client, filters
 
 #Headers
@@ -20,21 +19,22 @@ async def p_paste(message, extension=None):
     siteurl = "https://pasty.lus.pm/api/v1/pastes"
     data = {"content": message}
     try:
-        response = requests.post(url=siteurl, data=json.dumps(data), headers=headers)
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url=siteurl, data=json.dumps(data), headers=headers) as response:
+                if response.status == 201: # 201 Created typically, or check ok
+                     resp_json = await response.json()
+                     purl = (
+                        f"https://pasty.lus.pm/{resp_json['id']}.{extension}"
+                        if extension
+                        else f"https://pasty.lus.pm/{resp_json['id']}.txt"
+                     )
+                     return {
+                        "url": purl,
+                        "raw": f"https://pasty.lus.pm/{resp_json['id']}/raw",
+                        "bin": "Pasty",
+                     }
     except Exception as e:
         return {"error": str(e)}
-    if response.ok:
-        response = response.json()
-        purl = (
-            f"https://pasty.lus.pm/{response['id']}.{extension}"
-            if extension
-            else f"https://pasty.lus.pm/{response['id']}.txt"
-        )
-        return {
-            "url": purl,
-            "raw": f"https://pasty.lus.pm/{response['id']}/raw",
-            "bin": "Pasty",
-        }
     return {"error": "Unable to reach pasty.lus.pm"}
 
 
@@ -42,27 +42,33 @@ async def p_paste(message, extension=None):
 @Client.on_message(filters.command(["tgpaste", "pasty", "paste"]))
 async def pasty(client, message):
     pablo = await message.reply_text("`Please wait...`")
-    tex_t = message.text
     if ' ' in message.text:
         message_s = message.text.split(" ", 1)[1]
     elif message.reply_to_message:
         message_s = message.reply_to_message.text
     else:
-        await message.reply("sorry no in put. please repy to a text or /paste with text")
-    if not tex_t:
+        await pablo.edit("sorry no in put. please repy to a text or /paste with text")
+        return
+    if not message_s:
         if not message.reply_to_message:
             await pablo.edit("`Only text and documents are supported.`")
             return
         if not message.reply_to_message.text:
             file = await message.reply_to_message.download()
-            m_list = open(file, "r").read()
+            try:
+                with open(file, "r") as f:
+                    m_list = f.read()
+            finally:
+                os.remove(file)
             message_s = m_list
-            os.remove(file)
-        elif message.reply_to_message.text:
+        else:
             message_s = message.reply_to_message.text
 
     ext = "py"
     x = await p_paste(message_s, ext)
+    if "error" in x:
+        await pablo.edit(f"Failed to paste: {x['error']}")
+        return
     p_link = x["url"]
     p_raw = x["raw"]
 

@@ -1,4 +1,5 @@
-import requests
+import aiohttp
+import asyncio
 import html
 import time
 from datetime import datetime, timedelta
@@ -32,7 +33,7 @@ def clean_text(text):
     text = text.replace('\u2026', '...')
     return text
 
-def fetch_ott_data():
+async def fetch_ott_data():
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Accept": "application/json, text/plain, */*",
@@ -40,12 +41,17 @@ def fetch_ott_data():
         "Origin": "https://www.binged.com"
     }
     try:
-        response = requests.get(OTT_URL, headers=headers, timeout=10)
-        if response.status_code == 520:
-            time.sleep(2)
-            response = requests.get(OTT_URL, headers=headers, timeout=10)
-        response.raise_for_status()
-        return response.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(OTT_URL, headers=headers, timeout=10) as response:
+                if response.status == 520:
+                    await asyncio.sleep(2)
+                    async with session.get(OTT_URL, headers=headers, timeout=10) as response2:
+                         if response2.status != 200:
+                             return {"error": f"Status {response2.status}"}
+                         return await response2.json()
+                if response.status != 200:
+                    return {"error": f"Status {response.status}"}
+                return await response.json()
     except Exception as e:
         return {"error": str(e)}
 
@@ -73,7 +79,7 @@ async def ott_command_handler(client, event):
         user_id = event.from_user.id
         message = event
 
-    data = fetch_ott_data()
+    data = await fetch_ott_data()
     if "error" in data:
         await message.reply_text(f"⚠️ Failed to fetch OTT platforms.\nError: {data['error']}")
         return
@@ -114,8 +120,11 @@ async def platform_selected(client, callback_query):
     if not cache or cache["user_id"] != user_id:
         return await callback_query.answer("⚠️ Session expired. Send /ott again.", show_alert=True)
 
-    index = int(callback_query.data.split("ott_platform_")[1])
-    platform = cache['platforms'][index]
+    try:
+        index = int(callback_query.data.split("ott_platform_")[1])
+        platform = cache['platforms'][index]
+    except (ValueError, IndexError):
+        return await callback_query.answer("⚠️ Invalid selection.", show_alert=True)
 
     cache['selected_platform'] = platform
     cache['page'] = 0
@@ -185,7 +194,7 @@ async def ott_next_page(client, callback_query):
     message_id = message.id
 
     cache = OTT_USER_CACHE.get(message_id)
-    if not cache:
+    if not cache or cache.get("user_id") != user_id:
         return await callback_query.answer("⚠️ Session expired.", show_alert=True)
 
     cache['page'] += 1
@@ -204,7 +213,7 @@ async def ott_prev_page(client, callback_query):
     message_id = message.id
 
     cache = OTT_USER_CACHE.get(message_id)
-    if not cache or cache['page'] <= 0:
+    if not cache or cache.get("user_id") != user_id or cache['page'] <= 0:
         return await callback_query.answer("⚠️ Session expired or invalid page.", show_alert=True)
 
     cache['page'] -= 1
@@ -238,7 +247,13 @@ async def ott_back_to_main(client, callback_query):
 
 @Client.on_callback_query(filters.regex("ott_close"))
 async def ott_close_handler(client, callback_query):
+    cache = OTT_USER_CACHE.get(callback_query.message.id)
+    if cache and cache.get("user_id") != callback_query.from_user.id:
+        return await callback_query.answer("⚠️ This menu isn't yours.", show_alert=True)
+    OTT_USER_CACHE.pop(callback_query.message.id, None)
     try:
         await callback_query.message.delete()
-    except:
+    except Exception:
         await callback_query.answer("⚠️ Unable to close.")
+    else:
+        await callback_query.answer()

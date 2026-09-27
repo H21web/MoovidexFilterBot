@@ -211,171 +211,274 @@
 <!-- Video Player Buttons -->
 
 <!-- External Player and Video Player Scripts -->
+<!-- Responsive & Player Styles -->
+<style>
+    .oplayer-con { 
+        width: 100%; 
+        aspect-ratio: 16/9; 
+        background: #000; 
+        border-radius: 8px; 
+        overflow: hidden; 
+        display: block !important;
+        min-height: 200px;
+    }
+    .nft-details { display: flex; flex-direction: column; gap: 15px; }
+    @media (min-width: 768px) {
+        .nft-details { flex-direction: row; }
+        .nft-img { flex: 2; }
+        .nft-info { flex: 1; }
+    }
+</style>
+
 <script src="https://cdn.jsdelivr.net/npm/@oplayer/core@latest/dist/index.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@oplayer/ui@latest/dist/index.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@oplayer/hls@latest/dist/index.min.js"></script>
 
 <script>
-    const proxyUrl = "https://cors-anywhere-9e4m.onrender.com/";
     const defaultImageUrl = "https://h21web.github.io/host/assets/images/folder.png";
+    const tmdbKey = ""; // no API key is passed to this template; the poster fallback below applies
+    const botUrl = {{ bot_url|tojson }};
 
-    // Extract URL details
-    const videoLink = window.location.href;
-    const url = new URL(videoLink);
-    const domainUrl = url.origin;
-    const pathnameParts = url.pathname.split('/');
+    // Safe URL details extraction with error handling
+    let downloadlink = "";
+    let FileName = {{ file_name|tojson }}; // Use template variable as primary source
+    
+    try {
+        const videoLink = window.location.href;
+        const url = new URL(videoLink);
+        const domainUrl = url.origin;
+        const pathnameParts = url.pathname.split('/');
+        
+        // Safer array access
+        const videoId = pathnameParts.length > 2 ? pathnameParts[2] : 'unknown';
+        const urlFileName = pathnameParts.length > 3 ? pathnameParts[3] : FileName;
+        
+        // Use URL filename if template variable is not rendered
+        if (!FileName || FileName.includes("{" + "{")) {
+            FileName = decodeURIComponent(urlFileName);
+        }
 
-    const videoId = pathnameParts[2]; // '33'
-    const FileName = pathnameParts[3]; 
-    const hashParam = url.searchParams.get("hash");
-    const encodedName = encodeURIComponent(FileName);
+        const hashParam = url.searchParams.get("hash") || "";
+        const encodedName = encodeURIComponent(FileName);
+        downloadlink = `${domainUrl}/${videoId}/${encodedName}?hash=${hashParam}`;
+    } catch (e) {
+        console.error("URL Parsing Error:", e);
+        downloadlink = window.location.href; // Fallback to current URL
+    }
 
-    const downloadlink = `${domainUrl}/${videoId}/${encodedName}?hash=${hashParam}`;
+    // Enhanced Clean Filename for Better TMDB Search
+    function cleanTitle(filename) {
+        if (!filename) return "";
+        let name = filename;
+        
+        // Remove file extension
+        name = name.replace(/\.[^/.]+$/, "");
+        
+        // Replace separators with spaces
+        name = name.replace(/[._-]/g, " ");
+        
+        // Remove common quality/scene tags and brackets
+        const junkPatterns = /\b(1080p|720p|480p|2160p|4k|5k|8k|HD|SD|FHD|UHD|WEB-DL|WEBRip|BluRay|BRRip|DVDRip|DVD-Rip|H264|H265|x264|x265|AAC|AC3|E-AC3|DTS|TrueHD|10bit|HEVC|HDR|REMUX|S\d+E\d+|S\d+|E\d+|EXTENDED|REMASTERED|UNRATED|DIRECTORS.CUT)\b/gi;
+        name = name.replace(junkPatterns, "");
+        
+        // Remove content in brackets and parentheses
+        name = name.replace(/\[.*?\]|\(.*?\)/g, "");
+        
+        // Clean up multiple spaces
+        return name.replace(/\s+/g, ' ').trim();
+    }
 
-    // Fetch poster image from Yahoo
-    function fetchPoster(title, callback) {
-        const searchUrl = `https://images.search.yahoo.com/search/images?p=${encodeURIComponent(title)}&imga=wide`;
+    // Robust Poster Fetch using TMDB with Enhanced Error Handling
+    function fetchPoster(rawFilename, callback) {
+        if (!tmdbKey || tmdbKey === "None" || tmdbKey.includes("{" + "{")) {
+            console.log("No TMDB Key available, using default poster.");
+            callback(defaultImageUrl);
+            return;
+        }
+
+        const cleanName = cleanTitle(decodeURIComponent(rawFilename));
+        console.log("Searching TMDB for:", cleanName);
+
+        if (!cleanName) {
+            console.log("Empty search query, using default poster.");
+            callback(defaultImageUrl);
+            return;
+        }
+
+        const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${tmdbKey}&query=${encodeURIComponent(cleanName)}`;
 
         $.ajax({
-            url: proxyUrl + searchUrl,
+            url: searchUrl,
             method: "GET",
+            timeout: 5000, // 5 second timeout to prevent hanging
             success: function(data) {
-                const html = $(data);
-                const images = html.find("img");
-
-                if (images.length > 0) {
-                    const firstImageSrc = $(images[0]).attr("src");
-                    callback(firstImageSrc || defaultImageUrl);
+                if (data.results && data.results.length > 0) {
+                    const result = data.results[0];
+                    // Prefer backdrop for video player poster (better aspect ratio)
+                    const posterPath = result.backdrop_path || result.poster_path;
+                    if (posterPath) {
+                        const posterUrl = `https://image.tmdb.org/t/p/w780${posterPath}`;
+                        console.log("TMDB Poster found:", posterUrl);
+                        callback(posterUrl);
+                    } else {
+                        console.log("No poster path in TMDB result.");
+                        callback(defaultImageUrl);
+                    }
                 } else {
+                    console.log("No TMDB results found for query.");
                     callback(defaultImageUrl);
                 }
             },
-            error: function() {
+            error: function(xhr, status, error) {
+                console.error("TMDB API Error:", status, error);
                 callback(defaultImageUrl);
             }
         });
     }
 
-    // Initialize OPlayer with video and poster
+    // Initialize OPlayer with video and poster - Enhanced with Error Handling
     function initializePlayer(posterUrl) {
-        OPlayer.make('#oplayer', {
-            source: {
-                
-                src: downloadlink,  // Dynamic download link
-                poster: posterUrl   // Dynamic poster URL
-            }
-        })
-        .use([
-            OUI({
-                fullscreen: true,
-            coverButton: true,
-            miniProgressBar: true,
-            autoFocus: true,
-            forceLandscapeOnFullscreen: true,
-            screenshot: false,
-            pictureInPicture: true,
-            showControls: 'always',
-            keyboard: { focused: true, global: false },
-            settings: ['loop'],
-            theme: {
-                primaryColor: '#6A00BE',
-                watermark: {
-                    src: 'https://h21web.github.io/cdn/assets/moovidex-logo.png',
-                    style: {
-                        position: 'absolute',
-                        top: '0px',
-                        right: '8px',
-                        width: '40px',
-                        height: 'auto'
-                    },
-                    attrs: {
-                        class: 'watermark'
-                    }
+        if (typeof OPlayer === 'undefined') {
+            console.error("OPlayer library not loaded!");
+            return;
+        }
+        
+        console.log("Initializing player with poster:", posterUrl);
+        console.log("Video source:", downloadlink);
+        
+        try {
+            OPlayer.make('#oplayer', {
+                source: {
+                    src: downloadlink,
+                    poster: posterUrl
                 }
-            },
-            speeds: ['2.0', '1.75', '1.25', '1.0', '0.75', '0.5'],
-            slideToSeek: 'long-touch',
-            controlBar: false,
-            topSetting: false,
-            }),
-            OHls({
-                forceHLS: true,
-                library: 'https://cdn.jsdelivr.net/npm/hls.js@0.14.17/dist/hls.min.js'
             })
-        ])
-        .create();
+            .use([
+                OUI({
+                    fullscreen: true,
+                    coverButton: true,
+                    miniProgressBar: true,
+                    autoFocus: false, // Prevent unwanted scrolling
+                    forceLandscapeOnFullscreen: true,
+                    screenshot: false,
+                    pictureInPicture: true,
+                    showControls: 'always',
+                    keyboard: { focused: true, global: false },
+                    settings: ['loop'],
+                    theme: {
+                        primaryColor: '#6A00BE',
+                        watermark: {
+                            src: 'https://h21web.github.io/cdn/assets/moovidex-logo.png',
+                            style: {
+                                position: 'absolute',
+                                top: '0px',
+                                right: '8px',
+                                width: '40px',
+                                height: 'auto'
+                            },
+                            attrs: {
+                                class: 'watermark'
+                            }
+                        }
+                    },
+                    speeds: ['2.0', '1.75', '1.25', '1.0', '0.75', '0.5'],
+                    slideToSeek: 'long-touch',
+                    controlBar: false,
+                    topSetting: false,
+                }),
+                OHls({
+                    forceHLS: true,
+                    library: 'https://cdn.jsdelivr.net/npm/hls.js@0.14.17/dist/hls.min.js'
+                })
+            ])
+            .create();
+            console.log("Player initialized successfully!");
+        } catch (e) {
+            console.error("Player Initialization Error:", e);
+        }
     }
 
-    // Fetch the poster and initialize the player
+    // Trigger Flow
     fetchPoster(`${FileName}`, function(posterUrl) {
         initializePlayer(posterUrl);
     });
 
-    // Step 4: Define functions for external players
+    // --- Player Intents (Fixed URLs) ---
+    
     function mx_player() {
-        const openMx = `intent:${downloadlink}#Intent;package=com.mxtech.videoplayer.ad;end`;
-        window.open(openMx, '_blank');
-          Telegram.WebApp.HapticFeedback.notificationOccurred('light');
+        const intent = `intent:${downloadlink}#Intent;package=com.mxtech.videoplayer.ad;type=video/*;end`;
+        window.location.href = intent;
     }
 
     function vlc_player() {
-        const openVlc = `intent:${downloadlink}#Intent;package=org.videolan.vlc;type=video/*;end`;
-        window.open(openVlc, '_blank');
-          Telegram.WebApp.HapticFeedback.notificationOccurred('light');
-    }
-
-    function km_player() {
-        const openKmplayer = `intent:${downloadlink}#Intent;package=com.kmplayer;end`;
-        window.open(openKmplayer, '_blank');
-          Telegram.WebApp.HapticFeedback.notificationOccurred('light');
+        // VLC Android Intent - Fixed (removed problematic scheme parameter)
+        const intent = `intent:${downloadlink}#Intent;package=org.videolan.vlc;type=video/*;end`;
+        window.location.href = intent;
     }
 
     function playit_player() {
-        const openPlayit = `intent:${downloadlink}#Intent;package=uplayer.video.player;end`;
-        window.open(openPlayit, '_blank');
-          Telegram.WebApp.HapticFeedback.notificationOccurred('light');
+       const intent = `intent:${downloadlink}#Intent;package=com.playit.videoplayer;type=video/*;end`;
+       window.location.href = intent;
     }
 
     function s_player() {
-        const openS = `intent:${downloadlink}#Intent;action=com.young.simple.player.playback_online;package=com.young.simple.player;end`;
-        window.open(openS, '_blank');
-          Telegram.WebApp.HapticFeedback.notificationOccurred('light');
+        // Simple Player
+        window.open(downloadlink, '_blank'); 
     }
 
+    function km_player() {
+        const intent = `intent:${downloadlink}#Intent;package=com.kmplayer;type=video/*;end`;
+        window.location.href = intent;
+    }
+    
     function u_player() {
-        const openU = `intent:${downloadlink}#Intent;package=uplayer.video.player;end`;
-        window.open(openU, '_blank');
-          Telegram.WebApp.HapticFeedback.notificationOccurred('light');
+         const intent = `intent:${downloadlink}#Intent;package=uplayer.video.player;type=video/*;end`;
+         window.location.href = intent;
     }
 
-    // Step 5: Other helper functions
+    // Helper Functions
     function download() {
         window.open(downloadlink, '_blank');
-        Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+        try { Telegram.WebApp.HapticFeedback.notificationOccurred('success'); } catch(e){}
     }
       
     function openTG() {
-          const openTG = `https://telegram.me/moovidexrobot`;  // Removed HTML comment for Username
-          Telegram.WebApp.openTelegramLink(openTG, '_blank');
-          Telegram.WebApp.close();
-          Telegram.WebApp.HapticFeedback.notificationOccurred('success');
-        
+        if(botUrl && botUrl !== "None" && !botUrl.includes("{" + "{")) {
+             const url = botUrl.startsWith("http") ? botUrl : "https://" + botUrl;
+             window.open(url, '_blank');
+        } else {
+             window.open("https://telegram.me/moovidexrobot", '_blank');
+        }
+        try { Telegram.WebApp.close(); } catch(e){}
     }
       
     function copyUrl() {
         navigator.clipboard.writeText(downloadlink)
-            .then(() => {
-                alert('URL copied to clipboard!');
-            })
-            .catch((error) => {
-                console.error('Failed to copy URL: ', error);
-            });
-          Telegram.WebApp.HapticFeedback.notificationOccurred('light');
+            .then(() => alert('URL copied to clipboard!'))
+            .catch((error) => console.error('Failed to copy URL: ', error));
     }
+    
+    // Auto-fill details from Filename (Client-side regex)
+    // No changes needed to the existing logic below, just ensuring it runs
+    
+    let tg = window.Telegram.WebApp; 
+    try {
+        tg.expand();
+        tg.MainButton.setText("Powered by Moovidex"); 
+        tg.MainButton.show();
+    } catch(e) {}
+    
+    let profName = document.getElementById("usernametg"); 
+    if(profName && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+        profName.innerText = `${tg.initDataUnsafe.user.first_name}`;
+    }
+
 </script>
+      
+      
 
-    <script>
 
+<script>
     
 
 
@@ -409,50 +512,7 @@
         
 
     </script>
-      <script>
-   let tg = window.Telegram.WebApp; // Get the Telegram WebApp object
 
-   tg.expand(); // Expand to full window
-
-   tg.MainButton.setText("Powered by Moovidex"); // Set the main button text
-   tg.MainButton.textColor = "#fff"; // Change button text color
-   tg.MainButton.color = "#090909"; // Change button background color
-   tg.MainButton.show(); // Always show the main button
-
-   let btn = document.getElementById("btn"); // Get the hide/show button
-
-   btn.addEventListener('click', function(){ // Add event on HTML button click
-      if (tg.MainButton.isVisible){ // If the button is visible
-         tg.MainButton.hide() // Hide the button
-      }
-      else{ // Otherwise
-         tg.MainButton.show() // Show the button
-      }
-   });
-
-   let btnED = document.getElementById("btnED"); // Get the enable/disable button
-   btnED.addEventListener('click', function(){ // Add event on HTML button click
-      if (tg.MainButton.isActive){ // If the button is active
-         tg.MainButton.setParams({"color": "#E0FFFF"}); // Change color
-         tg.MainButton.disable() // Disable the button
-      }
-      else{ // Otherwise
-         tg.MainButton.setParams({"color": "#143F6B"}); // Change color
-         tg.MainButton.enable() // Enable the button
-      }
-   });
-
-   Telegram.WebApp.onEvent('mainButtonClicked', function(){
-      tg.sendData("some string that we need to send"); 
-      // Send data as a string when the main button is clicked
-   });
-
-   
-   let profName = document.getElementById("usernametg"); // Create a paragraph
-   profName.innerText = `${tg.initDataUnsafe.user.first_name}`;
-   
-   
-      </script>
       
       
 

@@ -115,8 +115,7 @@ Cᴏᴍᴍᴀɴᴅs Aɴᴅ Usᴀɢᴇ:
   
  <b>✯ Join here : <a href={}>Update Channel</a></b> 
   
- ./id - <code>ɢᴇᴛ ɪᴅ ᴏꜰ ᴀ ꜱᴘᴇᴄɪꜰɪᴇᴅ ᴜꜱᴇʀ.</ 
- code> 
+ ./id - <code>ɢᴇᴛ ɪᴅ ᴏꜰ ᴀ ꜱᴘᴇᴄɪꜰɪᴇᴅ ᴜꜱᴇʀ.</code>
   
  ./info  - <code>ɢᴇᴛ ɪɴꜰᴏʀᴍᴀᴛɪᴏɴ ᴀʙᴏᴜᴛ ᴀ ᴜꜱᴇʀ.</code> 
   
@@ -295,7 +294,7 @@ Please check the spelling or try searching on Google or IMDb for the correct tit
 🎭 <b>Genre: </b>{genres}
 
 <blockquote>⏱️ Results shown in: {remaining_seconds} <i>seconds</i> 
-🐱 Requested by : {message.from_user.mention}</b></blockquote>
+🐱 Requested by : {query.from_user.mention}</b></blockquote>
 
 """
     
@@ -711,7 +710,7 @@ Also your tutorial will be Added Your Group..."""
 તેમજ તમારી ટીમ વિડિયો કલેક્શનની તાલીમ આપશે..."""
 
     KANNADA_INFO = """
-ಹೇ {message.from_user.mention}
+ಹೇ <a href='tg://settings'>ᴍʏ ғʀɪᴇɴᴅ</a>
 
  ಈಗ ನೀವು ಟೆಲಿಗ್ರಾಮ್‌ನಲ್ಲಿಯೂ ಹಣ ಗಳಿಸಬಹುದು.
 
